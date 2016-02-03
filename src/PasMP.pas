@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-01-22-53-0000                       *
+ *                        Version 2016-02-03-07-50-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -215,7 +215,7 @@ uses {$ifdef Windows}
        {$endif}
       {$endif}
      {$endif}
-     SysUtils,Classes,SyncObjs;
+     SysUtils,Classes,Math,SyncObjs;
 
 const PasMPAllocatorPoolBucketBits=12;
       PasMPAllocatorPoolBucketSize=1 shl PasMPAllocatorPoolBucketBits;
@@ -517,6 +517,9 @@ type TPasMPAvailableCPUCores=array of longint;
       private
        fAvailableCPUCores:TPasMPAvailableCPUCores;
        fDoCPUCorePinning:longbool;
+       fFPUExceptionMask:TFPUExceptionMask;
+       fFPUPrecisionMode:TFPUPrecisionMode;
+       fFPURoundingMode:TFPURoundingMode;
        fWorkerThreads:array of TPasMPWorkerThread;
        fCountWorkerThreads:longint;
        fSystemIsReadyEvent:TEvent;
@@ -1924,6 +1927,11 @@ var ThreadIDHash:longword;
 {$endif}
 {$endif}
 begin
+
+ SetExceptionMask(fPasMPInstance.fFPUExceptionMask);
+ SetPrecisionMode(fPasMPInstance.fFPUPrecisionMode);
+ SetRoundMode(fPasMPInstance.fFPURoundingMode);
+
  if (length(fPasMPInstance.fAvailableCPUCores)>1) and
     (fThreadIndex<length(fPasMPInstance.fAvailableCPUCores)) then begin
 {$ifdef Windows}
@@ -2148,6 +2156,10 @@ constructor TPasMP.Create(const MaxThreads:longint=-1;const ThreadHeadRoomForFor
 var Index:longint;
 begin
  inherited Create;
+
+ fFPUExceptionMask:=GetExceptionMask;
+ fFPUPrecisionMode:=GetPrecisionMode;
+ fFPURoundingMode:=GetRoundMode;
 
  fAvailableCPUCores:=nil;
 
