@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-06-13-31-0000                       *
+ *                        Version 2016-02-06-13-32-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -477,7 +477,7 @@ type TPasMPAvailableCPUCores=array of longint;
        fIsReadyEvent:TEvent;
        fJobAllocator:TPasMPJobAllocator;
        fJobQueue:TPasMPJobQueue;
-       fJobWorkerThreadDepth:longint;
+       fJobStackDepth:longint;
 {$ifdef PasMPJobTracing}
        fCurrentJob:PPasMPJob;
 {$endif}
@@ -500,7 +500,7 @@ type TPasMPAvailableCPUCores=array of longint;
        constructor Create(const APasMPInstance:TPasMP;const AThreadIndex:longint);
        destructor Destroy; override;
        property ThreadIndex:longint read fThreadIndex;
-       property JobWorkerThreadDepth:longint read fJobWorkerThreadDepth;
+       property JobStackDepth:longint read fJobStackDepth;
      end;
 
      TPasMPJobWorkerThreadHashTable=array[0..PasMPJobWorkerThreadHashTableSize-1] of TPasMPJobWorkerThread;
@@ -524,7 +524,7 @@ type TPasMPAvailableCPUCores=array of longint;
       private
        fAvailableCPUCores:TPasMPAvailableCPUCores;
        fDoCPUCorePinning:longbool;
-       fMaximalJobWorkerThreadDepth:longint;
+       fMaximalJobStackDepth:longint;
        fFPUExceptionMask:TFPUExceptionMask;
        fFPUPrecisionMode:TFPUPrecisionMode;
        fFPURoundingMode:TFPURoundingMode;
@@ -541,7 +541,7 @@ type TPasMPAvailableCPUCores=array of longint;
        fJobWorkerThreadHashTable:TPasMPJobWorkerThreadHashTable;
 {$endif}
        function GetJobWorkerThread:TPasMPJobWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
-       function GetCurrentJobWorkerThreadDepth:longint; {$ifdef CAN_INLINE}inline;{$endif}
+       function GetCurrentJobStackDepth:longint; {$ifdef CAN_INLINE}inline;{$endif}
        function GlobalAllocateJob:PPasMPJob;
        procedure GlobalFreeJob(const Job:PPasMPJob);
        function AllocateJob(const MethodCode,MethodData,Data:pointer):PPasMPJob; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
@@ -562,10 +562,10 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure ParallelIndirectMergeSortJobFunction(const Job:PPasMPJob;const ThreadIndex:longint);
        procedure ParallelIndirectMergeSortRootJobFunction(const Job:PPasMPJob;const ThreadIndex:longint);
       public
-       constructor Create(const MaxThreads:longint=-1;const ThreadHeadRoomForForeignTasks:longint=0;const DoCPUCorePinning:boolean=false;const MaxJobWorkerThreadDepth:longint=8);
+       constructor Create(const MaxThreads:longint=-1;const ThreadHeadRoomForForeignTasks:longint=0;const DoCPUCorePinning:boolean=false;const MaxJobStackDepth:longint=8);
        destructor Destroy; override;
        procedure Reset;
-       function IsJobWorkerThreadDepthLimitReached:boolean; {$ifdef CAN_INLINE}inline;{$endif}
+       function IsJobStackDepthLimitReached:boolean; {$ifdef CAN_INLINE}inline;{$endif}
 {$ifdef HAS_ANONYMOUS_METHODS}
        function Acquire(const JobReferenceProcedure:TPasMPJobReferenceProcedure;const Data:pointer=nil):PPasMPJob; overload;
 {$endif}
@@ -593,8 +593,8 @@ type TPasMPAvailableCPUCores=array of longint;
        function ParallelDirectMergeSort(const Items:pointer;const Left,Right,ElementSize:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16):PPasMPJob;
        function ParallelIndirectMergeSort(const Items:pointer;const Left,Right:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16):PPasMPJob;
        property CountJobWorkerThreads:longint read fCountJobWorkerThreads;
-       property MaximalJobWorkerThreadDepth:longint read fMaximalJobWorkerThreadDepth;
-       property CurrentJobWorkerThreadDepth:longint read GetCurrentJobWorkerThreadDepth;
+       property MaximalJobStackDepth:longint read fMaximalJobStackDepth;
+       property CurrentJobStackDepth:longint read GetCurrentJobStackDepth;
      end;
 
 implementation
@@ -1892,7 +1892,7 @@ begin
  fPasMPInstance:=APasMPInstance;
  fJobAllocator:=TPasMPJobAllocator.Create(self);
  fJobQueue:=TPasMPJobQueue.Create(fPasMPInstance);
- fJobWorkerThreadDepth:=0;
+ fJobStackDepth:=0;
 {$ifdef PasMPJobTracing}
  fCurrentJob:=nil;
 {$endif}
@@ -2188,7 +2188,7 @@ begin
  end;
 end;
 
-constructor TPasMP.Create(const MaxThreads:longint=-1;const ThreadHeadRoomForForeignTasks:longint=0;const DoCPUCorePinning:boolean=false;const MaxJobWorkerThreadDepth:longint=8);
+constructor TPasMP.Create(const MaxThreads:longint=-1;const ThreadHeadRoomForForeignTasks:longint=0;const DoCPUCorePinning:boolean=false;const MaxJobStackDepth:longint=8);
 var Index:longint;
 begin
  inherited Create;
@@ -2201,7 +2201,7 @@ begin
 
  fDoCPUCorePinning:=DoCPUCorePinning;
 
- fMaximalJobWorkerThreadDepth:=MaxJobWorkerThreadDepth;
+ fMaximalJobStackDepth:=MaxJobStackDepth;
 
  fCountJobWorkerThreads:=GetCountOfHardwareThreads(fAvailableCPUCores)-ThreadHeadRoomForForeignTasks;
  if fCountJobWorkerThreads<1 then begin
@@ -2330,23 +2330,23 @@ begin
  end;
 end;
 
-function TPasMP.GetCurrentJobWorkerThreadDepth:longint; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+function TPasMP.GetCurrentJobStackDepth:longint; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 var JobWorkerThread:TPasMPJobWorkerThread;
 begin
  JobWorkerThread:=GetJobWorkerThread;
  if assigned(JobWorkerThread) then begin
-  result:=JobWorkerThread.fJobWorkerThreadDepth;
+  result:=JobWorkerThread.fJobStackDepth;
  end else begin
   result:=high(longint);
  end;
 end;
 
-function TPasMP.IsJobWorkerThreadDepthLimitReached:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+function TPasMP.IsJobStackDepthLimitReached:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 var JobWorkerThread:TPasMPJobWorkerThread;
 begin
  JobWorkerThread:=GetJobWorkerThread;
  if assigned(JobWorkerThread) then begin
-  result:=(fMaximalJobWorkerThreadDepth>=0) and (JobWorkerThread.fJobWorkerThreadDepth>fMaximalJobWorkerThreadDepth);
+  result:=(fMaximalJobStackDepth>=0) and (JobWorkerThread.fJobStackDepth>fMaximalJobStackDepth);
  end else begin
   result:=true;
  end;
@@ -2474,7 +2474,7 @@ begin
  JobWorkerThread.fCurrentJob:=Job;
 {$endif}
 
- inc(JobWorkerThread.fJobWorkerThreadDepth);
+ inc(JobWorkerThread.fJobStackDepth);
 
  ThreadIndex:=JobWorkerThread.ThreadIndex;
 
@@ -2486,7 +2486,7 @@ begin
 
   end else begin
 
-   if (fMaximalJobWorkerThreadDepth>=0) and (JobWorkerThread.fJobWorkerThreadDepth>=fMaximalJobWorkerThreadDepth) then begin
+   if (fMaximalJobStackDepth>=0) and (JobWorkerThread.fJobStackDepth>=fMaximalJobStackDepth) then begin
 
     // Maximal job depth reached => just execute the job as whole
     TPasMPJobInstance(pointer(Job^.Method.Data)).Run(Job,ThreadIndex);
@@ -2537,7 +2537,7 @@ begin
 
  InterlockedExchange(longint(longbool(Job^.Completed)),longint(longbool(true)));
 
- dec(JobWorkerThread.fJobWorkerThreadDepth);
+ dec(JobWorkerThread.fJobStackDepth);
 
 {$ifdef PasMPJobTracing}
  JobWorkerThread.fCurrentJob:=LastCurrentJob;
@@ -2552,7 +2552,7 @@ begin
   JobWorkerThread:=GetJobWorkerThread;
   if assigned(JobWorkerThread) then begin
     if ((assigned(Job^.Method.Data) and not assigned(Job^.Method.Code))) and
-       (((fMaximalJobWorkerThreadDepth<0) or (JobWorkerThread.fJobWorkerThreadDepth<fMaximalJobWorkerThreadDepth))) then begin
+       (((fMaximalJobStackDepth<0) or (JobWorkerThread.fJobStackDepth<fMaximalJobStackDepth))) then begin
     if not TPasMPJobInstance(pointer(Job^.Method.Data)).Spread(Job,JobWorkerThread.fThreadIndex) then begin
      JobWorkerThread.fJobQueue.PushJob(Job);
     end;
@@ -2577,7 +2577,7 @@ begin
   if assigned(Job) then begin
    if assigned(JobWorkerThread) then begin
     if ((assigned(Job^.Method.Data) and not assigned(Job^.Method.Code))) and
-       (((fMaximalJobWorkerThreadDepth<0) or (JobWorkerThread.fJobWorkerThreadDepth<fMaximalJobWorkerThreadDepth))) then begin
+       (((fMaximalJobStackDepth<0) or (JobWorkerThread.fJobStackDepth<fMaximalJobStackDepth))) then begin
      if not TPasMPJobInstance(pointer(Job^.Method.Data)).Spread(Job,JobWorkerThread.fThreadIndex) then begin
       JobWorkerThread.fJobQueue.PushJob(Job);
      end;
@@ -2600,7 +2600,7 @@ var SpinCount,CountMaxSpinCount:longint;
 begin
  if assigned(Job) then begin
   JobWorkerThread:=GetJobWorkerThread;
-  CanSteal:=(fMaximalJobWorkerThreadDepth<0) or (JobWorkerThread.fJobWorkerThreadDepth<fMaximalJobWorkerThreadDepth);
+  CanSteal:=(fMaximalJobStackDepth<0) or (JobWorkerThread.fJobStackDepth<fMaximalJobStackDepth);
   SpinCount:=0;
   CountMaxSpinCount:=128;
   while not Job^.Completed do begin
@@ -2632,7 +2632,7 @@ begin
  CountJobs:=length(Jobs);
  if CountJobs>0 then begin
   JobWorkerThread:=GetJobWorkerThread;
-  CanSteal:=(fMaximalJobWorkerThreadDepth<0) or (JobWorkerThread.fJobWorkerThreadDepth<fMaximalJobWorkerThreadDepth);
+  CanSteal:=(fMaximalJobStackDepth<0) or (JobWorkerThread.fJobStackDepth<fMaximalJobStackDepth);
   SpinCount:=0;
   CountMaxSpinCount:=128;
   repeat
@@ -2751,7 +2751,7 @@ begin
   StartJobData:=JobData^.StartJobData;
   if (((JobData^.LastIndex-JobData^.FirstIndex)+1)<=StartJobData^.Granularity) or
      (JobData^.RemainDepth=0) or
-     IsJobWorkerThreadDepthLimitReached then begin
+     IsJobStackDepthLimitReached then begin
    ParallelForJobFunctionProcess(Job,ThreadIndex);
   end else begin
    if (Job^.OwnedByJobWorkerThreadIndex>=0) and (Job^.OwnedByJobWorkerThreadIndex<>ThreadIndex) then begin
@@ -2804,7 +2804,7 @@ begin
   if JobData^.FirstIndex<EndIndex then begin
    Granularity:=JobData^.Granularity;
    Count:=EndIndex-Index;
-   if (Count<=Granularity) or IsJobWorkerThreadDepthLimitReached then begin
+   if (Count<=Granularity) or IsJobStackDepthLimitReached then begin
     ParallelForJobFunctionProcess(Job,ThreadIndex);
    end else begin
     CountJobs:=Count div Granularity;
@@ -2898,7 +2898,7 @@ begin
   StartJobData:=JobData^.StartJobData;
   if (((JobData^.LastIndex-JobData^.FirstIndex)+1)<=StartJobData^.Granularity) or
      (JobData^.RemainDepth<=0) or
-     IsJobWorkerThreadDepthLimitReached then begin
+     IsJobStackDepthLimitReached then begin
    ParallelForJobFunctionProcess(Job,ThreadIndex);
   end else begin
    if (Job^.OwnedByJobWorkerThreadIndex>=0) and (Job^.OwnedByJobWorkerThreadIndex<>ThreadIndex) then begin
@@ -2950,7 +2950,7 @@ begin
  if JobData^.FirstIndex<EndIndex then begin
   Granularity:=JobData^.Granularity;
   Count:=EndIndex-Index;
-  if (Count<=Granularity) or IsJobWorkerThreadDepthLimitReached then begin
+  if (Count<=Granularity) or IsJobStackDepthLimitReached then begin
    ParallelForJobFunctionProcess(Job,ThreadIndex);
   end else begin
    CountJobs:=Count div Granularity;
