@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-06-13-32-0000                       *
+ *                        Version 2016-02-06-13-41-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2086,42 +2086,33 @@ var SpinCount,CountMaxSpinCount:longint;
     Job:PPasMPJob;
 begin
  ThreadInitialization;
+ ConditionMutex:=TPasMPMutex.Create;
  try
-  ConditionMutex:=TPasMPMutex.Create;
+  ConditionMutex.Acquire;
   try
-   ConditionMutex.Acquire;
-   try
-    fPasMPInstance.fSystemIsReadyEvent.WaitFor(INFINITE);
-    fPasMPInstance.fWakeUpCondition.Wait(ConditionMutex);
-    SpinCount:=0;
-    CountMaxSpinCount:=128;
-    while not fSystemThread.Terminated do begin
-     Job:=GetJob(true);
-     if assigned(Job) then begin
-      fPasMPInstance.ExecuteJob(Job,self);
-      SpinCount:=0;
+   fPasMPInstance.fSystemIsReadyEvent.WaitFor(INFINITE);
+   fPasMPInstance.fWakeUpCondition.Wait(ConditionMutex);
+   SpinCount:=0;
+   CountMaxSpinCount:=128;
+   while not fSystemThread.Terminated do begin
+    Job:=GetJob(true);
+    if assigned(Job) then begin
+     fPasMPInstance.ExecuteJob(Job,self);
+     SpinCount:=0;
+    end else begin
+     if SpinCount<CountMaxSpinCount then begin
+      inc(SpinCount);
      end else begin
-      if SpinCount<CountMaxSpinCount then begin
-       inc(SpinCount);
-      end else begin
-       fPasMPInstance.fWakeUpCondition.Wait(ConditionMutex);
-       SpinCount:=0;
-      end;
+      fPasMPInstance.fWakeUpCondition.Wait(ConditionMutex);
+      SpinCount:=0;
      end;
     end;
-   finally
-    ConditionMutex.Release;
    end;
   finally
-   ConditionMutex.Free;
+   ConditionMutex.Release;
   end;
- except
-  on e:Exception do begin
-   if assigned(e) then begin
-    if assigned(e) then begin
-    end;
-   end;
-  end;
+ finally
+  ConditionMutex.Free;
  end;
 end;
 
