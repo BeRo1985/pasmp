@@ -5,7 +5,7 @@ License: zlib
 
 ### Features
 
-- Fully-strict fork-join model (because it's less errorprone to work with it than with terminally-strict fork-join for my taste)
+- Fully-strict fork-join model (because it's less error-prone to work with it than with terminally-strict fork-join for my taste)
 - Work-first lock-free Chase-Lev work-stealing
 - Lock-free job memory allocator 
 - Parallel-for pattern
