@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-06-05-19-0000                       *
+ *                        Version 2016-02-06-12-42-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -221,8 +221,8 @@ const PasMPAllocatorPoolBucketBits=12;
       PasMPAllocatorPoolBucketSize=1 shl PasMPAllocatorPoolBucketBits;
       PasMPAllocatorPoolBucketMask=PasMPAllocatorPoolBucketSize-1;
 
-      PasMPWorkerThreadHashTableSize=4096;
-      PasMPWorkerThreadHashTableMask=PasMPWorkerThreadHashTableSize-1;
+      PasMPJobWorkerThreadHashTableSize=4096;
+      PasMPJobWorkerThreadHashTableMask=PasMPJobWorkerThreadHashTableSize-1;
 
 type TPasMPAvailableCPUCores=array of longint;
 
@@ -341,16 +341,16 @@ type TPasMPAvailableCPUCores=array of longint;
      TPasMPJobMethod=procedure(const Job:PPasMPJob;const ThreadIndex:longint) of object;
 
 {$ifdef HAS_ANONYMOUS_METHODS}
-     TPasMPParallelForReferenceProcedure=reference to procedure(const Job:PPasMPJob;const ThreadIndex:longint;const Data:pointer;const Index:longint);
+     TPasMPParallelForReferenceProcedure=reference to procedure(const Job:PPasMPJob;const ThreadIndex:longint;const Data:pointer;const FromIndex,ToIndex:longint);
 {$endif}
 
-     TPasMPParallelForProcedure=procedure(const Job:PPasMPJob;const ThreadIndex:longint;const Data:pointer;const Index:longint);
+     TPasMPParallelForProcedure=procedure(const Job:PPasMPJob;const ThreadIndex:longint;const Data:pointer;const FromIndex,ToIndex:longint);
 
-     TPasMPParallelForMethod=procedure(const Job:PPasMPJob;const ThreadIndex:longint;const Data:pointer;const Index:longint) of object;
+     TPasMPParallelForMethod=procedure(const Job:PPasMPJob;const ThreadIndex:longint;const Data:pointer;const FromIndex,ToIndex:longint) of object;
 
      TPasMPParallelSortCompareFunction=function(const a,b:pointer):longint;
 
-     TPasMPWorkerThread=class;
+     TPasMPJobWorkerThread=class;
 
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
      PPasMPSingleLinkedListNativeMachineWord=^TPasMPSingleLinkedListNativeMachineWord;
@@ -370,9 +370,11 @@ type TPasMPAvailableCPUCores=array of longint;
       case longint of
        0:(                                                // 32 / 64 bit
         Method:TMethod;                                   //  8 / 16 => 2x pointers
-        Parent:PPasMPJob;                                 //  4 /  8 => 1x pointer
-        OwnedByWorkerThreadIndex:longint;                 //  4 /  4 => 1x 32-bit signed integer
-        UnfinishedJobs:longint;                           //  4 /  4 => 1x 32-bit signed integer
+{$ifdef PasMPJobTracing}
+        ParentJob:PPasMPJob;                              //  4 /  8 => 1x pointer
+{$endif}
+        OwnedByJobWorkerThreadIndex:longint;              //  4 /  4 => 1x 32-bit signed integer
+        Completed:longbool;                               //  4 /  4 => 1x 32-bit boolean (casted as 32-bit signed integer internally for atomically operations)
         Data:pointer;                                     // ------- => just a dummy variable as struct field offset anchor
        );                                                 // 20 / 32
        1:(
@@ -408,7 +410,7 @@ type TPasMPAvailableCPUCores=array of longint;
 
      TPasMPJobAllocator=class
       private
-       fJobWorkerThread:TPasMPWorkerThread;
+       fJobWorkerThread:TPasMPJobWorkerThread;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
        fFreeJobs:PPasMPSingleLinkedListNativeMachineWord;
 {$else}
@@ -423,7 +425,7 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure FreeJobs; {$ifdef CAN_INLINE}inline;{$endif}
        procedure FreeJob(const Job:PPasMPJob);
       public
-       constructor Create(const AJobWorkerThread:TPasMPWorkerThread);
+       constructor Create(const AJobWorkerThread:TPasMPJobWorkerThread);
        destructor Destroy; override;
      end;
 
@@ -437,11 +439,11 @@ type TPasMPAvailableCPUCores=array of longint;
 
      TPasMPWorkerSystemThread=class(TThread)
       private
-       fJobWorkerThread:TPasMPWorkerThread;
+       fJobWorkerThread:TPasMPJobWorkerThread;
       protected
        procedure Execute; override;
       public
-       constructor Create(const AJobWorkerThread:TPasMPWorkerThread);
+       constructor Create(const AJobWorkerThread:TPasMPJobWorkerThread);
        destructor Destroy; override;
      end;
 
@@ -463,10 +465,10 @@ type TPasMPAvailableCPUCores=array of longint;
        destructor Destroy; override;
      end;
 
-     TPasMPWorkerThread=class
+     TPasMPJobWorkerThread=class
       private
        fPasMPInstance:TPasMP;
-       fNext:TPasMPWorkerThread;
+       fNext:TPasMPJobWorkerThread;
        fThreadIndex:longint;
 {$ifndef UseThreadLocalStorage}
        fThreadID:{$ifdef fpc}TThreadID{$else}longword{$endif};
@@ -475,6 +477,10 @@ type TPasMPAvailableCPUCores=array of longint;
        fIsReadyEvent:TEvent;
        fJobAllocator:TPasMPJobAllocator;
        fJobQueue:TPasMPJobQueue;
+       fJobWorkerThreadDepth:longint;
+{$ifdef PasMPJobTracing}
+       fCurrentJob:PPasMPJob;
+{$endif}
 {$ifdef UseXorShift128}
        fXorShift128x:longword;
        fXorShift128y:longword;
@@ -488,15 +494,16 @@ type TPasMPAvailableCPUCores=array of longint;
 {$endif}
 {$endif}
        procedure ThreadInitialization;
-       function GetJob:PPasMPJob;
+       function GetJob(const CanSteal:boolean):PPasMPJob;
        procedure ThreadProc;
       public
        constructor Create(const APasMPInstance:TPasMP;const AThreadIndex:longint);
        destructor Destroy; override;
        property ThreadIndex:longint read fThreadIndex;
+       property JobWorkerThreadDepth:longint read fJobWorkerThreadDepth;
      end;
 
-     TPasMPWorkerThreadHashTable=array[0..PasMPWorkerThreadHashTableSize-1] of TPasMPWorkerThread;
+     TPasMPJobWorkerThreadHashTable=array[0..PasMPJobWorkerThreadHashTableSize-1] of TPasMPJobWorkerThread;
 
      TPasMPScope=class
       private
@@ -517,11 +524,12 @@ type TPasMPAvailableCPUCores=array of longint;
       private
        fAvailableCPUCores:TPasMPAvailableCPUCores;
        fDoCPUCorePinning:longbool;
+       fMaximalJobWorkerThreadDepth:longint;
        fFPUExceptionMask:TFPUExceptionMask;
        fFPUPrecisionMode:TFPUPrecisionMode;
        fFPURoundingMode:TFPURoundingMode;
-       fWorkerThreads:array of TPasMPWorkerThread;
-       fCountWorkerThreads:longint;
+       fJobWorkerThreads:array of TPasMPJobWorkerThread;
+       fCountJobWorkerThreads:longint;
        fSystemIsReadyEvent:TEvent;
        fWakeUpCondition:TPasMPCondition;
        fMutex:TPasMPMutex;
@@ -529,15 +537,15 @@ type TPasMPAvailableCPUCores=array of longint;
        fJobAllocator:TPasMPJobAllocator;
        fJobQueue:TPasMPJobQueue;
 {$ifndef UseThreadLocalStorage}
-       fWorkerThreadHashTableMutex:TPasMPMutex;
-       fWorkerThreadHashTable:TPasMPWorkerThreadHashTable;
+       fJobWorkerThreadHashTableMutex:TPasMPMutex;
+       fJobWorkerThreadHashTable:TPasMPJobWorkerThreadHashTable;
 {$endif}
-       function GetJobWorkerThread:TPasMPWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
+       function GetJobWorkerThread:TPasMPJobWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
+       function GetCurrentJobWorkerThreadDepth:longint; {$ifdef CAN_INLINE}inline;{$endif}
        function GlobalAllocateJob:PPasMPJob;
        procedure GlobalFreeJob(const Job:PPasMPJob);
-       function AllocateJob(const MethodCode,MethodData,Data:pointer;const Parent:PPasMPJob=nil):PPasMPJob; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       procedure FinishJob(Job:PPasMPJob); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       procedure ExecuteJob(const Job:PPasMPJob;const ThreadIndex:longint); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       function AllocateJob(const MethodCode,MethodData,Data:pointer):PPasMPJob; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef HAS_ANONYMOUS_METHODS}
        procedure JobReferenceProcedureJobFunction(const Job:PPasMPJob;const ThreadIndex:longint);
        procedure ParallelForJobReferenceProcedureProcess(const Job:PPasMPJob;const ThreadIndex:longint);
@@ -554,17 +562,18 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure ParallelIndirectMergeSortJobFunction(const Job:PPasMPJob;const ThreadIndex:longint);
        procedure ParallelIndirectMergeSortRootJobFunction(const Job:PPasMPJob;const ThreadIndex:longint);
       public
-       constructor Create(const MaxThreads:longint=-1;const ThreadHeadRoomForForeignTasks:longint=0;const DoCPUCorePinning:boolean=false);
+       constructor Create(const MaxThreads:longint=-1;const ThreadHeadRoomForForeignTasks:longint=0;const DoCPUCorePinning:boolean=false;const MaxJobWorkerThreadDepth:longint=8);
        destructor Destroy; override;
        procedure Reset;
+       function IsJobWorkerThreadDepthLimitReached:boolean; {$ifdef CAN_INLINE}inline;{$endif}
 {$ifdef HAS_ANONYMOUS_METHODS}
-       function Acquire(const JobReferenceProcedure:TPasMPJobReferenceProcedure;const Data:pointer=nil;const ParentJob:PPasMPJob=nil):PPasMPJob; overload;
+       function Acquire(const JobReferenceProcedure:TPasMPJobReferenceProcedure;const Data:pointer=nil):PPasMPJob; overload;
 {$endif}
-       function Acquire(const JobProcedure:TPasMPJobProcedure;const Data:pointer=nil;const ParentJob:PPasMPJob=nil):PPasMPJob; overload;
-       function Acquire(const JobMethod:TPasMPJobMethod;const Data:pointer=nil;const ParentJob:PPasMPJob=nil):PPasMPJob; overload;
-       procedure Release(const Job:PPasMPJob); overload; {$ifdef CAN_INLINE}inline;{$endif}
+       function Acquire(const JobProcedure:TPasMPJobProcedure;const Data:pointer=nil):PPasMPJob; overload;
+       function Acquire(const JobMethod:TPasMPJobMethod;const Data:pointer=nil):PPasMPJob; overload;
+       procedure Release(const Job:PPasMPJob); overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure Release(const Jobs:array of PPasMPJob); overload;
-       procedure Run(const Job:PPasMPJob); overload; {$ifdef CAN_INLINE}inline;{$endif}
+       procedure Run(const Job:PPasMPJob); overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure Run(const Jobs:array of PPasMPJob); overload;
        procedure Wait(const Job:PPasMPJob); overload;
        procedure Wait(const Jobs:array of PPasMPJob); overload;
@@ -575,15 +584,17 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure Invoke(const Job:PPasMPJob); overload; {$ifdef CAN_INLINE}inline;{$endif}
        procedure Invoke(const Jobs:array of PPasMPJob); overload;
 {$ifdef HAS_ANONYMOUS_METHODS}
-       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:longint;const ParallelForReferenceProcedure:TPasMPParallelForReferenceProcedure;const Granularity:longint=1;const ParentJob:PPasMPJob=nil):PPasMPJob; overload;
+       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:longint;const ParallelForReferenceProcedure:TPasMPParallelForReferenceProcedure;const Granularity:longint=1;const Depth:longint=6):PPasMPJob; overload;
 {$endif}
-       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:longint;const ParallelForProcedure:TPasMPParallelForProcedure;const Granularity:longint=1;const ParentJob:PPasMPJob=nil):PPasMPJob; overload;
-       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:longint;const ParallelForMethod:TPasMPParallelForMethod;const Granularity:longint=1;const ParentJob:PPasMPJob=nil):PPasMPJob; overload;
-       function ParallelDirectIntroSort(const Items:pointer;const Left,Right,ElementSize:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16;const ParentJob:PPasMPJob=nil):PPasMPJob;
-       function ParallelIndirectIntroSort(const Items:pointer;const Left,Right:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16;const ParentJob:PPasMPJob=nil):PPasMPJob;
-       function ParallelDirectMergeSort(const Items:pointer;const Left,Right,ElementSize:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16;const ParentJob:PPasMPJob=nil):PPasMPJob;
-       function ParallelIndirectMergeSort(const Items:pointer;const Left,Right:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16;const ParentJob:PPasMPJob=nil):PPasMPJob;
-       property CountWorkerThreads:longint read fCountWorkerThreads;
+       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:longint;const ParallelForProcedure:TPasMPParallelForProcedure;const Granularity:longint=1;const Depth:longint=6):PPasMPJob; overload;
+       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:longint;const ParallelForMethod:TPasMPParallelForMethod;const Granularity:longint=1;const Depth:longint=6):PPasMPJob; overload;
+       function ParallelDirectIntroSort(const Items:pointer;const Left,Right,ElementSize:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16):PPasMPJob;
+       function ParallelIndirectIntroSort(const Items:pointer;const Left,Right:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16):PPasMPJob;
+       function ParallelDirectMergeSort(const Items:pointer;const Left,Right,ElementSize:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16):PPasMPJob;
+       function ParallelIndirectMergeSort(const Items:pointer;const Left,Right:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16):PPasMPJob;
+       property CountJobWorkerThreads:longint read fCountJobWorkerThreads;
+       property MaximalJobWorkerThreadDepth:longint read fMaximalJobWorkerThreadDepth;
+       property CurrentJobWorkerThreadDepth:longint read GetCurrentJobWorkerThreadDepth;
      end;
 
 implementation
@@ -592,7 +603,7 @@ implementation
 {$if defined(UseThreadLocalStorageX8632) or defined(UseThreadLocalStorageX8664)}
 var CurrentJobWorkerThreadTLSIndex,CurrentJobWorkerThreadTLSOffset:longint;
 {$else}
-threadvar CurrentJobWorkerThread:TPasMPWorkerThread;
+threadvar CurrentJobWorkerThread:TPasMPJobWorkerThread;
 {$ifend}
 {$endif}
 
@@ -729,7 +740,7 @@ asm
 end;
 {$else}
 {$ifdef CPUx86_64}
-function InterLockedDecrement(var Target:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedDecrement(var Target:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
 {$ifdef Windows}
  mov rax,rcx
@@ -742,7 +753,7 @@ asm
  dec eax
 end;
 
-function InterLockedDecrement64(var Target:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedDecrement64(var Target:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
 {$ifdef Windows}
  mov rax,rcx
@@ -755,7 +766,7 @@ asm
  dec rax
 end;
 
-function InterLockedIncrement(var Target:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedIncrement(var Target:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
 {$ifdef Windows}
  mov rax,rcx
@@ -768,7 +779,7 @@ asm
  inc eax
 end;
 
-function InterLockedIncrement64(var Target:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedIncrement64(var Target:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
 {$ifdef Windows}
  mov rax,rcx
@@ -1406,7 +1417,7 @@ begin
  result:=false;
 end;
 
-constructor TPasMPJobAllocator.Create(const AJobWorkerThread:TPasMPWorkerThread);
+constructor TPasMPJobAllocator.Create(const AJobWorkerThread:TPasMPJobWorkerThread);
 begin
  inherited Create;
  fJobWorkerThread:=AJobWorkerThread;
@@ -1567,10 +1578,10 @@ begin
   fMutex.Release;
  end;
 {$endif}
- Job^.OwnedByWorkerThreadIndex:=-1;
+ Job^.OwnedByJobWorkerThreadIndex:=-1;
 end;
 
-constructor TPasMPWorkerSystemThread.Create(const AJobWorkerThread:TPasMPWorkerThread);
+constructor TPasMPWorkerSystemThread.Create(const AJobWorkerThread:TPasMPJobWorkerThread);
 begin
  fJobWorkerThread:=AJobWorkerThread;
  inherited Create(false);
@@ -1591,6 +1602,7 @@ end;
 constructor TPasMPJobQueue.Create(const APasMPInstance:TPasMP);
 begin
  inherited Create;
+ fPasMPInstance:=APasMPInstance;
  fQueueLockState:=0;
  GetMem(fQueueArray,SizeOf(TPasMPJobQueueArray));
  FillChar(fQueueArray^,SizeOf(TPasMPJobQueueArray),AnsiChar(#0));
@@ -1797,9 +1809,9 @@ begin
     result:=nil;
    end;
 {$if (defined(CPU386) or defined(CPUx86_64))}
-   fQueueBottom:=QueueTop+1;
+   fQueueBottom:=QueueBottom+1;
 {$else}
-   InterlockedExchange(fQueueBottom,QueueTop+1);
+   InterlockedExchange(fQueueBottom,QueueBottom+1);
 {$ifend}
   end else begin
    // There's still more than one item left in the queue
@@ -1807,9 +1819,9 @@ begin
  end else begin
   // Deque was already empty
 {$if (defined(CPU386) or defined(CPUx86_64))}
-  fQueueBottom:=QueueTop;
+  fQueueBottom:=QueueBottom+1;
 {$else}
-  InterlockedExchange(fQueueBottom,QueueTop);
+  InterlockedExchange(fQueueBottom,QueueBottom+1);
 {$ifend}
   result:=nil;
  end;
@@ -1874,12 +1886,16 @@ begin
 
 end;
 
-constructor TPasMPWorkerThread.Create(const APasMPInstance:TPasMP;const AThreadIndex:longint);
+constructor TPasMPJobWorkerThread.Create(const APasMPInstance:TPasMP;const AThreadIndex:longint);
 begin
  inherited Create;
  fPasMPInstance:=APasMPInstance;
  fJobAllocator:=TPasMPJobAllocator.Create(self);
  fJobQueue:=TPasMPJobQueue.Create(fPasMPInstance);
+ fJobWorkerThreadDepth:=0;
+{$ifdef PasMPJobTracing}
+ fCurrentJob:=nil;
+{$endif}
  fIsReadyEvent:=TEvent.Create(nil,false,false,'');
  fThreadIndex:=AThreadIndex;
 {$ifdef UseXorShift128}
@@ -1902,7 +1918,7 @@ begin
  end;
 end;
 
-destructor TPasMPWorkerThread.Destroy;
+destructor TPasMPJobWorkerThread.Destroy;
 begin
  if assigned(fSystemThread) then begin
   fSystemThread.Terminate;
@@ -1916,9 +1932,9 @@ begin
  inherited Destroy;
 end;
 
-procedure TPasMPWorkerThread.ThreadInitialization;
+procedure TPasMPJobWorkerThread.ThreadInitialization;
 var ThreadIDHash:longword;
-    HashWorkerThread:TPasMPWorkerThread;
+    HashJobWorkerThread:TPasMPJobWorkerThread;
 {$ifdef Windows}
     CurrentThreadHandle:THANDLE;
 {$else}
@@ -1964,16 +1980,16 @@ begin
  fThreadID:=GetCurrentThreadID;
  ThreadIDHash:=GetThreadIDHash(fThreadID);
 
- fPasMPInstance.fWorkerThreadHashTableMutex.Acquire;
+ fPasMPInstance.fJobWorkerThreadHashTableMutex.Acquire;
  try
-  HashWorkerThread:=fPasMPInstance.fWorkerThreadHashTable[ThreadIDHash and PasMPWorkerThreadHashTableMask];
-  if assigned(HashWorkerThread) then begin
-   HashWorkerThread.fNext:=self;
+  HashJobWorkerThread:=fPasMPInstance.fJobWorkerThreadHashTable[ThreadIDHash and PasMPJobWorkerThreadHashTableMask];
+  if assigned(HashJobWorkerThread) then begin
+   HashJobWorkerThread.fNext:=self;
   end;
   fNext:=nil;
-  fPasMPInstance.fWorkerThreadHashTable[ThreadIDHash and PasMPWorkerThreadHashTableMask]:=self;
+  fPasMPInstance.fJobWorkerThreadHashTable[ThreadIDHash and PasMPJobWorkerThreadHashTableMask]:=self;
  finally
-  fPasMPInstance.fWorkerThreadHashTableMutex.Release;
+  fPasMPInstance.fJobWorkerThreadHashTableMutex.Release;
  end;
 {$endif}
 
@@ -1981,71 +1997,82 @@ begin
 
 end;
 
-function TPasMPWorkerThread.GetJob:PPasMPJob;
+function TPasMPJobWorkerThread.GetJob(const CanSteal:boolean):PPasMPJob;
 const XorShiftBitShift={$ifdef UseXorShift128}16{$else}{$ifdef CPU64}48{$else}16{$endif}{$endif};
 var XorShiftTemp:{$ifdef UseXorShift128}longword{$else}{$ifdef CPU64}PasMPUInt64{$else}longword{$endif}{$endif};
-    OtherWorkerThreadIndex:longword;
-    OtherWorkerThread:TPasMPWorkerThread;
+    OtherJobWorkerThreadIndex:longword;
+    OtherJobWorkerThread:TPasMPJobWorkerThread;
 begin
 
  result:=fJobQueue.PopJob;
- if (not assigned(result)) or (result^.UnfinishedJobs<=0) then begin
+ if (not assigned(result)) or result^.Completed then begin
 
   // This is not a valid job because our own queue is empty, so try stealing from some other queue
 
+  if CanSteal then begin
+
+   // But only, when we're allowed to do that
+
 {$ifdef UseXorShift128}
-  XorShiftTemp:=fXorShift128x xor (fXorShift128x shl 11);
-  fXorShift128x:=fXorShift128y;
-  fXorShift128y:=fXorShift128z;
-  fXorShift128z:=fXorShift128w;
-  fXorShift128w:=((fXorShift128w xor (fXorShift128w shr 19)) xor XorShiftTemp) xor (XorShiftTemp shr 8);
-  XorShiftTemp:=XorShiftTemp;
+   XorShiftTemp:=fXorShift128x xor (fXorShift128x shl 11);
+   fXorShift128x:=fXorShift128y;
+   fXorShift128y:=fXorShift128z;
+   fXorShift128z:=fXorShift128w;
+   fXorShift128w:=((fXorShift128w xor (fXorShift128w shr 19)) xor XorShiftTemp) xor (XorShiftTemp shr 8);
+   XorShiftTemp:=XorShiftTemp;
 {$else}
 {$ifdef CPU64}
-  XorShiftTemp:=fXorShift64;
-  XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 21);
-  XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shr 35);
-  XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 4);
-  fXorShift64:=XorShiftTemp;
-{ XorShiftTemp:=fXorShift64;
-  XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 13);
-  XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shr 7);
-  XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 17);
-  fXorShift64:=XorShiftTemp;{}
+   XorShiftTemp:=fXorShift64;
+   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 21);
+   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shr 35);
+   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 4);
+   fXorShift64:=XorShiftTemp;
+ { XorShiftTemp:=fXorShift64;
+   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 13);
+   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shr 7);
+   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 17);
+   fXorShift64:=XorShiftTemp;{}
 {$else}
-  XorShiftTemp:=fXorShift32;
-  XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 13);
-  XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shr 17);
-  XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 5);
-  fXorShift32:=XorShiftTemp;
+   XorShiftTemp:=fXorShift32;
+   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 13);
+   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shr 17);
+   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 5);
+   fXorShift32:=XorShiftTemp;
 {$endif}
 {$endif}
 
-  OtherWorkerThreadIndex:=((XorShiftTemp shr XorShiftBitShift)*longword(fPasMPInstance.fCountWorkerThreads)) shr 16;
-  OtherWorkerThread:=fPasMPInstance.fWorkerThreads[OtherWorkerThreadIndex];
-  if OtherWorkerThread=self then begin
-   // Don't try to steal from ourselves
-   result:=nil;
-  end else begin
-   result:=OtherWorkerThread.fJobQueue.StealJob;
-   if (not assigned(result)) or (result^.UnfinishedJobs<=0) then begin
-    // We couldn't steal a job from the other queue either
+   OtherJobWorkerThreadIndex:=((XorShiftTemp shr XorShiftBitShift)*longword(fPasMPInstance.fCountJobWorkerThreads)) shr 16;
+   OtherJobWorkerThread:=fPasMPInstance.fJobWorkerThreads[OtherJobWorkerThreadIndex];
+   if OtherJobWorkerThread=self then begin
+    // Don't try to steal from ourselves
     result:=nil;
-   end;
-  end;
-
-  if not assigned(result) then begin
-
-   result:=fPasMPInstance.fJobQueue.StealJob;
-   if (not assigned(result)) or (result^.UnfinishedJobs<=0) then begin
-    // We couldn't steal a job from the global queue
-    result:=nil;
+   end else begin
+    result:=OtherJobWorkerThread.fJobQueue.StealJob;
+    if (not assigned(result)) or result^.Completed then begin
+     // We couldn't steal a job from the other queue either
+     result:=nil;
+    end;
    end;
 
    if not assigned(result) then begin
-    // If we couldn't steal a job from any queue either, so we just yield our time slice for now
-    Yield;
+
+    result:=fPasMPInstance.fJobQueue.StealJob;
+    if (not assigned(result)) or result^.Completed then begin
+     // We couldn't steal a job from the global queue
+     result:=nil;
+    end;
+
+    if not assigned(result) then begin
+     // If we couldn't steal a job from any queue either, so we just yield our time slice for now
+     Yield;
+    end;
+
    end;
+
+  end else begin
+
+   // But stealing is forbidden for us in the moment
+   result:=nil;
 
   end;
 
@@ -2053,39 +2080,48 @@ begin
 
 end;
 
-procedure TPasMPWorkerThread.ThreadProc;
+procedure TPasMPJobWorkerThread.ThreadProc;
 var SpinCount,CountMaxSpinCount:longint;
     ConditionMutex:TPasMPMutex;
     Job:PPasMPJob;
 begin
  ThreadInitialization;
- ConditionMutex:=TPasMPMutex.Create;
  try
-  ConditionMutex.Acquire;
+  ConditionMutex:=TPasMPMutex.Create;
   try
-   fPasMPInstance.fSystemIsReadyEvent.WaitFor(INFINITE);
-   fPasMPInstance.fWakeUpCondition.Wait(ConditionMutex);
-   SpinCount:=0;
-   CountMaxSpinCount:=128;
-   while not fSystemThread.Terminated do begin
-    Job:=GetJob;
-    if assigned(Job) then begin
-     fPasMPInstance.ExecuteJob(Job,ThreadIndex);
-     SpinCount:=0;
-    end else begin
-     if SpinCount<CountMaxSpinCount then begin
-      inc(SpinCount);
-     end else begin
-      fPasMPInstance.fWakeUpCondition.Wait(ConditionMutex);
+   ConditionMutex.Acquire;
+   try
+    fPasMPInstance.fSystemIsReadyEvent.WaitFor(INFINITE);
+    fPasMPInstance.fWakeUpCondition.Wait(ConditionMutex);
+    SpinCount:=0;
+    CountMaxSpinCount:=128;
+    while not fSystemThread.Terminated do begin
+     Job:=GetJob(true);
+     if assigned(Job) then begin
+      fPasMPInstance.ExecuteJob(Job,self);
       SpinCount:=0;
+     end else begin
+      if SpinCount<CountMaxSpinCount then begin
+       inc(SpinCount);
+      end else begin
+       fPasMPInstance.fWakeUpCondition.Wait(ConditionMutex);
+       SpinCount:=0;
+      end;
      end;
     end;
+   finally
+    ConditionMutex.Release;
    end;
   finally
-   ConditionMutex.Release;
+   ConditionMutex.Free;
   end;
- finally
-  ConditionMutex.Free;
+ except
+  on e:Exception do begin
+   if assigned(e) then begin
+    if assigned(e) then begin
+    end;
+   end;
+  end;
  end;
 end;
 
@@ -2152,7 +2188,7 @@ begin
  end;
 end;
 
-constructor TPasMP.Create(const MaxThreads:longint=-1;const ThreadHeadRoomForForeignTasks:longint=0;const DoCPUCorePinning:boolean=false);
+constructor TPasMP.Create(const MaxThreads:longint=-1;const ThreadHeadRoomForForeignTasks:longint=0;const DoCPUCorePinning:boolean=false;const MaxJobWorkerThreadDepth:longint=8);
 var Index:longint;
 begin
  inherited Create;
@@ -2165,20 +2201,22 @@ begin
 
  fDoCPUCorePinning:=DoCPUCorePinning;
 
- fCountWorkerThreads:=GetCountOfHardwareThreads(fAvailableCPUCores)-ThreadHeadRoomForForeignTasks;
- if fCountWorkerThreads<1 then begin
-  fCountWorkerThreads:=1;
+ fMaximalJobWorkerThreadDepth:=MaxJobWorkerThreadDepth;
+
+ fCountJobWorkerThreads:=GetCountOfHardwareThreads(fAvailableCPUCores)-ThreadHeadRoomForForeignTasks;
+ if fCountJobWorkerThreads<1 then begin
+  fCountJobWorkerThreads:=1;
  end;
- if (MaxThreads>0) and (fCountWorkerThreads>MaxThreads) then begin
-  fCountWorkerThreads:=MaxThreads;
+ if (MaxThreads>0) and (fCountJobWorkerThreads>MaxThreads) then begin
+  fCountJobWorkerThreads:=MaxThreads;
  end;
 
  fSystemIsReadyEvent:=TEvent.Create(nil,true,false,'');
 
  fWakeUpCondition:=TPasMPCondition.Create;
 
- fWorkerThreads:=nil;
- SetLength(fWorkerThreads,fCountWorkerThreads);
+ fJobWorkerThreads:=nil;
+ SetLength(fJobWorkerThreads,fCountJobWorkerThreads);
 
  fMutex:=TPasMPMutex.Create;
 
@@ -2189,17 +2227,17 @@ begin
  fJobQueue:=TPasMPJobQueue.Create(self);
 
 {$ifndef UseThreadLocalStorage}
- fWorkerThreadHashTableMutex:=TPasMPMutex.Create;
+ fJobWorkerThreadHashTableMutex:=TPasMPMutex.Create;
 
- FillChar(fWorkerThreadHashTable,SizeOf(TPasMPWorkerThreadHashTable),AnsiChar(#0));
+ FillChar(fJobWorkerThreadHashTable,SizeOf(TPasMPJobWorkerThreadHashTable),AnsiChar(#0));
 {$endif}
 
- for Index:=0 to fCountWorkerThreads-1 do begin
-  fWorkerThreads[Index]:=TPasMPWorkerThread.Create(self,Index);
+ for Index:=0 to fCountJobWorkerThreads-1 do begin
+  fJobWorkerThreads[Index]:=TPasMPJobWorkerThread.Create(self,Index);
  end;
- for Index:=0 to fCountWorkerThreads-1 do begin
-  fWorkerThreads[Index].fIsReadyEvent.WaitFor(INFINITE);
-  FreeAndNil(fWorkerThreads[Index].fIsReadyEvent);
+ for Index:=0 to fCountJobWorkerThreads-1 do begin
+  fJobWorkerThreads[Index].fIsReadyEvent.WaitFor(INFINITE);
+  FreeAndNil(fJobWorkerThreads[Index].fIsReadyEvent);
  end;
  fSystemIsReadyEvent.SetEvent;
 
@@ -2207,33 +2245,33 @@ end;
 
 destructor TPasMP.Destroy;
 var Index:longint;
-    WorkerThread:TPasMPWorkerThread;
+    JobWorkerThread:TPasMPJobWorkerThread;
 begin
- for Index:=0 to fCountWorkerThreads-1 do begin
-  WorkerThread:=fWorkerThreads[Index];
-  if assigned(WorkerThread.fSystemThread) then begin
-   WorkerThread.fSystemThread.Terminate;
+ for Index:=0 to fCountJobWorkerThreads-1 do begin
+  JobWorkerThread:=fJobWorkerThreads[Index];
+  if assigned(JobWorkerThread.fSystemThread) then begin
+   JobWorkerThread.fSystemThread.Terminate;
   end;
  end;
  fWakeUpCondition.WakeUpAll;
- for Index:=0 to fCountWorkerThreads-1 do begin
-  WorkerThread:=fWorkerThreads[Index];
-  if assigned(WorkerThread.fSystemThread) then begin
-   while WorkerThread.fSystemThread.ReturnValue=0 do begin
+ for Index:=0 to fCountJobWorkerThreads-1 do begin
+  JobWorkerThread:=fJobWorkerThreads[Index];
+  if assigned(JobWorkerThread.fSystemThread) then begin
+   while JobWorkerThread.fSystemThread.ReturnValue=0 do begin
     fWakeUpCondition.WakeUpAll;
     Yield;
    end;
-   WorkerThread.fSystemThread.WaitFor;
+   JobWorkerThread.fSystemThread.WaitFor;
   end;
  end;
- for Index:=0 to fCountWorkerThreads-1 do begin
-  WorkerThread:=fWorkerThreads[Index];
-  if assigned(WorkerThread.fSystemThread) then begin
-   FreeAndNil(WorkerThread.fSystemThread);
+ for Index:=0 to fCountJobWorkerThreads-1 do begin
+  JobWorkerThread:=fJobWorkerThreads[Index];
+  if assigned(JobWorkerThread.fSystemThread) then begin
+   FreeAndNil(JobWorkerThread.fSystemThread);
   end;
-  WorkerThread.Free;
+  JobWorkerThread.Free;
  end;
- SetLength(fWorkerThreads,0);
+ SetLength(fJobWorkerThreads,0);
  SetLength(fAvailableCPUCores,0);
  fJobQueue.Free;
  fJobAllocator.Free;
@@ -2241,13 +2279,13 @@ begin
  fSystemIsReadyEvent.Free;
  fWakeUpCondition.Free;
 {$ifndef UseThreadLocalStorage}
- fWorkerThreadHashTableMutex.Free;
+ fJobWorkerThreadHashTableMutex.Free;
 {$endif}
  fMutex.Free;
  inherited Destroy;
 end;
 
-function TPasMP.GetJobWorkerThread:TPasMPWorkerThread; {$ifdef UseThreadLocalStorage}{$if defined(UseThreadLocalStorageX8632) or defined(UseThreadLocalStorageX8664)}assembler;{$ifend}{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
+function TPasMP.GetJobWorkerThread:TPasMPJobWorkerThread; {$ifdef UseThreadLocalStorage}{$if defined(UseThreadLocalStorageX8632) or defined(UseThreadLocalStorageX8664)}assembler;{$ifend}{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
 {$ifdef UseThreadLocalStorage}
 {$ifdef UseThreadLocalStorageX8632}
 asm
@@ -2274,7 +2312,7 @@ var ThreadID:{$ifdef fpc}TThreadID{$else}longword{$endif};
 begin
  ThreadID:=GetCurrentThreadID;
  ThreadIDHash:=GetThreadIDHash(ThreadID);
- result:=fWorkerThreadHashTable[ThreadIDHash and PasMPWorkerThreadHashTableMask];
+ result:=fJobWorkerThreadHashTable[ThreadIDHash and PasMPJobWorkerThreadHashTableMask];
  while assigned(result) and (result.fThreadID<>ThreadID) do begin
   result:=result.fNext;
  end;
@@ -2286,9 +2324,31 @@ var Index:longint;
 begin
  fJobQueue.QueueGarbageCollector;
  fJobAllocator.FreeJobs;
- for Index:=0 to fCountWorkerThreads-1 do begin
-  fWorkerThreads[Index].fJobQueue.QueueGarbageCollector;
-  fWorkerThreads[Index].fJobAllocator.FreeJobs;
+ for Index:=0 to fCountJobWorkerThreads-1 do begin
+  fJobWorkerThreads[Index].fJobQueue.QueueGarbageCollector;
+  fJobWorkerThreads[Index].fJobAllocator.FreeJobs;
+ end;
+end;
+
+function TPasMP.GetCurrentJobWorkerThreadDepth:longint; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+var JobWorkerThread:TPasMPJobWorkerThread;
+begin
+ JobWorkerThread:=GetJobWorkerThread;
+ if assigned(JobWorkerThread) then begin
+  result:=JobWorkerThread.fJobWorkerThreadDepth;
+ end else begin
+  result:=high(longint);
+ end;
+end;
+
+function TPasMP.IsJobWorkerThreadDepthLimitReached:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+var JobWorkerThread:TPasMPJobWorkerThread;
+begin
+ JobWorkerThread:=GetJobWorkerThread;
+ if assigned(JobWorkerThread) then begin
+  result:=(fMaximalJobWorkerThreadDepth>=0) and (JobWorkerThread.fJobWorkerThreadDepth>fMaximalJobWorkerThreadDepth);
+ end else begin
+  result:=true;
  end;
 end;
 
@@ -2312,27 +2372,29 @@ begin
  end;
 end;
 
-function TPasMP.AllocateJob(const MethodCode,MethodData,Data:pointer;const Parent:PPasMPJob=nil):PPasMPJob; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-var JobWorkerThread:TPasMPWorkerThread;
+function TPasMP.AllocateJob(const MethodCode,MethodData,Data:pointer):PPasMPJob; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+var JobWorkerThread:TPasMPJobWorkerThread;
 begin
  JobWorkerThread:=GetJobWorkerThread;
- if assigned(Parent) then begin
-  InterlockedIncrement(Parent^.UnfinishedJobs);
- end;
  if assigned(JobWorkerThread) then begin
   result:=JobWorkerThread.fJobAllocator.AllocateJob;
+{$ifdef PasMPJobTracing}
+  result^.ParentJob:=JobWorkerThread.fCurrentJob;
+{$endif}
  end else begin
   result:=GlobalAllocateJob;
+{$ifdef PasMPJobTracing}
+  result^.ParentJob:=nil;
+{$endif}
  end;
  result^.Method.Code:=MethodCode;
  result^.Method.Data:=MethodData;
- result^.Parent:=Parent;
  if assigned(JobWorkerThread) then begin
-  result^.OwnedByWorkerThreadIndex:=JobWorkerThread.fThreadIndex;
+  result^.OwnedByJobWorkerThreadIndex:=JobWorkerThread.fThreadIndex;
  end else begin
-  result^.OwnedByWorkerThreadIndex:=-1;
+  result^.OwnedByJobWorkerThreadIndex:=-1;
  end;
- result^.UnfinishedJobs:=1;
+ result^.Completed:=false;
  result^.Data:=Data;
 end;
 
@@ -2354,12 +2416,12 @@ begin
  end;
 end;
 
-function TPasMP.Acquire(const JobReferenceProcedure:TPasMPJobReferenceProcedure;const Data:pointer=nil;const ParentJob:PPasMPJob=nil):PPasMPJob;
+function TPasMP.Acquire(const JobReferenceProcedure:TPasMPJobReferenceProcedure;const Data:pointer=nil):PPasMPJob;
 var JobMethod:TPasMPJobMethod;
     JobReferenceProcedureJobData:PPasMPJobReferenceProcedureJobData;
 begin
  JobMethod:=JobReferenceProcedureJobFunction;
- result:=AllocateJob(TMethod(JobMethod).Code,TMethod(JobMethod).Data,nil,ParentJob);
+ result:=AllocateJob(TMethod(JobMethod).Code,TMethod(JobMethod).Data,nil);
  if assigned(result) then begin
   JobReferenceProcedureJobData:=PPasMPJobReferenceProcedureJobData(pointer(@result^.Data));
   Initialize(JobReferenceProcedureJobData^);
@@ -2369,24 +2431,24 @@ begin
 end;
 {$endif}
 
-function TPasMP.Acquire(const JobProcedure:TPasMPJobProcedure;const Data:pointer=nil;const ParentJob:PPasMPJob=nil):PPasMPJob;
+function TPasMP.Acquire(const JobProcedure:TPasMPJobProcedure;const Data:pointer=nil):PPasMPJob;
 begin
- result:=AllocateJob(Addr(JobProcedure),nil,Data,ParentJob);
+ result:=AllocateJob(Addr(JobProcedure),nil,Data);
 end;
 
-function TPasMP.Acquire(const JobMethod:TPasMPJobMethod;const Data:pointer=nil;const ParentJob:PPasMPJob=nil):PPasMPJob;
+function TPasMP.Acquire(const JobMethod:TPasMPJobMethod;const Data:pointer=nil):PPasMPJob;
 begin
- result:=AllocateJob(TMethod(JobMethod).Code,TMethod(JobMethod).Data,Data,ParentJob);
+ result:=AllocateJob(TMethod(JobMethod).Code,TMethod(JobMethod).Data,Data);
 end;
 
 procedure TPasMP.Release(const Job:PPasMPJob); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-var WorkerThreadIndex:longint;
-    JobWorkerThread:TPasMPWorkerThread;
+var JobWorkerThreadIndex:longint;
+    JobWorkerThread:TPasMPJobWorkerThread;
 begin
  if assigned(Job) then begin
-  WorkerThreadIndex:=Job^.OwnedByWorkerThreadIndex;
-  if WorkerThreadIndex>=0 then begin
-   fWorkerThreads[WorkerThreadIndex].fJobAllocator.FreeJob(Job);
+  JobWorkerThreadIndex:=Job^.OwnedByJobWorkerThreadIndex;
+  if JobWorkerThreadIndex>=0 then begin
+   fJobWorkerThreads[JobWorkerThreadIndex].fJobAllocator.FreeJob(Job);
   end else begin
    GlobalFreeJob(Job);
   end;
@@ -2401,61 +2463,96 @@ begin
  end;
 end;
 
-procedure TPasMP.FinishJob(Job:PPasMPJob); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-var UnfinishedJobs:longint;
+procedure TPasMP.ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+var {$ifdef PasMPJobTracing}LastCurrentJob,{$endif}NewJob:PPasMPJob;
+    ThreadIndex:longint;
+    CanSpawn:boolean;
 begin
- repeat
-  UnfinishedJobs:=InterlockedDecrement(Job^.UnfinishedJobs);
-  if (UnfinishedJobs=0) and assigned(Job^.Parent) then begin
-   Job:=Job^.Parent;
-  end else begin
-   break;
-  end;
- until false;
-end;
 
-procedure TPasMP.ExecuteJob(const Job:PPasMPJob;const ThreadIndex:longint); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-var NewJob:PPasMPJob;
-begin
+{$ifdef PasMPJobTracing}
+ LastCurrentJob:=JobWorkerThread.fCurrentJob;
+ JobWorkerThread.fCurrentJob:=Job;
+{$endif}
+
+ inc(JobWorkerThread.fJobWorkerThreadDepth);
+
+ ThreadIndex:=JobWorkerThread.ThreadIndex;
+
  if assigned(Job^.Method.Data) then begin
+
   if assigned(Job^.Method.Code) then begin
+
    TPasMPJobMethod(Job^.Method)(Job,ThreadIndex);
+
   end else begin
-   // It's a stolen job => try Split
-   if (Job^.OwnedByWorkerThreadIndex<>ThreadIndex) and
-      TPasMPJobInstance(pointer(Job^.Method.Data)).Split(Job,ThreadIndex,NewJob) then begin
-    Run(NewJob);
+
+   if (fMaximalJobWorkerThreadDepth>=0) and (JobWorkerThread.fJobWorkerThreadDepth>=fMaximalJobWorkerThreadDepth) then begin
+
+    // Maximal job depth reached => just execute the job as whole
     TPasMPJobInstance(pointer(Job^.Method.Data)).Run(Job,ThreadIndex);
-    Wait(NewJob);
-    Release(NewJob);
+
    end else begin
-    // It's a non-stolen job or Split of a stolen job has failed => try PartialPop
-    if TPasMPJobInstance(pointer(Job^.Method.Data)).PartialPop(Job,ThreadIndex,NewJob) then begin
+
+    // It's a stolen job => try Split
+
+    if (Job^.OwnedByJobWorkerThreadIndex<>ThreadIndex) and
+       TPasMPJobInstance(pointer(Job^.Method.Data)).Split(Job,ThreadIndex,NewJob) then begin
+
      Run(NewJob);
      TPasMPJobInstance(pointer(Job^.Method.Data)).Run(Job,ThreadIndex);
      Wait(NewJob);
      Release(NewJob);
+
     end else begin
-     // if PartialPop has also failed => just execute the job as whole
-     TPasMPJobInstance(pointer(Job^.Method.Data)).Run(Job,ThreadIndex);
+
+     // It's a non-stolen job or Split of a stolen job has failed => try PartialPop
+
+     if TPasMPJobInstance(pointer(Job^.Method.Data)).PartialPop(Job,ThreadIndex,NewJob) then begin
+
+      Run(NewJob);
+      TPasMPJobInstance(pointer(Job^.Method.Data)).Run(Job,ThreadIndex);
+      Wait(NewJob);
+      Release(NewJob);
+
+     end else begin
+
+      // if PartialPop has also failed => just execute the job as whole
+      TPasMPJobInstance(pointer(Job^.Method.Data)).Run(Job,ThreadIndex);
+
+     end;
+
     end;
+
    end;
+
   end;
+
  end else begin
+
   if assigned(Job^.Method.Code) then begin
    TPasMPJobProcedure(pointer(Job^.Method.Code))(Job,ThreadIndex);
   end;
+
  end;
- FinishJob(Job);
+
+ InterlockedExchange(longint(longbool(Job^.Completed)),longint(longbool(true)));
+
+ dec(JobWorkerThread.fJobWorkerThreadDepth);
+
+{$ifdef PasMPJobTracing}
+ JobWorkerThread.fCurrentJob:=LastCurrentJob;
+{$endif}
+
 end;
 
 procedure TPasMP.Run(const Job:PPasMPJob); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-var JobWorkerThread:TPasMPWorkerThread;
+var JobWorkerThread:TPasMPJobWorkerThread;
 begin
  if assigned(Job) then begin
   JobWorkerThread:=GetJobWorkerThread;
   if assigned(JobWorkerThread) then begin
-   if (assigned(Job^.Method.Data) and not assigned(Job^.Method.Code)) then begin
+    if ((assigned(Job^.Method.Data) and not assigned(Job^.Method.Code))) and
+       (((fMaximalJobWorkerThreadDepth<0) or (JobWorkerThread.fJobWorkerThreadDepth<fMaximalJobWorkerThreadDepth))) then begin
     if not TPasMPJobInstance(pointer(Job^.Method.Data)).Spread(Job,JobWorkerThread.fThreadIndex) then begin
      JobWorkerThread.fJobQueue.PushJob(Job);
     end;
@@ -2470,7 +2567,7 @@ begin
 end;
 
 procedure TPasMP.Run(const Jobs:array of PPasMPJob);
-var JobWorkerThread:TPasMPWorkerThread;
+var JobWorkerThread:TPasMPJobWorkerThread;
     JobIndex:longint;
     Job:PPasMPJob;
 begin
@@ -2479,7 +2576,8 @@ begin
   Job:=Jobs[JobIndex];
   if assigned(Job) then begin
    if assigned(JobWorkerThread) then begin
-    if (assigned(Job^.Method.Data) and not assigned(Job^.Method.Code)) then begin
+    if ((assigned(Job^.Method.Data) and not assigned(Job^.Method.Code))) and
+       (((fMaximalJobWorkerThreadDepth<0) or (JobWorkerThread.fJobWorkerThreadDepth<fMaximalJobWorkerThreadDepth))) then begin
      if not TPasMPJobInstance(pointer(Job^.Method.Data)).Spread(Job,JobWorkerThread.fThreadIndex) then begin
       JobWorkerThread.fJobQueue.PushJob(Job);
      end;
@@ -2497,17 +2595,19 @@ end;
 procedure TPasMP.Wait(const Job:PPasMPJob);
 var SpinCount,CountMaxSpinCount:longint;
     NextJob:PPasMPJob;
-    JobWorkerThread:TPasMPWorkerThread;
+    JobWorkerThread:TPasMPJobWorkerThread;
+    CanSteal:boolean;
 begin
  if assigned(Job) then begin
   JobWorkerThread:=GetJobWorkerThread;
+  CanSteal:=(fMaximalJobWorkerThreadDepth<0) or (JobWorkerThread.fJobWorkerThreadDepth<fMaximalJobWorkerThreadDepth);
   SpinCount:=0;
   CountMaxSpinCount:=128;
-  while Job^.UnfinishedJobs>0 do begin
+  while not Job^.Completed do begin
    if assigned(JobWorkerThread) then begin
-    NextJob:=JobWorkerThread.GetJob;
+    NextJob:=JobWorkerThread.GetJob(CanSteal);
     if assigned(NextJob) then begin
-     ExecuteJob(NextJob,JobWorkerThread.fThreadIndex);
+     ExecuteJob(NextJob,JobWorkerThread);
      SpinCount:=0;
     end else begin
      if SpinCount<CountMaxSpinCount then begin
@@ -2526,19 +2626,20 @@ end;
 procedure TPasMP.Wait(const Jobs:array of PPasMPJob);
 var JobIndex,CountJobs,SpinCount,CountMaxSpinCount:longint;
     Job,NextJob:PPasMPJob;
-    Done:boolean;
-    JobWorkerThread:TPasMPWorkerThread;
+    CanSteal,Done:boolean;
+    JobWorkerThread:TPasMPJobWorkerThread;
 begin
  CountJobs:=length(Jobs);
  if CountJobs>0 then begin
   JobWorkerThread:=GetJobWorkerThread;
+  CanSteal:=(fMaximalJobWorkerThreadDepth<0) or (JobWorkerThread.fJobWorkerThreadDepth<fMaximalJobWorkerThreadDepth);
   SpinCount:=0;
   CountMaxSpinCount:=128;
   repeat
    Done:=true;
    for JobIndex:=0 to CountJobs-1 do begin
     Job:=Jobs[JobIndex];
-    if assigned(Job) and (Job^.UnfinishedJobs>0) then begin
+    if assigned(Job) and not Job^.Completed then begin
      Done:=false;
      break;
     end;
@@ -2547,9 +2648,9 @@ begin
     break;
    end else begin
     if assigned(JobWorkerThread) then begin
-     NextJob:=JobWorkerThread.GetJob;
+     NextJob:=JobWorkerThread.GetJob(CanSteal);
      if assigned(NextJob) then begin
-      ExecuteJob(NextJob,JobWorkerThread.fThreadIndex);
+      ExecuteJob(NextJob,JobWorkerThread);
       SpinCount:=0;
      end else begin
       if SpinCount<CountMaxSpinCount then begin
@@ -2618,6 +2719,7 @@ type PPasMPParallelForReferenceProcedureStartJobData=^TPasMPParallelForReference
       FirstIndex:longint;
       LastIndex:longint;
       Granularity:longint;
+      Depth:longint;
      end;
 
      PPasMPParallelForReferenceProcedureJobData=^TPasMPParallelForReferenceProcedureJobData;
@@ -2625,23 +2727,17 @@ type PPasMPParallelForReferenceProcedureStartJobData=^TPasMPParallelForReference
       StartJobData:PPasMPParallelForReferenceProcedureStartJobData;
       FirstIndex:longint;
       LastIndex:longint;
+      RemainDepth:longint;
      end;
 
 procedure TPasMP.ParallelForJobReferenceProcedureProcess(const Job:PPasMPJob;const ThreadIndex:longint);
 var JobData:PPasMPParallelForReferenceProcedureJobData;
     StartJobData:PPasMPParallelForReferenceProcedureStartJobData;
-    ParallelForReferenceProcedure:TPasMPParallelForReferenceProcedure;
-    Index:longint;
-    Data:pointer;
 begin
  JobData:=PPasMPParallelForReferenceProcedureJobData(pointer(@Job^.Data));
  StartJobData:=JobData^.StartJobData;
- Data:=StartJobData^.Data;
  if assigned(StartJobData^.ParallelForReferenceProcedure) then begin
-  ParallelForReferenceProcedure:=StartJobData^.ParallelForReferenceProcedure;
-  for Index:=JobData^.FirstIndex to JobData^.LastIndex do begin
-   ParallelForReferenceProcedure(Job,ThreadIndex,Data,Index);
-  end;
+  StartJobData^.ParallelForReferenceProcedure(Job,ThreadIndex,StartJobData^.Data,JobData^.FirstIndex,JobData^.LastIndex);
  end;
 end;
 
@@ -2653,30 +2749,34 @@ begin
  JobData:=PPasMPParallelForReferenceProcedureJobData(pointer(@Job^.Data));
  if JobData^.FirstIndex<=JobData^.LastIndex then begin
   StartJobData:=JobData^.StartJobData;
-  if ((JobData^.LastIndex-JobData^.FirstIndex)+1)<=StartJobData^.Granularity then begin
+  if (((JobData^.LastIndex-JobData^.FirstIndex)+1)<=StartJobData^.Granularity) or
+     (JobData^.RemainDepth=0) or
+     IsJobWorkerThreadDepthLimitReached then begin
    ParallelForJobFunctionProcess(Job,ThreadIndex);
   end else begin
-   if (Job^.OwnedByWorkerThreadIndex>=0) and (Job^.OwnedByWorkerThreadIndex<>ThreadIndex) then begin
+   if (Job^.OwnedByJobWorkerThreadIndex>=0) and (Job^.OwnedByJobWorkerThreadIndex<>ThreadIndex) then begin
     // It is a stolen job => split in two halfs
     begin
-     NewJobs[0]:=Acquire(ParallelForJobFunction,nil,Job);
+     NewJobs[0]:=Acquire(ParallelForJobFunction,nil);
      NewJobData:=PPasMPParallelForReferenceProcedureJobData(pointer(@NewJobs[0]^.Data));
      NewJobData^.StartJobData:=StartJobData;
      NewJobData^.FirstIndex:=JobData^.FirstIndex;
      NewJobData^.LastIndex:=(JobData^.FirstIndex+((JobData^.LastIndex-JobData^.FirstIndex) div 2))-1;
+     NewJobData^.RemainDepth:=JobData^.RemainDepth-1;
     end;
     begin
-     NewJobs[1]:=Acquire(ParallelForJobFunction,nil,Job);
+     NewJobs[1]:=Acquire(ParallelForJobFunction,nil);
      NewJobData:=PPasMPParallelForReferenceProcedureJobData(pointer(@NewJobs[1]^.Data));
      NewJobData^.StartJobData:=StartJobData;
      NewJobData^.FirstIndex:=PPasMPParallelForReferenceProcedureJobData(pointer(@NewJobs[0]^.Data))^.LastIndex+1;
      NewJobData^.LastIndex:=JobData^.LastIndex;
+     NewJobData^.RemainDepth:=JobData^.RemainDepth-1;
     end;
     Invoke(NewJobs);
    end else begin
     // It is a non-stolen job => split and increment by granularity count
     begin
-     NewJobs[0]:=Acquire(ParallelForJobFunction,nil,Job);
+     NewJobs[0]:=Acquire(ParallelForJobFunction,nil);
      NewJobData:=PPasMPParallelForReferenceProcedureJobData(pointer(@NewJobs[0]^.Data));
      NewJobData^.StartJobData:=StartJobData;
      NewJobData^.FirstIndex:=JobData^.FirstIndex+StartJobData^.Granularity;
@@ -2704,7 +2804,7 @@ begin
   if JobData^.FirstIndex<EndIndex then begin
    Granularity:=JobData^.Granularity;
    Count:=EndIndex-Index;
-   if Count<=Granularity then begin
+   if (Count<=Granularity) or IsJobWorkerThreadDepthLimitReached then begin
     ParallelForJobFunctionProcess(Job,ThreadIndex);
    end else begin
     CountJobs:=Count div Granularity;
@@ -2720,7 +2820,7 @@ begin
      if Rest>JobIndex then begin
       inc(Size);
      end;
-     NewJobs[JobIndex]:=Acquire(ParallelForJobFunction,nil,Job);
+     NewJobs[JobIndex]:=Acquire(ParallelForJobFunction,nil);
      NewJobData:=PPasMPParallelForReferenceProcedureJobData(pointer(@NewJobs[JobIndex]^.Data));
      NewJobData^.StartJobData:=JobData;
      NewJobData^.FirstIndex:=Index;
@@ -2728,6 +2828,7 @@ begin
      if NewJobData^.LastIndex>JobData^.LastIndex then begin
       NewJobData^.LastIndex:=JobData^.LastIndex;
      end;
+     NewJobData^.RemainDepth:=JobData^.Depth;
      Run(NewJobs[JobIndex]);
      inc(Index,Size);
     end;
@@ -2741,10 +2842,10 @@ begin
  end;
 end;
 
-function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:longint;const ParallelForReferenceProcedure:TPasMPParallelForReferenceProcedure;const Granularity:longint=1;const ParentJob:PPasMPJob=nil):PPasMPJob;
+function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:longint;const ParallelForReferenceProcedure:TPasMPParallelForReferenceProcedure;const Granularity:longint=1;const Depth:longint=6):PPasMPJob;
 var JobData:PPasMPParallelForReferenceProcedureStartJobData;
 begin
- result:=Acquire(ParallelForStartJobReferenceProcedureFunction,nil,ParentJob);
+ result:=Acquire(ParallelForStartJobReferenceProcedureFunction,nil);
  JobData:=PPasMPParallelForReferenceProcedureStartJobData(pointer(@result^.Data));
  Initialize(JobData^);
  JobData^.ParallelForReferenceProcedure:=ParallelForReferenceProcedure;
@@ -2752,80 +2853,81 @@ begin
  JobData^.FirstIndex:=FirstIndex;
  JobData^.LastIndex:=LastIndex;
  JobData^.Granularity:=Granularity;
+ JobData^.Depth:=Depth;
 end;
 {$endif}
 
-type PPasMPParallelForJobData=^TPasMPParallelForJobData;
-     TPasMPParallelForJobData=record
+type PPasMPParallelForStartJobData=^TPasMPParallelForStartJobData;
+     TPasMPParallelForStartJobData=record
       Method:TMethod;
       Data:pointer;
       FirstIndex:longint;
       LastIndex:longint;
       Granularity:longint;
+      Depth:longint;
+     end;
+
+     PPasMPParallelForJobData=^TPasMPParallelForJobData;
+     TPasMPParallelForJobData=record
+      StartJobData:PPasMPParallelForStartJobData;
+      FirstIndex:longint;
+      LastIndex:longint;
+      RemainDepth:longint;
      end;
 
 procedure TPasMP.ParallelForJobFunctionProcess(const Job:PPasMPJob;const ThreadIndex:longint);
 var JobData:PPasMPParallelForJobData;
-    ParallelForMethod:TPasMPParallelForMethod;
-    ParallelForProcedure:TPasMPParallelForProcedure;
-    Index:longint;
-    Data:pointer;
+    StartJobData:PPasMPParallelForStartJobData;
 begin
  JobData:=PPasMPParallelForJobData(pointer(@Job^.Data));
- Data:=JobData^.Data;
- if assigned(JobData^.Method.Data) then begin
-  ParallelForMethod:=TPasMPParallelForMethod(JobData^.Method);
-  for Index:=JobData^.FirstIndex to JobData^.LastIndex do begin
-   ParallelForMethod(Job,ThreadIndex,Data,Index);
-  end;
+ StartJobData:=JobData^.StartJobData;
+ if assigned(StartJobData^.Method.Data) then begin
+  TPasMPParallelForMethod(StartJobData^.Method)(Job,ThreadIndex,StartJobData^.Data,JobData^.FirstIndex,JobData^.LastIndex);
  end else begin
-  ParallelForProcedure:=JobData^.Method.Code;
-  for Index:=JobData^.FirstIndex to JobData^.LastIndex do begin
-   ParallelForProcedure(Job,ThreadIndex,Data,Index);
-  end;
+  TPasMPParallelForProcedure(StartJobData^.Method.Code)(Job,ThreadIndex,StartJobData^.Data,JobData^.FirstIndex,JobData^.LastIndex);
  end;
 end;
 
 procedure TPasMP.ParallelForJobFunction(const Job:PPasMPJob;const ThreadIndex:longint);
 var NewJobs:array[0..1] of PPasMPJob;
     JobData,NewJobData:PPasMPParallelForJobData;
+    StartJobData:PPasMPParallelForStartJobData;
 begin
  JobData:=PPasMPParallelForJobData(pointer(@Job^.Data));
  if JobData^.FirstIndex<=JobData^.LastIndex then begin
-  if ((JobData^.LastIndex-JobData^.FirstIndex)+1)<=JobData^.Granularity then begin
+  StartJobData:=JobData^.StartJobData;
+  if (((JobData^.LastIndex-JobData^.FirstIndex)+1)<=StartJobData^.Granularity) or
+     (JobData^.RemainDepth<=0) or
+     IsJobWorkerThreadDepthLimitReached then begin
    ParallelForJobFunctionProcess(Job,ThreadIndex);
   end else begin
-   if (Job^.OwnedByWorkerThreadIndex>=0) and (Job^.OwnedByWorkerThreadIndex<>ThreadIndex) then begin
+   if (Job^.OwnedByJobWorkerThreadIndex>=0) and (Job^.OwnedByJobWorkerThreadIndex<>ThreadIndex) then begin
     // It is a stolen job => split in two halfs
     begin
-     NewJobs[0]:=Acquire(ParallelForJobFunction,nil,Job);
+     NewJobs[0]:=Acquire(ParallelForJobFunction,nil);
      NewJobData:=PPasMPParallelForJobData(pointer(@NewJobs[0]^.Data));
-     NewJobData^.Method:=JobData^.Method;
-     NewJobData^.Data:=JobData^.Data;
+     NewJobData^.StartJobData:=JobData^.StartJobData;
      NewJobData^.FirstIndex:=JobData^.FirstIndex;
      NewJobData^.LastIndex:=(JobData^.FirstIndex+((JobData^.LastIndex-JobData^.FirstIndex) div 2))-1;
-     NewJobData^.Granularity:=JobData^.Granularity;
+     NewJobData^.RemainDepth:=JobData^.RemainDepth-1;
     end;
     begin
-     NewJobs[1]:=Acquire(ParallelForJobFunction,nil,Job);
+     NewJobs[1]:=Acquire(ParallelForJobFunction,nil);
      NewJobData:=PPasMPParallelForJobData(pointer(@NewJobs[1]^.Data));
-     NewJobData^.Method:=JobData^.Method;
-     NewJobData^.Data:=JobData^.Data;
+     NewJobData^.StartJobData:=JobData^.StartJobData;
      NewJobData^.FirstIndex:=PPasMPParallelForJobData(pointer(@NewJobs[0]^.Data))^.LastIndex+1;
      NewJobData^.LastIndex:=JobData^.LastIndex;
-     NewJobData^.Granularity:=JobData^.Granularity;
+     NewJobData^.RemainDepth:=JobData^.RemainDepth-1;
     end;
     Invoke(NewJobs);
    end else begin
     // It is a non-stolen job => split and increment by granularity count
     begin
-     NewJobs[0]:=Acquire(ParallelForJobFunction,nil,Job);
+     NewJobs[0]:=Acquire(ParallelForJobFunction,nil);
      NewJobData:=PPasMPParallelForJobData(pointer(@NewJobs[0]^.Data));
-     NewJobData^.Method:=JobData^.Method;
-     NewJobData^.Data:=JobData^.Data;
-     NewJobData^.FirstIndex:=JobData^.FirstIndex+JobData^.Granularity;
+     NewJobData^.StartJobData:=JobData^.StartJobData;
+     NewJobData^.FirstIndex:=JobData^.FirstIndex+StartJobData^.Granularity;
      NewJobData^.LastIndex:=JobData^.LastIndex;
-     NewJobData^.Granularity:=JobData^.Granularity;
      JobData^.LastIndex:=NewJobData^.FirstIndex-1;
     end;
     Run(NewJobs[0]);
@@ -2838,16 +2940,17 @@ end;
 
 procedure TPasMP.ParallelForStartJobFunction(const Job:PPasMPJob;const ThreadIndex:longint);
 var NewJobs:array[0..31] of PPasMPJob;
-    JobData,NewJobData:PPasMPParallelForJobData;
+    JobData:PPasMPParallelForStartJobData;
+    NewJobData:PPasMPParallelForJobData;
     Index,EndIndex,Granularity,Count,CountJobs,PartSize,Rest,Size,JobIndex:longint;
 begin
- JobData:=PPasMPParallelForJobData(pointer(@Job^.Data));
+ JobData:=PPasMPParallelForStartJobData(pointer(@Job^.Data));
  Index:=JobData^.FirstIndex;
  EndIndex:=JobData^.LastIndex+1;
  if JobData^.FirstIndex<EndIndex then begin
   Granularity:=JobData^.Granularity;
   Count:=EndIndex-Index;
-  if Count<=Granularity then begin
+  if (Count<=Granularity) or IsJobWorkerThreadDepthLimitReached then begin
    ParallelForJobFunctionProcess(Job,ThreadIndex);
   end else begin
    CountJobs:=Count div Granularity;
@@ -2863,16 +2966,15 @@ begin
     if Rest>JobIndex then begin
      inc(Size);
     end;
-    NewJobs[JobIndex]:=Acquire(ParallelForJobFunction,nil,Job);
+    NewJobs[JobIndex]:=Acquire(ParallelForJobFunction,nil);
     NewJobData:=PPasMPParallelForJobData(pointer(@NewJobs[JobIndex]^.Data));
-    NewJobData^.Method:=JobData^.Method;
-    NewJobData^.Data:=JobData^.Data;
+    NewJobData^.StartJobData:=JobData;
     NewJobData^.FirstIndex:=Index;
     NewJobData^.LastIndex:=(Index+Size)-1;
     if NewJobData^.LastIndex>JobData^.LastIndex then begin
      NewJobData^.LastIndex:=JobData^.LastIndex;
     end;
-    NewJobData^.Granularity:=JobData^.Granularity;
+    NewJobData^.RemainDepth:=JobData^.Depth;
     Run(NewJobs[JobIndex]);
     inc(Index,Size);
    end;
@@ -2883,11 +2985,11 @@ begin
  end;
 end;
 
-function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:longint;const ParallelForProcedure:TPasMPParallelForProcedure;const Granularity:longint=1;const ParentJob:PPasMPJob=nil):PPasMPJob;
-var JobData:PPasMPParallelForJobData;
+function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:longint;const ParallelForProcedure:TPasMPParallelForProcedure;const Granularity:longint=1;const Depth:longint=6):PPasMPJob;
+var JobData:PPasMPParallelForStartJobData;
 begin
- result:=Acquire(ParallelForStartJobFunction,nil,ParentJob);
- JobData:=PPasMPParallelForJobData(pointer(@result^.Data));
+ result:=Acquire(ParallelForStartJobFunction,nil);
+ JobData:=PPasMPParallelForStartJobData(pointer(@result^.Data));
  JobData^.Method.Code:=Addr(ParallelForProcedure);
  JobData^.Method.Data:=nil;
  JobData^.Data:=Data;
@@ -2898,13 +3000,14 @@ begin
  end else begin
   JobData^.Granularity:=Granularity;
  end;
+ JobData^.Depth:=Depth;
 end;
 
-function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:longint;const ParallelForMethod:TPasMPParallelForMethod;const Granularity:longint=1;const ParentJob:PPasMPJob=nil):PPasMPJob;
-var JobData:PPasMPParallelForJobData;
+function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:longint;const ParallelForMethod:TPasMPParallelForMethod;const Granularity:longint=1;const Depth:longint=6):PPasMPJob;
+var JobData:PPasMPParallelForStartJobData;
 begin
- result:=Acquire(ParallelForStartJobFunction,nil,ParentJob);
- JobData:=PPasMPParallelForJobData(pointer(@result^.Data));
+ result:=Acquire(ParallelForStartJobFunction,nil);
+ JobData:=PPasMPParallelForStartJobData(pointer(@result^.Data));
  JobData^.Method:=TMethod(ParallelForMethod);
  JobData^.Data:=Data;
  JobData^.FirstIndex:=FirstIndex;
@@ -2914,6 +3017,7 @@ begin
  end else begin
   JobData^.Granularity:=Granularity;
  end;
+ JobData^.Depth:=Depth;
 end;
 
 type PPasMPParallelDirectIntroSortJobData=^TPasMPParallelDirectIntroSortJobData;
@@ -3038,7 +3142,7 @@ begin
      end;
     until false;
     if Left<j then begin
-     NewJobs[0]:=Acquire(ParallelDirectIntroSortJobFunction,nil,Job);
+     NewJobs[0]:=Acquire(ParallelDirectIntroSortJobFunction,nil);
      NewJobData:=PPasMPParallelDirectIntroSortJobData(pointer(@NewJobs[0]^.Data));
      NewJobData^.Items:=JobData^.Items;
      NewJobData^.Left:=Left;
@@ -3051,7 +3155,7 @@ begin
      NewJobs[0]:=nil;
     end;
     if i<Right then begin
-     NewJobs[1]:=Acquire(ParallelDirectIntroSortJobFunction,nil,Job);
+     NewJobs[1]:=Acquire(ParallelDirectIntroSortJobFunction,nil);
      NewJobData:=PPasMPParallelDirectIntroSortJobData(pointer(@NewJobs[1]^.Data));
      NewJobData^.Items:=JobData^.Items;
      NewJobData^.Left:=i;
@@ -3069,10 +3173,10 @@ begin
  end;
 end;
 
-function TPasMP.ParallelDirectIntroSort(const Items:pointer;const Left,Right,ElementSize:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16;const ParentJob:PPasMPJob=nil):PPasMPJob;
+function TPasMP.ParallelDirectIntroSort(const Items:pointer;const Left,Right,ElementSize:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16):PPasMPJob;
 var JobData:PPasMPParallelDirectIntroSortJobData;
 begin
- result:=Acquire(ParallelDirectIntroSortJobFunction,nil,ParentJob);
+ result:=Acquire(ParallelDirectIntroSortJobFunction,nil);
  JobData:=PPasMPParallelDirectIntroSortJobData(pointer(@result^.Data));
  JobData^.Items:=Items;
  JobData^.Left:=Left;
@@ -3203,7 +3307,7 @@ begin
      end;
     until false;
     if Left<j then begin
-     NewJobs[0]:=Acquire(ParallelIndirectIntroSortJobFunction,nil,Job);
+     NewJobs[0]:=Acquire(ParallelIndirectIntroSortJobFunction,nil);
      NewJobData:=PPasMPParallelIndirectIntroSortJobData(pointer(@NewJobs[0]^.Data));
      NewJobData^.Items:=JobData^.Items;
      NewJobData^.Left:=Left;
@@ -3215,7 +3319,7 @@ begin
      NewJobs[0]:=nil;
     end;
     if i<Right then begin
-     NewJobs[1]:=Acquire(ParallelIndirectIntroSortJobFunction,nil,Job);
+     NewJobs[1]:=Acquire(ParallelIndirectIntroSortJobFunction,nil);
      NewJobData:=PPasMPParallelIndirectIntroSortJobData(pointer(@NewJobs[1]^.Data));
      NewJobData^.Items:=JobData^.Items;
      NewJobData^.Left:=i;
@@ -3232,10 +3336,10 @@ begin
  end;
 end;
 
-function TPasMP.ParallelIndirectIntroSort(const Items:pointer;const Left,Right:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16;const ParentJob:PPasMPJob=nil):PPasMPJob;
+function TPasMP.ParallelIndirectIntroSort(const Items:pointer;const Left,Right:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16):PPasMPJob;
 var JobData:PPasMPParallelIndirectIntroSortJobData;
 begin
- result:=Acquire(ParallelIndirectIntroSortJobFunction,nil,ParentJob);
+ result:=Acquire(ParallelIndirectIntroSortJobFunction,nil);
  JobData:=PPasMPParallelIndirectIntroSortJobData(pointer(@result^.Data));
  JobData^.Items:=Items;
  JobData^.Left:=Left;
@@ -3338,7 +3442,7 @@ begin
     end else begin
      Middle:=Left+((Right-Left) shr 1);
      if Left<Middle then begin
-      NewJobs[0]:=Acquire(ParallelDirectMergeSortJobFunction,nil,Job);
+      NewJobs[0]:=Acquire(ParallelDirectMergeSortJobFunction,nil);
       NewJobData:=PPasMPParallelDirectMergeSortJobData(pointer(@NewJobs[0]^.Data));
       NewJobData^.Data:=Data;
       NewJobData^.Left:=Left;
@@ -3348,7 +3452,7 @@ begin
       NewJobs[0]:=nil;
      end;
      if Middle<=Right then begin
-      NewJobs[1]:=Acquire(ParallelDirectMergeSortJobFunction,nil,Job);
+      NewJobs[1]:=Acquire(ParallelDirectMergeSortJobFunction,nil);
       NewJobData:=PPasMPParallelDirectMergeSortJobData(pointer(@NewJobs[1]^.Data));
       NewJobData^.Data:=JobData^.Data;
       NewJobData^.Left:=Middle;
@@ -3429,7 +3533,7 @@ begin
   Data.ElementSize:=JobData^.ElementSize;
   Data.Granularity:=JobData^.Granularity;
   Data.CompareFunc:=JobData^.CompareFunc;
-  ChildJob:=Acquire(ParallelDirectMergeSortJobFunction,nil,Job);
+  ChildJob:=Acquire(ParallelDirectMergeSortJobFunction,nil);
   ChildJobData:=PPasMPParallelDirectMergeSortJobData(pointer(@ChildJob^.Data));
   ChildJobData^.Data:=@Data;
   ChildJobData^.Left:=JobData^.Left;
@@ -3445,11 +3549,11 @@ begin
  end;
 end;
 
-function TPasMP.ParallelDirectMergeSort(const Items:pointer;const Left,Right,ElementSize:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16;const ParentJob:PPasMPJob=nil):PPasMPJob;
+function TPasMP.ParallelDirectMergeSort(const Items:pointer;const Left,Right,ElementSize:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16):PPasMPJob;
 var JobData:PPasMPParallelDirectMergeSortRootJobData;
 begin
  if ((Left+1)<Right) and (ElementSize>0) then begin
-  result:=Acquire(ParallelDirectMergeSortJobFunction,nil,ParentJob);
+  result:=Acquire(ParallelDirectMergeSortJobFunction,nil);
   JobData:=PPasMPParallelDirectMergeSortRootJobData(pointer(@result^.Data));
   JobData^.Items:=Items;
   JobData^.Left:=Left;
@@ -3562,7 +3666,7 @@ begin
     end else begin
      Middle:=Left+((Right-Left) shr 1);
      if Left<Middle then begin
-      ChildJobs[0]:=Acquire(ParallelIndirectMergeSortJobFunction,nil,Job);
+      ChildJobs[0]:=Acquire(ParallelIndirectMergeSortJobFunction,nil);
       ChildJobData:=PPasMPParallelIndirectMergeSortJobData(pointer(@ChildJobs[0]^.Data));
       ChildJobData^.Data:=Data;
       ChildJobData^.Left:=Left;
@@ -3572,7 +3676,7 @@ begin
       ChildJobs[0]:=nil;
      end;
      if Middle<=Right then begin
-      ChildJobs[1]:=Acquire(ParallelIndirectMergeSortJobFunction,nil,Job);
+      ChildJobs[1]:=Acquire(ParallelIndirectMergeSortJobFunction,nil);
       ChildJobData:=PPasMPParallelIndirectMergeSortJobData(pointer(@ChildJobs[1]^.Data));
       ChildJobData^.Data:=JobData^.Data;
       ChildJobData^.Left:=Middle;
@@ -3651,7 +3755,7 @@ begin
   Data.Items:=JobData^.Items;
   Data.Granularity:=JobData^.Granularity;
   Data.CompareFunc:=JobData^.CompareFunc;
-  ChildJob:=Acquire(ParallelIndirectMergeSortJobFunction,nil,Job);
+  ChildJob:=Acquire(ParallelIndirectMergeSortJobFunction,nil);
   ChildJobData:=PPasMPParallelIndirectMergeSortJobData(pointer(@ChildJob^.Data));
   ChildJobData^.Data:=@Data;
   ChildJobData^.Left:=JobData^.Left;
@@ -3667,11 +3771,11 @@ begin
  end;
 end;
 
-function TPasMP.ParallelIndirectMergeSort(const Items:pointer;const Left,Right:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16;const ParentJob:PPasMPJob=nil):PPasMPJob;
+function TPasMP.ParallelIndirectMergeSort(const Items:pointer;const Left,Right:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16):PPasMPJob;
 var JobData:PPasMPParallelIndirectMergeSortRootJobData;
 begin
  if (Left+1)<Right then begin
-  result:=Acquire(ParallelIndirectMergeSortJobFunction,nil,ParentJob);
+  result:=Acquire(ParallelIndirectMergeSortJobFunction,nil);
   JobData:=PPasMPParallelIndirectMergeSortRootJobData(pointer(@result^.Data));
   JobData^.Items:=Items;
   JobData^.Left:=Left;
