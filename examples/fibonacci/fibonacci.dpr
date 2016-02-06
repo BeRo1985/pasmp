@@ -62,9 +62,14 @@ begin
   NewJobData^.Current:=JobData^.Current-1;
   NewJobData^.Depth:=JobData^.Depth+1;
 
-  PasMPInstance.Invoke(Jobs); // Invoke combines Run, Wait and Release into a call
+  PasMPInstance.RunWait(Jobs); // <= RunWait combines Run and Wait into a single call
+                               // and Invoke combines Run, Wait and Release into a single call, but
+                               // Invoke isn't applicable here, since we do need the return values of
+                               // our children jobs
 
   JobData^.ReturnValue:=PfibRPJobData(pointer(@Jobs[0].Data))^.ReturnValue+PfibRPJobData(pointer(@Jobs[1].Data))^.ReturnValue;
+
+  PasMPInstance.Release(Jobs); // Release our children jobs onto the job allocator free list (=> otherwise memory leak)
 
  end;
 end;
@@ -77,8 +82,12 @@ begin
  JobData:=PfibRPJobData(pointer(@Job^.Data));
  JobData^.Current:=n;
  JobData^.Depth:=0;
- PasMPInstance.Invoke(Job);
+ PasMPInstance.RunWait(Job); // <= RunWait combines Run and Wait into a single call
+                             // and Invoke combines Run, Wait and Release into a single call, but
+                             // Invoke isn't applicable here, since we do need the return values of
+                             // our children job
  result:=JobData^.ReturnValue;
+ PasMPInstance.Release(Job); // Release our children jobs onto the job allocator free list (=> otherwise memory leak)
 end;
 
 const N=45;
