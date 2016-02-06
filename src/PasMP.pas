@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-06-12-42-0000                       *
+ *                        Version 2016-02-06-13-31-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -147,10 +147,10 @@ unit PasMP;
  {$ifend}
 {$endif}
 {$ifdef CPU386}
- {-$define HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+ {$define HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 {$endif}
 {$ifdef CPUx86_64}
- {-$define HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+ {$define HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 {$endif}
 {$ifdef Win32}
  {$define Windows}
