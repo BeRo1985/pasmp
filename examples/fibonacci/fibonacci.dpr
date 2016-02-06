@@ -116,7 +116,7 @@ begin
  end;
 
  for i:=1 to 9 do begin
-  PasMPInstance.Reset; // <= optional, triggers amongst other things the job queue memory pool garbage collector
+  PasMPInstance.Reset; // <= optional per workload-frame, triggers amongst other things the job queue memory pool garbage collector
   write('fibRP (parallelized recursive): ');
   QueryPerformanceCounter(StartTime);
   write(fibRP(N));
