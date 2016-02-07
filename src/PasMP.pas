@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-07-07-02-0000                       *
+ *                        Version 2016-02-07-08-25-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -402,10 +402,10 @@ type TPasMPAvailableCPUCores=array of longint;
       public
        constructor Create;
        destructor Destroy; override;
-       procedure Run(const Job:PPasMPJob;const ThreadIndex:longint); virtual;
-       function Split(const Job:PPasMPJob;const ThreadIndex:longint;out NewJob:PPasMPJob):boolean; virtual;
-       function PartialPop(const Job:PPasMPJob;const ThreadIndex:longint;out NewJob:PPasMPJob):boolean; virtual;
-       function Spread(const Job:PPasMPJob;const ThreadIndex:longint):boolean; virtual;
+       procedure Run(const ThreadIndex:longint); virtual;
+       function Split(out NewJobTask:TPasMPJobTask):boolean; virtual;
+       function PartialPop(out NewJobTask:TPasMPJobTask):boolean; virtual;
+       function Spread:boolean; virtual;
        property FreeOnRelease:boolean read fFreeOnRelease write fFreeOnRelease;
      end;
 
@@ -1447,21 +1447,21 @@ begin
  inherited Destroy;
 end;
 
-procedure TPasMPJobTask.Run(const Job:PPasMPJob;const ThreadIndex:longint);
+procedure TPasMPJobTask.Run(const ThreadIndex:longint);
 begin
 end;
 
-function TPasMPJobTask.Split(const Job:PPasMPJob;const ThreadIndex:longint;out NewJob:PPasMPJob):boolean;
-begin
- result:=false;
-end;
-
-function TPasMPJobTask.PartialPop(const Job:PPasMPJob;const ThreadIndex:longint;out NewJob:PPasMPJob):boolean;
+function TPasMPJobTask.Split(out NewJobTask:TPasMPJobTask):boolean;
 begin
  result:=false;
 end;
 
-function TPasMPJobTask.Spread(const Job:PPasMPJob;const ThreadIndex:longint):boolean;
+function TPasMPJobTask.PartialPop(out NewJobTask:TPasMPJobTask):boolean;
+begin
+ result:=false;
+end;
+
+function TPasMPJobTask.Spread:boolean;
 begin
  result:=false;
 end;
@@ -2563,6 +2563,7 @@ end;
 procedure TPasMP.ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 var {$ifdef PasMPJobTracing}LastCurrentJob,{$endif}NewJob:PPasMPJob;
     ThreadIndex:longint;
+    NewJobTask:TPasMPJobTask;
 begin
 
 {$ifdef PasMPJobTracing}
@@ -2590,13 +2591,17 @@ begin
 
    end else{$endif}begin
 
+    // First try to spread
+    TPasMPJobTask(pointer(Job^.Method.Data)).Spread;
+
     // It's a stolen job => try Split
 
-    if (Job^.OwnedByJobWorkerThreadIndex<>ThreadIndex) and
-       TPasMPJobTask(pointer(Job^.Method.Data)).Split(Job,ThreadIndex,NewJob) then begin
+    if ((Job^.OwnedByJobWorkerThreadIndex>=0) and (Job^.OwnedByJobWorkerThreadIndex<>ThreadIndex)) and
+       TPasMPJobTask(pointer(Job^.Method.Data)).Split(NewJobTask) then begin
 
+     NewJob:=Acquire(NewJobTask);
      Run(NewJob);
-     TPasMPJobTask(pointer(Job^.Method.Data)).Run(Job,ThreadIndex);
+     TPasMPJobTask(pointer(Job^.Method.Data)).Run(ThreadIndex);
      Wait(NewJob);
      Release(NewJob);
 
@@ -2604,17 +2609,18 @@ begin
 
      // It's a non-stolen job or Split of a stolen job has failed => try PartialPop
 
-     if TPasMPJobTask(pointer(Job^.Method.Data)).PartialPop(Job,ThreadIndex,NewJob) then begin
+     if TPasMPJobTask(pointer(Job^.Method.Data)).PartialPop(NewJobTask) then begin
 
+      NewJob:=Acquire(NewJobTask);
       Run(NewJob);
-      TPasMPJobTask(pointer(Job^.Method.Data)).Run(Job,ThreadIndex);
+      TPasMPJobTask(pointer(Job^.Method.Data)).Run(ThreadIndex);
       Wait(NewJob);
       Release(NewJob);
 
      end else begin
 
       // if PartialPop has also failed => just execute the job as whole
-      TPasMPJobTask(pointer(Job^.Method.Data)).Run(Job,ThreadIndex);
+      TPasMPJobTask(pointer(Job^.Method.Data)).Run(ThreadIndex);
 
      end;
 
@@ -2648,14 +2654,7 @@ begin
  if assigned(Job) then begin
   JobWorkerThread:=GetJobWorkerThread;
   if assigned(JobWorkerThread) then begin
-    if ((assigned(Job^.Method.Data) and not assigned(Job^.Method.Code))){$ifdef PasMPJobTracing}and
-       (((fMaximalJobStackDepth<0) or (JobWorkerThread.fJobStackDepth<fMaximalJobStackDepth))){$endif}then begin
-    if not TPasMPJobTask(pointer(Job^.Method.Data)).Spread(Job,JobWorkerThread.fThreadIndex) then begin
-     JobWorkerThread.fJobQueue.PushJob(Job);
-    end;
-   end else begin
-    JobWorkerThread.fJobQueue.PushJob(Job);
-   end;
+   JobWorkerThread.fJobQueue.PushJob(Job);
   end else begin
    fJobQueue.PushJob(Job);
   end;
@@ -2673,14 +2672,7 @@ begin
   Job:=Jobs[JobIndex];
   if assigned(Job) then begin
    if assigned(JobWorkerThread) then begin
-    if ((assigned(Job^.Method.Data) and not assigned(Job^.Method.Code))){$ifdef PasMPJobTracing}and
-       (((fMaximalJobStackDepth<0) or (JobWorkerThread.fJobStackDepth<fMaximalJobStackDepth))){$endif}then begin
-     if not TPasMPJobTask(pointer(Job^.Method.Data)).Spread(Job,JobWorkerThread.fThreadIndex) then begin
-      JobWorkerThread.fJobQueue.PushJob(Job);
-     end;
-    end else begin
-     JobWorkerThread.fJobQueue.PushJob(Job);
-    end;
+    JobWorkerThread.fJobQueue.PushJob(Job);
    end else begin
     fJobQueue.PushJob(Job);
    end;

@@ -38,7 +38,7 @@ type TfibRPJobTask=class(TPasMPJobTask)
        fDepth:longint;
        fReturnValue:longint;
        constructor Create(const Current,Depth:longint);
-       procedure Run(const Job:PPasMPJob;const ThreadIndex:longint); override;
+       procedure Run(const ThreadIndex:longint); override;
      end;
 
 constructor TfibRPJobTask.Create(const Current,Depth:longint);
@@ -49,7 +49,7 @@ begin
  fDepth:=Depth;
 end;
 
-procedure TfibRPJobTask.Run(const Job:PPasMPJob;const ThreadIndex:longint);
+procedure TfibRPJobTask.Run(const ThreadIndex:longint);
 var Jobs:array[0..1] of PPasMPJob;
     JobTasks:array[0..1] of TfibRPJobTask;
 begin
