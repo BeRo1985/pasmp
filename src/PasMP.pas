@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-06-13-41-0000                       *
+ *                        Version 2016-02-07-04-32-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -514,7 +514,6 @@ type TPasMPAvailableCPUCores=array of longint;
       public
        constructor Create(const APasMPInstance:TPasMP);
        destructor Destroy; override;
-       procedure Reset;
        procedure Run(const Job:PPasMPJob); overload;
        procedure Run(const Jobs:array of PPasMPJob); overload;
        procedure Wait;
@@ -540,6 +539,7 @@ type TPasMPAvailableCPUCores=array of longint;
        fJobWorkerThreadHashTableMutex:TPasMPMutex;
        fJobWorkerThreadHashTable:TPasMPJobWorkerThreadHashTable;
 {$endif}
+       class procedure DestroyGlobalInstance;
        function GetJobWorkerThread:TPasMPJobWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
        function GetCurrentJobStackDepth:longint; {$ifdef CAN_INLINE}inline;{$endif}
        function GlobalAllocateJob:PPasMPJob;
@@ -564,8 +564,11 @@ type TPasMPAvailableCPUCores=array of longint;
       public
        constructor Create(const MaxThreads:longint=-1;const ThreadHeadRoomForForeignTasks:longint=0;const DoCPUCorePinning:boolean=false;const MaxJobStackDepth:longint=8);
        destructor Destroy; override;
+       class function CreateGlobalInstance:TPasMP;
+       class function GetGlobalInstance:TPasMP; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure Reset;
        function IsJobStackDepthLimitReached:boolean; {$ifdef CAN_INLINE}inline;{$endif}
+       function CreateScope:TPasMPScope; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef HAS_ANONYMOUS_METHODS}
        function Acquire(const JobReferenceProcedure:TPasMPJobReferenceProcedure;const Data:pointer=nil):PPasMPJob; overload;
 {$endif}
@@ -597,6 +600,15 @@ type TPasMPAvailableCPUCores=array of longint;
        property CurrentJobStackDepth:longint read GetCurrentJobStackDepth;
      end;
 
+var GlobalPasMP:TPasMP=nil; // "Optional" singleton-like global PasMP instance
+
+    GlobalPasMPMaximalThreads:longint=-1;
+    GlobalPasMPThreadHeadRoomForForeignTasks:longint=0;
+    GlobalPasMPDoCPUCorePinning:boolean=false;
+    GlobalPasMPMaxJobStackDepth:longint=8;
+
+    GPasMP:TPasMP absolute GlobalPasMP; // A shorter name for lazy peoples
+
 implementation
 
 {$ifdef UseThreadLocalStorage}
@@ -606,6 +618,8 @@ var CurrentJobWorkerThreadTLSIndex,CurrentJobWorkerThreadTLSOffset:longint;
 threadvar CurrentJobWorkerThread:TPasMPJobWorkerThread;
 {$ifend}
 {$endif}
+
+var GlobalPasMPMutex:TPasMPMutex=nil;
 
 {$ifdef fpc}
  {$undef OldDelphi}
@@ -2135,17 +2149,6 @@ begin
  inherited Destroy;
 end;
 
-procedure TPasMPScope.Reset;
-begin
- if not fWaitCalled then begin
-  Wait;
- end;
- fPasMPInstance.Release(fJobs);
- fWaitCalled:=false;
- SetLength(fJobs,0);
- fCountJobs:=0;
-end;
-
 procedure TPasMPScope.Run(const Job:PPasMPJob);
 begin
  fPasMPInstance.Run(Job);
@@ -2182,6 +2185,7 @@ end;
 constructor TPasMP.Create(const MaxThreads:longint=-1;const ThreadHeadRoomForForeignTasks:longint=0;const DoCPUCorePinning:boolean=false;const MaxJobStackDepth:longint=8);
 var Index:longint;
 begin
+
  inherited Create;
 
  fFPUExceptionMask:=GetExceptionMask;
@@ -2276,6 +2280,44 @@ begin
  inherited Destroy;
 end;
 
+class function TPasMP.CreateGlobalInstance:TPasMP;
+begin
+ MemoryBarrier;
+ if not assigned(GlobalPasMP) then begin
+  GlobalPasMPMutex.Acquire;
+  try
+   if not assigned(GlobalPasMP) then begin
+    GlobalPasMP:=TPasMP.Create(GlobalPasMPMaximalThreads,
+                               GlobalPasMPThreadHeadRoomForForeignTasks,
+                               GlobalPasMPDoCPUCorePinning,
+                               GlobalPasMPMaxJobStackDepth);
+    MemoryBarrier;
+   end;
+  finally
+   GlobalPasMPMutex.Release;
+  end;
+ end;
+ result:=GlobalPasMP;
+end;
+
+class procedure TPasMP.DestroyGlobalInstance;
+begin
+ GlobalPasMPMutex.Acquire;
+ try
+  FreeAndNil(GlobalPasMP);
+ finally
+  GlobalPasMPMutex.Release;
+ end;
+end;
+
+class function TPasMP.GetGlobalInstance:TPasMP; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+ if not assigned(GlobalPasMP) then begin
+  CreateGlobalInstance;
+ end;
+ result:=GlobalPasMP;
+end;
+
 function TPasMP.GetJobWorkerThread:TPasMPJobWorkerThread; {$ifdef UseThreadLocalStorage}{$if defined(UseThreadLocalStorageX8632) or defined(UseThreadLocalStorageX8664)}assembler;{$ifend}{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
 {$ifdef UseThreadLocalStorage}
 {$ifdef UseThreadLocalStorageX8632}
@@ -2341,6 +2383,11 @@ begin
  end else begin
   result:=true;
  end;
+end;
+
+function TPasMP.CreateScope:TPasMPScope; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+ result:=TPasMPScope.Create(self);
 end;
 
 function TPasMP.GlobalAllocateJob:PPasMPJob;
@@ -3790,4 +3837,11 @@ initialization
  CurrentJobWorkerThreadTLSOffset:={$if defined(UseThreadLocalStorageX8632)}$e10+(CurrentJobWorkerThreadTLSIndex*4){$else}$1480+(CurrentJobWorkerThreadTLSIndex*8){$ifend};
 {$ifend}
 {$endif}
+ GlobalPasMP:=nil;
+ GlobalPasMPMutex:=TPasMPMutex.Create;
+finalization
+ if assigned(GlobalPasMP) then begin
+  TPasMP.DestroyGlobalInstance;
+ end;
+ GlobalPasMPMutex.Free;
 end.
