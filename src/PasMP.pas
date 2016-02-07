@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-07-05-29-0000                       *
+ *                        Version 2016-02-07-07-02-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2877,12 +2877,12 @@ begin
   if (((JobData^.LastIndex-JobData^.FirstIndex)+1)<=StartJobData^.Granularity) or
      (JobData^.RemainDepth=0){$ifdef PasMPJobTracing}or
      IsJobStackDepthLimitReached{$endif}then begin
-   ParallelForJobFunctionProcess(Job,ThreadIndex);
+   ParallelForJobReferenceProcedureProcess(Job,ThreadIndex);
   end else begin
    if (Job^.OwnedByJobWorkerThreadIndex>=0) and (Job^.OwnedByJobWorkerThreadIndex<>ThreadIndex) then begin
     // It is a stolen job => split in two halfs
     begin
-     NewJobs[0]:=Acquire(ParallelForJobFunction,nil);
+     NewJobs[0]:=Acquire(ParallelForJobReferenceProcedureFunction,nil);
      NewJobData:=PPasMPParallelForReferenceProcedureJobData(pointer(@NewJobs[0]^.Data));
      NewJobData^.StartJobData:=StartJobData;
      NewJobData^.FirstIndex:=JobData^.FirstIndex;
@@ -2890,7 +2890,7 @@ begin
      NewJobData^.RemainDepth:=JobData^.RemainDepth-1;
     end;
     begin
-     NewJobs[1]:=Acquire(ParallelForJobFunction,nil);
+     NewJobs[1]:=Acquire(ParallelForJobReferenceProcedureFunction,nil);
      NewJobData:=PPasMPParallelForReferenceProcedureJobData(pointer(@NewJobs[1]^.Data));
      NewJobData^.StartJobData:=StartJobData;
      NewJobData^.FirstIndex:=PPasMPParallelForReferenceProcedureJobData(pointer(@NewJobs[0]^.Data))^.LastIndex+1;
@@ -2901,7 +2901,7 @@ begin
    end else begin
     // It is a non-stolen job => split and increment by granularity count
     begin
-     NewJobs[0]:=Acquire(ParallelForJobFunction,nil);
+     NewJobs[0]:=Acquire(ParallelForJobReferenceProcedureFunction,nil);
      NewJobData:=PPasMPParallelForReferenceProcedureJobData(pointer(@NewJobs[0]^.Data));
      NewJobData^.StartJobData:=StartJobData;
      NewJobData^.FirstIndex:=JobData^.FirstIndex+StartJobData^.Granularity;
@@ -2909,7 +2909,7 @@ begin
      JobData^.LastIndex:=NewJobData^.FirstIndex-1;
     end;
     Run(NewJobs[0]);
-    ParallelForJobFunctionProcess(Job,ThreadIndex);
+    ParallelForJobReferenceProcedureProcess(Job,ThreadIndex);
     WaitRelease(NewJobs[0]);
    end;
   end;
@@ -2945,7 +2945,7 @@ begin
      if Rest>JobIndex then begin
       inc(Size);
      end;
-     NewJobs[JobIndex]:=Acquire(ParallelForJobFunction,nil);
+     NewJobs[JobIndex]:=Acquire(ParallelForJobReferenceProcedureFunction,nil);
      NewJobData:=PPasMPParallelForReferenceProcedureJobData(pointer(@NewJobs[JobIndex]^.Data));
      NewJobData^.StartJobData:=JobData;
      NewJobData^.FirstIndex:=Index;
