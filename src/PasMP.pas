@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-07-04-32-0000                       *
+ *                        Version 2016-02-07-04-37-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -179,6 +179,7 @@ unit PasMP;
 {$undef UseThreadLocalStorage}
 {$undef UseThreadLocalStorageX8632}
 
+{$ifdef PasMPUseAsStrictSingletonInstance}
 {$if defined(Windows) and (defined(CPU386) or defined(CPUx86_64)) and not (defined(FPC) or defined(UseMultiplePasMPInstanceInstances))}
  // Delphi (under x86 Windows) has fast thread local storage handling (per nearly direct TEB access by reading fs:[0x18])
  {$define UseThreadLocalStorage}
@@ -193,6 +194,7 @@ unit PasMP;
  // calls etc. in FPC_THREADVAR_RELOCATE), so use here the bit faster thread ID hash table approach with less total CPU-cycle
  // count and less OS-API calls than with the FPC_THREADVAR_RELOCATE variant
 {$ifend}
+{$endif}
 
 {$if not (defined(CPU386) or defined(CPUx86_64))}
  {$define UseForeignStealThreadLockingAtResizing} // Just for to be on the safe side on non-x86 CPU targets
