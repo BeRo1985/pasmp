@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-07-08-25-0000                       *
+ *                        Version 2016-02-07-11-38-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -3498,7 +3498,7 @@ type PByteArray=^TByteArray;
      TByteArray=array[0..$3fffffff] of byte;
 var NewJobs:array[0..1] of PPasMPJob;
     JobData,NewJobData:PPasMPParallelDirectMergeSortJobData;
-    Left,Right,ElementSize,Size,Middle,iA,iB,iC,nA,nB,nC,p,pBase:longint;
+    Left,Right,ElementSize,Size,Middle,iA,iB,iC,Count:longint;
     CompareFunc:TPasMPParallelSortCompareFunction;
     Items,Temp:pointer;
     Data:PPasMPParallelDirectMergeSortData;
@@ -3547,7 +3547,24 @@ begin
    end;
    else begin
     if (JobData^.Depth=0) or (Size<=JobData^.Data.Granularity) then begin
-     // Insertion sort
+{    // Insertion sort (with temporary memory)
+     GetMem(Temp,ElementSize);
+     try
+      for iA:=Left+1 to Right do begin
+       iB:=iA-1;
+       if (iB>=Left) and (CompareFunc(pointer(@PByteArray(Items)^[iB*ElementSize]),pointer(@PByteArray(Items)^[iA*ElementSize]))>0) then begin
+        Move(PByteArray(Items)^[iA*ElementSize],Temp^,ElementSize);
+        repeat
+         Move(PByteArray(Items)^[iB*ElementSize],PByteArray(Items)^[(iB+1)*ElementSize],ElementSize);
+         dec(iB);
+        until not ((iB>=Left) and (CompareFunc(pointer(@PByteArray(Items)^[iB*ElementSize]),Temp)>0));
+        Move(Temp^,PByteArray(Items)^[(iB+1)*ElementSize],ElementSize);
+       end;
+      end;
+     finally
+      FreeMem(Temp);
+     end;}
+     // Insertion sort (in-place)
      iA:=Left;
      iB:=iA+1;
      while iB<=Right do begin
@@ -3589,41 +3606,38 @@ begin
       // Merge
       Temp:=Data^.Temp;
       iA:=Left;
-      nA:=Middle-Left;
       iB:=Middle;
-      nB:=(Right-Middle)+1;
-      while nA<>0 do begin
-       if CompareFunc(pointer(@PByteArray(Items)^[iA*ElementSize]),pointer(@PByteArray(Items)^[iB*ElementSize]))>0 then begin
-        break;
-       end;
+      iC:=Left;
+      while (iA<Middle) and
+            (CompareFunc(pointer(@PByteArray(Items)^[iA*ElementSize]),pointer(@PByteArray(Items)^[iB*ElementSize]))<=0) do begin
        inc(iA);
-       dec(nA);
       end;
-      if nA<>0 then begin
-       pBase:=iA;
+      if iA<Middle then begin
+       Left:=iA;
        iC:=iA;
-       p:=iA;
-       Move(PByteArray(Items)^[iB*ElementSize],PByteArray(Temp)^[(p-pBase)*ElementSize],ElementSize);
-       inc(p);
+       Move(PByteArray(Items)^[iB*ElementSize],PByteArray(Temp)^[iC*ElementSize],ElementSize);
        inc(iB);
-       dec(nB);
-       while (nA<>0) and (nB<>0) do begin
+       inc(iC);
+       while (iA<Middle) and (iB<=Right) do begin
         if CompareFunc(pointer(@PByteArray(Items)^[iA*ElementSize]),pointer(@PByteArray(Items)^[iB*ElementSize]))>0 then begin
-         Move(PByteArray(Items)^[iB*ElementSize],PByteArray(Temp)^[(p-pBase)*ElementSize],ElementSize);
-         inc(p);
+         Move(PByteArray(Items)^[iB*ElementSize],PByteArray(Temp)^[iC*ElementSize],ElementSize);
          inc(iB);
-         dec(nB);
         end else begin
-         Move(PByteArray(Items)^[iA*ElementSize],PByteArray(Temp)^[(p-pBase)*ElementSize],ElementSize);
-         inc(p);
+         Move(PByteArray(Items)^[iA*ElementSize],PByteArray(Temp)^[iC*ElementSize],ElementSize);
          inc(iA);
-         dec(nA);
         end;
+        inc(iC);
        end;
-       Move(PByteArray(Items)^[iA*ElementSize],PByteArray(Temp)^[(p-pBase)*ElementSize],nA*ElementSize);
-       inc(p,nA);
-       nC:=p-iC;
-       Move(PByteArray(Temp)^[(iC-pBase)*ElementSize],PByteArray(Items)^[iC*ElementSize],nC*ElementSize);
+       if iA<Middle then begin
+        Count:=Middle-iA;
+        Move(PByteArray(Items)^[iA*ElementSize],PByteArray(Temp)^[iC*ElementSize],Count*ElementSize);
+        inc(iC,Count);
+       end;
+       if iB<=Right then begin
+        Count:=(Right-iB)+1;
+        Move(PByteArray(Items)^[iB*ElementSize],PByteArray(Temp)^[iC*ElementSize],Count*ElementSize);
+       end;
+       Move(PByteArray(Temp)^[Left*ElementSize],PByteArray(Items)^[Left*ElementSize],((Right-Left)+1)*ElementSize);
       end;
      end;
     end;
@@ -3672,7 +3686,7 @@ function TPasMP.ParallelDirectMergeSort(const Items:pointer;const Left,Right,Ele
 var JobData:PPasMPParallelDirectMergeSortRootJobData;
 begin
  if ((Left+1)<Right) and (ElementSize>0) then begin
-  result:=Acquire(ParallelDirectMergeSortJobFunction,nil);
+  result:=Acquire(ParallelDirectMergeSortRootJobFunction,nil);
   JobData:=PPasMPParallelDirectMergeSortRootJobData(pointer(@result^.Data));
   JobData^.Items:=Items;
   JobData^.Left:=Left;
@@ -3714,7 +3728,7 @@ type PPointers=^TPointers;
      TPointers=array[0..($7fffffff div sizeof(pointer))-1] of pointer;
 var ChildJobs:array[0..1] of PPasMPJob;
     JobData,ChildJobData:PPasMPParallelIndirectMergeSortJobData;
-    Left,Right,Size,Middle,i,j,iA,iB,iC,nA,nB,nC,p,pBase:longint;
+    Left,Right,Size,Middle,i,j,iA,iB,iC,Count:longint;
     CompareFunc:TPasMPParallelSortCompareFunction;
     Items,Temp:pointer;
     Data:PPasMPParallelIndirectMergeSortData;
@@ -3812,41 +3826,38 @@ begin
       // Merge
       Temp:=Data^.Temp;
       iA:=Left;
-      nA:=Middle-Left;
       iB:=Middle;
-      nB:=(Right-Middle)+1;
-      while nA<>0 do begin
-       if CompareFunc(PPointers(Items)^[iA],PPointers(Items)^[iB])>0 then begin
-        break;
-       end;
+      iC:=Left;
+      while (iA<Middle) and
+            (CompareFunc(PPointers(Items)^[iA],PPointers(Items)^[iB])<=0) do begin
        inc(iA);
-       dec(nA);
       end;
-      if nA<>0 then begin
-       pBase:=iA;
+      if iA<Middle then begin
+       Left:=iA;
        iC:=iA;
-       p:=iA;
-       PPointers(Temp)^[(p-pBase)]:=PPointers(Items)^[iB];
-       inc(p);
+       PPointers(Temp)^[iC]:=PPointers(Items)^[iB];
        inc(iB);
-       dec(nB);
-       while (nA<>0) and (nB<>0) do begin
+       inc(iC);
+       while (iA<Middle) and (iB<=Right) do begin
         if CompareFunc(PPointers(Items)^[iA],PPointers(Items)^[iB])>0 then begin
-         PPointers(Temp)^[(p-pBase)]:=PPointers(Items)^[iB];
-         inc(p);
+         PPointers(Temp)^[iC]:=PPointers(Items)^[iB];
          inc(iB);
-         dec(nB);
         end else begin
-         PPointers(Temp)^[(p-pBase)]:=PPointers(Items)^[iA];
-         inc(p);
+         PPointers(Temp)^[iC]:=PPointers(Items)^[iA];
          inc(iA);
-         dec(nA);
         end;
+        inc(iC);
        end;
-       Move(PPointers(Items)^[iA],PPointers(Temp)^[(p-pBase)],nA*SizeOf(pointer));
-       inc(p,nA);
-       nC:=p-iC;
-       Move(PPointers(Temp)^[(iC-pBase)],PPointers(Items)^[iC],nC*SizeOf(pointer));
+       if iA<Middle then begin
+        Count:=Middle-iA;
+        Move(PPointers(Items)^[iA],PPointers(Temp)^[iC],Count*SizeOf(pointer));
+        inc(iC,Count);
+       end;
+       if iB<=Right then begin
+        Count:=(Right-iB)+1;
+        Move(PPointers(Items)^[iB],PPointers(Temp)^[iC],Count*SizeOf(pointer));
+       end;
+       Move(PPointers(Temp)^[Left],PPointers(Items)^[Left],((Right-Left)+1)*SizeOf(pointer));
       end;
      end;
     end;
@@ -3893,7 +3904,7 @@ function TPasMP.ParallelIndirectMergeSort(const Items:pointer;const Left,Right:l
 var JobData:PPasMPParallelIndirectMergeSortRootJobData;
 begin
  if (Left+1)<Right then begin
-  result:=Acquire(ParallelIndirectMergeSortJobFunction,nil);
+  result:=Acquire(ParallelIndirectMergeSortRootJobFunction,nil);
   JobData:=PPasMPParallelIndirectMergeSortRootJobData(pointer(@result^.Data));
   JobData^.Items:=Items;
   JobData^.Left:=Left;
