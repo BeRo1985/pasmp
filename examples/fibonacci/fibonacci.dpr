@@ -48,7 +48,7 @@ begin
  JobData:=PfibRPJobData(pointer(@Job^.Data));
  if JobData^.Current<2 then begin
   JobData^.ReturnValue:=JobData^.Current;
- end else if (JobData^.Depth>8) or PasMPInstance.IsJobStackDepthLimitReached then begin
+ end else if JobData^.Depth>8 then begin
   JobData^.ReturnValue:=fibR(JobData^.Current);
  end else begin
 
@@ -95,7 +95,7 @@ const N=45;
 var Frequency,StartTime,EndTime:int64;
     i:longint;
 begin
- PasMPInstance:=TPasMP.Create(-1,0,true,8);
+ PasMPInstance:=TPasMP.Create;
 
  QueryPerformanceFrequency(Frequency);
 
