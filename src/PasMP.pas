@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-08-01-55-0000                       *
+ *                        Version 2016-02-08-02-19-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -748,6 +748,12 @@ asm
  mov eax,edx
 end;
 
+function InterlockedExchangePointer(var Target:pointer;Source:pointer):pointer; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+asm
+ lock xchg dword ptr [eax],edx
+ mov eax,edx
+end;
+
 function InterlockedExchangeAdd(var Target:longint;Source:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
  xchg edx,eax
@@ -827,10 +833,21 @@ end;
 function InterlockedExchange64(var Target:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
 {$ifdef Windows}
- xchg rdx,qword ptr [rcx]
+ lock xchg rdx,qword ptr [rcx]
  mov rax,rdx
 {$else}
- xchg rsi,qword ptr [rdi]
+ lock xchg rsi,qword ptr [rdi]
+ mov rax,rsi
+{$endif}
+end;
+
+function InterlockedExchangePointer(var Target:pointer;Source:pointer):pointer; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+asm
+{$ifdef Windows}
+ lock xchg rdx,qword ptr [rcx]
+ mov rax,rdx
+{$else}
+ lock xchg rsi,qword ptr [rdi]
  mov rax,rsi
 {$endif}
 end;
@@ -896,6 +913,11 @@ end;
 function InterlockedExchange(var Target:longint;Source:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  result:=Windows.InterlockedExchange(Target,Source);
+end;
+
+function InterlockedExchangePointer(var Target:pointer;Source:pointer):pointer; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ result:=Windows.InterlockedExchangePointer(Target,Source);
 end;
 
 function InterlockedExchangeAdd(var Target:longint;Source:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
@@ -2502,51 +2524,66 @@ end;
 procedure TPasMP.FinishJob(Job:PPasMPJob); {$if defined(cpu386) or defined(cpux86_64)}assembler; register;{$ifend}
 {$if defined(cpu386)}
 asm
+ // Object Pascal i386 register fastcall call convention
  // eax = self
  // edx = Job
+ // ecx = Temporary
 @Loop:
  cmp dword ptr [edx+TPasMPJob.CompletedAndActiveChildJobs],0
  jl @Done
  lock dec dword ptr [edx+TPasMPJob.CompletedAndActiveChildJobs]
  jns @Done
- mov eax,dword ptr [edx+TPasMPJob.ParentJob]
+ xor ecx,ecx
+ lock xchg dword ptr [edx+TPasMPJob.ParentJob],ecx
+ mov edx,ecx
  test edx,edx
  jnz @Loop
 @Done:
 end;
 {$elseif defined(cpux86_64)}
-asm
-@Loop:
 {$ifdef Windows}
+asm
  // Win64 ABI
  // rcx = self
  // rdx = Job
+ // r8 = Temporary
+@Loop:
  cmp dword ptr [rdx+TPasMPJob.CompletedAndActiveChildJobs],0
  jl @Done
  lock dec dword ptr [rdx+TPasMPJob.CompletedAndActiveChildJobs]
  jns @Done
- mov rdx,qword ptr [rdx+TPasMPJob.ParentJob]
+ xor r8,r8
+ lock xchg qword ptr [rdx+TPasMPJob.ParentJob],r8
+ mov rdx,r8
  test rdx,rdx
-{$else}
- // System V ABI
- // rdi = self
- // rsi = Job
- cmp dword ptr [rsi+TPasMPJob.CompletedAndActiveChildJobs],0
- jl @Done
- lock dec dword ptr [rsi+TPasMPJob.CompletedAndActiveChildJobs]
- jns @Done
- mov rsi,qword ptr [rsi+TPasMPJob.ParentJob]
- test rsi,rsi
-{$endif}
  jnz @Loop
 @Done:
 end;
 {$else}
+asm
+ // System V ABI
+ // rdi = self
+ // rsi = Job
+ // rdx = Temporary
+@Loop:
+ cmp dword ptr [rsi+TPasMPJob.CompletedAndActiveChildJobs],0
+ jl @Done
+ lock dec dword ptr [rsi+TPasMPJob.CompletedAndActiveChildJobs]
+ jns @Done
+ xor edx,edx
+ lock xchg qword ptr [rsi+TPasMPJob.ParentJob],rdx
+ mov rsi,rdx
+ test rsi,rsi
+ jnz @Loop
+@Done:
+end;
+{$endif}
+{$else}
 begin
- while (Job^.CompletedAndActiveChildJobs>=0) and
-       (InterlockedDecrement(Job^.CompletedAndActiveChildJobs)<0) and
-       assigned(Job^.ParentJob) do begin
-  Job:=Job^.ParentJob;
+ while assigned(Job) and
+       (Job^.CompletedAndActiveChildJobs>=0) and
+       (InterlockedDecrement(Job^.CompletedAndActiveChildJobs)<0) do begin
+  Job:=InterlockedExchangePointer(pointer(Job^.ParentJob),nil);
  end;
 end;
 {$ifend}
