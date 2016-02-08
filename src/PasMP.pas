@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-08-02-51-0000                       *
+ *                        Version 2016-02-08-03-07-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -468,6 +468,7 @@ type TPasMPAvailableCPUCores=array of longint;
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fQueueBottom:longint;
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fQueueTop:longint;
        procedure QueueGarbageCollector;
+       function HasJobs:boolean;
        procedure PushJob(const AJob:PPasMPJob);
        function PopJob:PPasMPJob;
        function StealJob:PPasMPJob;
@@ -1685,6 +1686,11 @@ begin
  inherited Destroy;
 end;
 
+function TPasMPJobQueue.HasJobs:boolean;
+begin
+ result:=fQueueBottom>=fQueueTop;
+end;
+
 procedure TPasMPJobQueue.QueueGarbageCollector;
 var QueueLockState:longint;
     CurrentQueueArray,NextQueueArray:PPasMPJobQueueArray;
@@ -2639,6 +2645,9 @@ end;
 
 procedure TPasMP.ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 begin
+ if JobWorkerThread.fJobQueue.HasJobs then begin
+  fWakeUpCondition.WakeUpAll;
+ end;
  if assigned(Job^.Method.Data) then begin
   if assigned(Job^.Method.Code) then begin
    TPasMPJobMethod(Job^.Method)(Job,JobWorkerThread.ThreadIndex);
