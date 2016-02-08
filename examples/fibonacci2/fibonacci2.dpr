@@ -5,6 +5,9 @@ program fibonacci2;
 {$APPTYPE CONSOLE}
 
 uses
+{$ifdef unix}
+  cthreads,
+{$endif}
   SysUtils,
   PasMP in '..\..\src\PasMP.pas',
   BeRoHighResolutionTimer in '..\common\BeRoHighResolutionTimer.pas';

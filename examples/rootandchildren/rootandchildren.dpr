@@ -5,6 +5,9 @@ program rootandchildren;
 {$APPTYPE CONSOLE}
 
 uses
+{$ifdef unix}
+  cthreads,
+{$endif}
   SysUtils,
   PasMP in '..\..\src\PasMP.pas';
 
