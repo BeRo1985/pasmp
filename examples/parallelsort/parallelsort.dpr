@@ -54,7 +54,7 @@ begin
   writeln('IntroSort failed');
  end;
 
- XorShift:=$a04f312c;
+ XorShift:=$704f312c;
  for Index:=0 to N-1 do begin
   XorShift:=XorShift xor (XorShift shl 13);
   XorShift:=XorShift xor (XorShift shr 17);
