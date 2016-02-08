@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-08-12-36-0000                       *
+ *                        Version 2016-02-08-12-46-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -676,6 +676,11 @@ const _SC_UIO_MAXIOV=60;
 type cpu_set_p=^cpu_set_t;
      cpu_set_t=int64;
 
+     ppthread_mutex_t=^pthread_mutex_t;
+     ppthread_mutexattr_t=^pthread_mutexattr_t;
+     ppthread_cond_t=^pthread_cond_t;
+     ppthread_condattr_t=^pthread_condattr_t;
+
 {$linklib c}
 function sysconf(__name:longint):longint; cdecl; external 'c' name 'sysconf';
 
@@ -683,7 +688,7 @@ function sched_getaffinity(pid:ptruint;cpusetsize:longint;cpuset:pointer):longin
 function sched_setaffinity(pid:ptruint;cpusetsize:longint;cpuset:pointer):longint; cdecl; external 'c' name 'sched_setaffinity';
 
 function pthread_setaffinity_np(pid:ptruint;cpusetsize:longint;cpuset:pointer):longint; cdecl; external 'c' name 'pthread_setaffinity_np';
-function pthread_getaffinity_np(pid:ptruint;cpusetsize:longint; cpuset:pointer):longint; cdecl; external 'c' name 'pthread_getaffinity_np';
+function pthread_getaffinity_np(pid:ptruint;cpusetsize:longint;cpuset:pointer):longint; cdecl; external 'c' name 'pthread_getaffinity_np';
 
 function pthread_mutex_init(__mutex:ppthread_mutex_t;__mutex_attr:ppthread_mutexattr_t):longint; cdecl; external 'c' name 'pthread_mutex_init';
 function pthread_mutex_destroy(__mutex:ppthread_mutex_t):longint; cdecl; external 'c' name 'pthread_mutex_destroy';
@@ -1111,7 +1116,7 @@ begin
 {$ifdef Windows}
  SleepConditionVariableCS(@fConditionVariable,@Mutex.fCriticalSection,INFINITE);
 {$else}
- pthread_cond_wait(@fConditionVariable,@Mutex^.fMutex);
+ pthread_cond_wait(@fConditionVariable,@Mutex.fMutex);
 {$endif}
 end;
 
