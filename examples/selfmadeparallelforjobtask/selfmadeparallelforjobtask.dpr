@@ -30,9 +30,9 @@ type TParallelForJobTask=class(TPasMPJobTask)
       public
        constructor Create(const FromIndex,ToIndex,Granularity,RemainDepth:longint;const Spreaded:boolean=false);
        destructor Destroy; override;
-       procedure Run(const ThreadIndex:longint); override; // run our task
-       function Split(out NewJobTask:TPasMPJobTask):boolean; override; // keep half the work and put the other half in a new task
-       function PartialPop(out NewJobTask:TPasMPJobTask):boolean; override; // pop a sub part of the task
+       procedure Run; override; // run our task
+       function Split:TPasMPJobTask; override; // keep half the work and put the other half in a new task
+       function PartialPop:TPasMPJobTask; override; // pop a sub part of the task
        function Spread:boolean; override; // (pre-)spread work uniformly into multiple job tasks, the destructor must wait and release the spreaded jobs then.
      end;
 
@@ -61,7 +61,7 @@ begin
  inherited Destroy;
 end;
 
-procedure TParallelForJobTask.Run(const ThreadIndex:longint);
+procedure TParallelForJobTask.Run;
 var Index:longint;
 begin
  FakeAtomicOperationMutex.Acquire;
@@ -77,33 +77,31 @@ begin
  Sleep(100); // simulate some extra work load
 end;
 
-function TParallelForJobTask.Split(out NewJobTask:TPasMPJobTask):boolean;
+function TParallelForJobTask.Split:TPasMPJobTask;
 var SplitIndex:longint;
 begin
  if (fRemainDepth>0) and (fFromIndex<=fToIndex) and (((fToIndex-fFromIndex)+1)>fGranularity) then begin
   SplitIndex:=fFromIndex+(((fToIndex-fFromIndex)+1) div 2);
-  NewJobTask:=TParallelForJobTask.Create(SplitIndex,fToIndex,fGranularity,fRemainDepth-1,true);
+  result:=TParallelForJobTask.Create(SplitIndex,fToIndex,fGranularity,fRemainDepth-1,true);
   fToIndex:=SplitIndex-1;
   dec(fRemainDepth);
   fSpreaded:=true;
-  result:=true;
  end else begin
-  result:=false;
+  result:=nil;
  end;
 end;
 
-function TParallelForJobTask.PartialPop(out NewJobTask:TPasMPJobTask):boolean;
+function TParallelForJobTask.PartialPop:TPasMPJobTask;
 var SplitIndex:longint;
 begin
  if (fRemainDepth>0) and (fFromIndex<=fToIndex) and ((fFromIndex+fGranularity)<fToIndex) then begin
   SplitIndex:=fFromIndex+fGranularity;
-  NewJobTask:=TParallelForJobTask.Create(SplitIndex,fToIndex,fGranularity,fRemainDepth-1,true);
+  result:=TParallelForJobTask.Create(SplitIndex,fToIndex,fGranularity,fRemainDepth-1,true);
   fToIndex:=SplitIndex-1;
   dec(fRemainDepth);
   fSpreaded:=true;
-  result:=true;
  end else begin
-  result:=false;
+  result:=nil;
  end;
 end;
 
