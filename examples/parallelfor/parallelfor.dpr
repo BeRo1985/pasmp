@@ -42,6 +42,22 @@ begin
  Sleep(100); // simulate some extra work load
 end;
 {$ifend}
+{$else}
+procedure ParallelForJobFunction(const Job:PPasMPJob;const ThreadIndex:longint;const Data:pointer;const FromIndex,ToIndex:longint);
+var Index:longint;
+begin
+ FakeAtomicOperationMutex.Acquire;
+ try
+  writeln(FromIndex,'..',ToIndex,' from thread #',ThreadIndex);
+  inc(Sum,(ToIndex-FromIndex)+1);
+ finally
+  FakeAtomicOperationMutex.Release;
+ end;
+ for Index:=FromIndex to ToIndex do begin
+  PCells(Data)^[Index]:=true;
+ end;
+ Sleep(100); // simulate some extra work load
+end;
 {$endif}
 
 begin
