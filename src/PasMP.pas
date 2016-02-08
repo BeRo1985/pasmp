@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-08-06-00-0000                       *
+ *                        Version 2016-02-08-12-36-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -243,14 +243,14 @@ type TPasMPAvailableCPUCores=array of longint;
 
 {$ifdef fpc}
  {$undef OldDelphi}
-     PasMPUInt64=uint64;
+     TPasMPUInt64=uint64;
      TPasMPPtrUInt=PtrUInt;
      TPasMPPtrInt=PtrInt;
 {$else}
  {$ifdef conditionalexpressions}
   {$if CompilerVersion>=23.0}
    {$undef OldDelphi}
-     PasMPUInt64=uint64;
+     TPasMPUInt64=uint64;
      TPasMPPtrUInt=NativeUInt;
      TPasMPPtrInt=NativeInt;
   {$else}
@@ -262,9 +262,9 @@ type TPasMPAvailableCPUCores=array of longint;
 {$endif}
 {$ifdef OldDelphi}
   {$if CompilerVersion>=15.0}
-     PasMPUInt64=uint64;
+     TPasMPUInt64=uint64;
   {$else}
-     PasMPUInt64=int64;
+     TPasMPUInt64=int64;
   {$ifend}
   {$ifdef CPU64}
      TPasMPPtrUInt=qword;
@@ -278,9 +278,9 @@ type TPasMPAvailableCPUCores=array of longint;
      PPasMPInt128=^TPasMPInt128;
      TPasMPInt128=record
 {$ifdef BIG_ENDIAN}
-      Hi,Lo:PasMPUInt64;
+      Hi,Lo:TPasMPUInt64;
 {$else}
-      Lo,Hi:PasMPUInt64;
+      Lo,Hi:TPasMPUInt64;
 {$endif}
      end;
 
@@ -498,7 +498,7 @@ type TPasMPAvailableCPUCores=array of longint;
        fXorShift128w:longword;
 {$else}
 {$ifdef CPU64}
-       fXorShift64:PasMPUInt64;
+       fXorShift64:TPasMPUInt64;
 {$else}
        fXorShift32:longword;
 {$endif}
@@ -684,6 +684,19 @@ function sched_setaffinity(pid:ptruint;cpusetsize:longint;cpuset:pointer):longin
 
 function pthread_setaffinity_np(pid:ptruint;cpusetsize:longint;cpuset:pointer):longint; cdecl; external 'c' name 'pthread_setaffinity_np';
 function pthread_getaffinity_np(pid:ptruint;cpusetsize:longint; cpuset:pointer):longint; cdecl; external 'c' name 'pthread_getaffinity_np';
+
+function pthread_mutex_init(__mutex:ppthread_mutex_t;__mutex_attr:ppthread_mutexattr_t):longint; cdecl; external 'c' name 'pthread_mutex_init';
+function pthread_mutex_destroy(__mutex:ppthread_mutex_t):longint; cdecl; external 'c' name 'pthread_mutex_destroy';
+function pthread_mutex_trylock(__mutex:ppthread_mutex_t):longint; cdecl; external 'c' name 'pthread_mutex_trylock';
+function pthread_mutex_lock(__mutex:ppthread_mutex_t):longint; cdecl; external 'c' name 'pthread_mutex_lock';
+function pthread_mutex_unlock(__mutex:ppthread_mutex_t):longint; cdecl; external 'c' name 'pthread_mutex_unlock';
+
+function pthread_cond_init(__cond:ppthread_cond_t;__cond_attr:ppthread_condattr_t):longint; cdecl; external 'c' name 'pthread_cond_init';
+function pthread_cond_destroy(__cond:ppthread_cond_t):longint; cdecl; external 'c' name 'pthread_cond_destroy';
+function pthread_cond_signal(__cond:ppthread_cond_t):longint; cdecl; external 'c' name 'pthread_cond_signal';
+function pthread_cond_broadcast(__cond:ppthread_cond_t):longint; cdecl; external 'c' name 'pthread_cond_broadcast';
+function pthread_cond_wait(__cond:ppthread_cond_t; __mutex:ppthread_mutex_t):longint; cdecl; external 'c' name 'pthread_cond_wait';
+function pthread_cond_timedwait(__cond:ppthread_cond_t;__mutex:ppthread_mutex_t;__abstime:PTimeSpec):longint; cdecl; external 'c' name 'pthread_cond_timedwait';
 
 {$endif}
 {$endif}
@@ -1042,7 +1055,7 @@ begin
 {$ifdef Windows}
  InitializeCriticalSection(fCriticalSection);
 {$else}
- pthread_mutex_init(@fMutex,Nil);
+ pthread_mutex_init(@fMutex,nil);
 {$endif}
 end;
 
@@ -1737,7 +1750,7 @@ begin
 end;
 
 procedure TPasMPJobQueue.PushJob(const AJob:PPasMPJob);
-var QueueBottom,QueueTop,Index:longint;
+var QueueBottom,QueueTop:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
  ReadBarrier;
@@ -1881,6 +1894,9 @@ begin
 end;
 
 constructor TPasMPJobWorkerThread.Create(const APasMPInstance:TPasMP;const AThreadIndex:longint);
+{$ifdef CPU64}
+const XorShift64Mul:TPasMPUInt64=TPasMPUInt64(10116239910488455739);
+{$endif}
 begin
  inherited Create;
  fPasMPInstance:=APasMPInstance;
@@ -1895,7 +1911,8 @@ begin
  fXorShift128w:=(longword(AThreadIndex+1)*73856093) or 1;
 {$else}
 {$ifdef CPU64}
- fXorShift64:=(longword(AThreadIndex+1)*PasMPUInt64(10116239910488455739)) or 1;
+ fXorShift64:=(longword(AThreadIndex+1)*XorShift64Mul) or 1;
+//fXorShift64:=(longword(AThreadIndex+1)*TPasMPUInt64(10116239910488455739)) or 1;
 {$else}
  fXorShift32:=(longword(AThreadIndex+1)*83492791) or 1;
 {$endif}
@@ -1989,7 +2006,7 @@ end;
 
 function TPasMPJobWorkerThread.GetJob:PPasMPJob;
 const XorShiftBitShift={$ifdef UseXorShift128}16{$else}{$ifdef CPU64}48{$else}16{$endif}{$endif};
-var XorShiftTemp:{$ifdef UseXorShift128}longword{$else}{$ifdef CPU64}PasMPUInt64{$else}longword{$endif}{$endif};
+var XorShiftTemp:{$ifdef UseXorShift128}longword{$else}{$ifdef CPU64}TPasMPUInt64{$else}longword{$endif}{$endif};
     OtherJobWorkerThreadIndex:longword;
     OtherJobWorkerThread:TPasMPJobWorkerThread;
 begin
