@@ -42,7 +42,7 @@ begin
  try
   RootJob:=GlobalPasMP.Acquire(RootJobFunction);
   for i:=1 to N do begin
-   GlobalPasMP.Run(GlobalPasMP.Acquire(ChildJobFunction,nil,RootJob,PasMPJobFlagFreeOnRelease));
+   GlobalPasMP.Run(GlobalPasMP.Acquire(ChildJobFunction,nil,RootJob,PasMPJobFlagReleaseOnFinish));
   end;
   GlobalPasMP.Run(RootJob);
   GlobalPasMP.Wait(RootJob);

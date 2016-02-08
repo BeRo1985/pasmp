@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-08-05-33-0000                       *
+ *                        Version 2016-02-08-06-00-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -234,7 +234,7 @@ const PasMPAllocatorPoolBucketBits=12;
       PasMPJobThreadIndexMask=PasMPJobThreadIndexSize-1;
 
       PasMPJobFlagHasOwnerWorkerThread=longword(longword(1) shl (PasMPJobThreadIndexBits+1));
-      PasMPJobFlagFreeOnRelease=longword(longword(1) shl (PasMPJobThreadIndexBits+2));
+      PasMPJobFlagReleaseOnFinish=longword(longword(1) shl (PasMPJobThreadIndexBits+2));
 
 type TPasMPAvailableCPUCores=array of longint;
 
@@ -2489,7 +2489,7 @@ asm
  jns @Done
  xor ecx,ecx
  lock xchg dword ptr [edx+TPasMPJob.ParentJob],ecx
- test dword ptr [edx+TPasMPJob.InternalData],PasMPJobFlagFreeOnRelease
+ test dword ptr [edx+TPasMPJob.InternalData],PasMPJobFlagReleaseOnFinish
  jz @NoFreeOnRelease
  push ecx
  push edx
@@ -2517,7 +2517,7 @@ asm
  jns @Done
  xor r8,r8
  lock xchg qword ptr [rdx+TPasMPJob.ParentJob],r8
- test dword ptr [rdx+TPasMPJob.InternalData],PasMPJobFlagFreeOnRelease
+ test dword ptr [rdx+TPasMPJob.InternalData],PasMPJobFlagReleaseOnFinish
  jz @NoFreeOnRelease
  push r8
  push rdx
@@ -2548,7 +2548,7 @@ asm
  jns @Done
  xor edx,edx
  lock xchg qword ptr [rsi+TPasMPJob.ParentJob],rdx
- test dword ptr [rsi+TPasMPJob.InternalData],PasMPJobFlagFreeOnRelease
+ test dword ptr [rsi+TPasMPJob.InternalData],PasMPJobFlagReleaseOnFinish
  jz @NoFreeOnRelease
  push rdx
  push rsi
@@ -2572,7 +2572,7 @@ begin
        (InterlockedDecrement(Job^.State)<0) do begin
   LastJob:=Job;
   Job:=InterlockedExchangePointer(pointer(Job^.ParentJob),nil);
-  if (LastJob^.InternalData and PasMPJobFlagFreeOnRelease)<>0 then begin
+  if (LastJob^.InternalData and PasMPJobFlagReleaseOnFinish)<>0 then begin
    FinishJobRelease(LastJob);
   end;
  end;
