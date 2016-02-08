@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-08-15-06-0000                       *
+ *                        Version 2016-02-08-15-17-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -3012,6 +3012,7 @@ begin
      NewJobData^.StartJobData:=StartJobData;
      NewJobData^.FirstIndex:=JobData^.FirstIndex+StartJobData^.Granularity;
      NewJobData^.LastIndex:=JobData^.LastIndex;
+     NewJobData^.RemainDepth:=JobData^.RemainDepth-1;
      JobData^.LastIndex:=NewJobData^.FirstIndex-1;
     end;
     Run(NewJobs[0]);
@@ -3163,6 +3164,7 @@ begin
      NewJobData^.StartJobData:=JobData^.StartJobData;
      NewJobData^.FirstIndex:=JobData^.FirstIndex+StartJobData^.Granularity;
      NewJobData^.LastIndex:=JobData^.LastIndex;
+     NewJobData^.RemainDepth:=JobData^.RemainDepth-1;
      JobData^.LastIndex:=NewJobData^.FirstIndex-1;
     end;
     Run(NewJobs[0]);
