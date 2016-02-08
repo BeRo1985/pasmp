@@ -5,10 +5,12 @@ program parallelfor;
 {$APPTYPE CONSOLE}
 
 uses
-  Windows,
   SysUtils,
-  Classes,
   PasMP in '..\..\src\PasMP.pas';
+
+{$if defined(win32) or defined(win64) or defined(windows)}
+procedure Sleep(ms:longword); stdcall; external 'kernel32.dll' name 'Sleep';
+{$ifend}
 
 const N=65536;
 

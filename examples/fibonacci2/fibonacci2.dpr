@@ -5,9 +5,13 @@ program fibonacci2;
 {$APPTYPE CONSOLE}
 
 uses
-  Windows,
   SysUtils,
-  PasMP in '..\..\src\PasMP.pas';
+  PasMP in '..\..\src\PasMP.pas',
+  BeRoHighResolutionTimer in '..\common\BeRoHighResolutionTimer.pas';
+
+{$if defined(win32) or defined(win64) or defined(windows)}
+procedure Sleep(ms:longword); stdcall; external 'kernel32.dll' name 'Sleep';
+{$ifend}
 
 function fibI(n:longint):longint;
 var Last,Temporary:longint;
@@ -62,8 +66,9 @@ begin
   try
    JobTasks[1]:=TfibRPJobTask.Create(fCurrent-1,fDepth+1);
    try
-    GlobalPasMP.Invoke([GlobalPasMP.Acquire(JobTasks[0]),
-                        GlobalPasMP.Acquire(JobTasks[1])]); // Invoke combines Run, Wait and Release into a single call, but
+    Jobs[0]:=GlobalPasMP.Acquire(JobTasks[0]);
+    Jobs[1]:=GlobalPasMP.Acquire(JobTasks[1]);
+    GlobalPasMP.Invoke(Jobs); // Invoke combines Run, Wait and Release into a single call, but
     // or just GlobalPasMP.Invoke([JobTasks[0],JobTasks[1]]);
     fReturnValue:=JobTasks[0].fReturnValue+JobTasks[1].fReturnValue;
    finally
@@ -90,39 +95,41 @@ end;
 
 const N=45;
 
-var Frequency,StartTime,EndTime:int64;
+var HighResolutionTimer:THighResolutionTimer;
+    StartTime,EndTime:int64;
     i:longint;
 begin
-
  TPasMP.CreateGlobalInstance;
 
- QueryPerformanceFrequency(Frequency);
+ HighResolutionTimer:=THighResolutionTimer.Create;
 
  for i:=1 to 1 do begin
   write('                fibI (iterate): ');
-  QueryPerformanceCounter(StartTime);
+  StartTime:=HighResolutionTimer.GetTime;
   write(fibI(N));
-  QueryPerformanceCounter(EndTime);
-  writeln(' in ',(EndTime-StartTime)/Frequency:1:8,'s');
+  EndTime:=HighResolutionTimer.GetTime;
+  writeln(' in ',HighResolutionTimer.ToFloatSeconds(EndTime-StartTime):1:8,'s');
  end;
 
  for i:=1 to 1 do begin
   write('              fibR (recursive): ');
-  QueryPerformanceCounter(StartTime);
+  StartTime:=HighResolutionTimer.GetTime;
   write(fibR(N));
-  QueryPerformanceCounter(EndTime);
-  writeln(' in ',(EndTime-StartTime)/Frequency:1:8,'s');
+  EndTime:=HighResolutionTimer.GetTime;
+  writeln(' in ',HighResolutionTimer.ToFloatSeconds(EndTime-StartTime):1:8,'s');
  end;
 
  for i:=1 to 9 do begin
   GlobalPasMP.Reset; // <= optional per workload-frame, triggers amongst other things the job queue memory pool garbage collector
   write('fibRP (parallelized recursive): ');
-  QueryPerformanceCounter(StartTime);
+  StartTime:=HighResolutionTimer.GetTime;
   write(fibRP(N));
-  QueryPerformanceCounter(EndTime);
-  writeln(' in ',(EndTime-StartTime)/Frequency:1:8,'s');
+  EndTime:=HighResolutionTimer.GetTime;
+  writeln(' in ',HighResolutionTimer.ToFloatSeconds(EndTime-StartTime):1:8,'s');
  end;
 
  readln;
+
+ HighResolutionTimer.Free;
 
 end.

@@ -5,9 +5,12 @@ program rootandchildren;
 {$APPTYPE CONSOLE}
 
 uses
-  Windows,
   SysUtils,
   PasMP in '..\..\src\PasMP.pas';
+
+{$if defined(win32) or defined(win64) or defined(windows)}
+procedure Sleep(ms:longword); stdcall; external 'kernel32.dll' name 'Sleep';
+{$ifend}
 
 const N=32;
 
@@ -23,7 +26,8 @@ procedure ChildJobFunction(const Job:PPasMPJob;const ThreadIndex:longint);
 begin
  FakeAtomicOperationMutex.Acquire;
  try
-  writeln(InterlockedIncrement(Sum),' from thread #',ThreadIndex);
+  writeln(Sum,' from thread #',ThreadIndex);
+  inc(Sum);
  finally
   FakeAtomicOperationMutex.Release;
  end;
