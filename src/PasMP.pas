@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-08-02-19-0000                       *
+ *                        Version 2016-02-08-02-40-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -372,13 +372,13 @@ type TPasMPAvailableCPUCores=array of longint;
 
      TPasMPJob=record
       case longint of
-       0:(                                                // 32 / 64 bit
-        Method:TMethod;                                   //  8 / 16 => 2x pointers
-        ParentJob:PPasMPJob;                              //  4 /  8 => 1x pointer
-        OwnedByJobWorkerThreadIndex:longint;              //  4 /  4 => 1x 32-bit signed integer
-        CompletedAndActiveChildJobs:longint;              //  4 /  4 => 1x 32-bit signed integer (if <0 (bit 31 set) then completed, otherwise if >=0 then non-completed and count of active child jobs)
-        Data:pointer;                                     // ------- => just a dummy variable as struct field offset anchor
-       );                                                 // 20 / 32
+       0:(                                   // 32 / 64 bit
+        Method:TMethod;                      //  8 / 16 => 2x pointers
+        ParentJob:PPasMPJob;                 //  4 /  8 => 1x pointer
+        OwnedByJobWorkerThreadIndex:longint; //  4 /  4 => 1x 32-bit signed integer
+        State:longint;                       //  4 /  4 => 1x 32-bit signed integer (if it's below 0, then the job is completed, otherwise it's a 0-based unfinished job counter)
+        Data:pointer;                        // ------- => just a dummy variable as struct field offset anchor
+       );                                    // 20 / 32
        1:(
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
         SingleLinkedList:TPasMPSingleLinkedListNativeMachineWord;
@@ -2054,7 +2054,7 @@ var XorShiftTemp:{$ifdef UseXorShift128}longword{$else}{$ifdef CPU64}PasMPUInt64
 begin
 
  result:=fJobQueue.PopJob;
- if (not assigned(result)) or (result^.CompletedAndActiveChildJobs<0) then begin
+ if (not assigned(result)) or (result^.State<0) then begin
 
   // This is not a valid job because our own queue is empty, so try stealing from some other queue
 
@@ -2093,7 +2093,7 @@ begin
    result:=nil;
   end else begin
    result:=OtherJobWorkerThread.fJobQueue.StealJob;
-   if (not assigned(result)) or (result^.CompletedAndActiveChildJobs<0) then begin
+   if (not assigned(result)) or (result^.State<0) then begin
     // We couldn't steal a job from the other queue either
     result:=nil;
    end;
@@ -2102,7 +2102,7 @@ begin
   if not assigned(result) then begin
 
    result:=fPasMPInstance.fJobQueue.StealJob;
-   if (not assigned(result)) or (result^.CompletedAndActiveChildJobs<0) then begin
+   if (not assigned(result)) or (result^.State<0) then begin
     // We couldn't steal a job from the global queue
     result:=nil;
    end;
@@ -2425,8 +2425,8 @@ end;
 function TPasMP.AllocateJob(const MethodCode,MethodData,Data:pointer;const ParentJob:PPasMPJob):PPasMPJob; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 var JobWorkerThread:TPasMPJobWorkerThread;
 begin
- if assigned(ParentJob) and (ParentJob^.CompletedAndActiveChildJobs>=0) then begin
-  InterlockedIncrement(ParentJob^.CompletedAndActiveChildJobs);
+ if assigned(ParentJob) and (ParentJob^.State>=0) then begin
+  InterlockedIncrement(ParentJob^.State);
  end;
  JobWorkerThread:=GetJobWorkerThread;
  if assigned(JobWorkerThread) then begin
@@ -2442,7 +2442,7 @@ begin
  end else begin
   result^.OwnedByJobWorkerThreadIndex:=-1;
  end;
- result^.CompletedAndActiveChildJobs:=0;
+ result^.State:=0;
  result^.Data:=Data;
 end;
 
@@ -2529,9 +2529,9 @@ asm
  // edx = Job
  // ecx = Temporary
 @Loop:
- cmp dword ptr [edx+TPasMPJob.CompletedAndActiveChildJobs],0
+ cmp dword ptr [edx+TPasMPJob.State],0
  jl @Done
- lock dec dword ptr [edx+TPasMPJob.CompletedAndActiveChildJobs]
+ lock dec dword ptr [edx+TPasMPJob.State]
  jns @Done
  xor ecx,ecx
  lock xchg dword ptr [edx+TPasMPJob.ParentJob],ecx
@@ -2548,9 +2548,9 @@ asm
  // rdx = Job
  // r8 = Temporary
 @Loop:
- cmp dword ptr [rdx+TPasMPJob.CompletedAndActiveChildJobs],0
+ cmp dword ptr [rdx+TPasMPJob.State],0
  jl @Done
- lock dec dword ptr [rdx+TPasMPJob.CompletedAndActiveChildJobs]
+ lock dec dword ptr [rdx+TPasMPJob.State]
  jns @Done
  xor r8,r8
  lock xchg qword ptr [rdx+TPasMPJob.ParentJob],r8
@@ -2566,9 +2566,9 @@ asm
  // rsi = Job
  // rdx = Temporary
 @Loop:
- cmp dword ptr [rsi+TPasMPJob.CompletedAndActiveChildJobs],0
+ cmp dword ptr [rsi+TPasMPJob.State],0
  jl @Done
- lock dec dword ptr [rsi+TPasMPJob.CompletedAndActiveChildJobs]
+ lock dec dword ptr [rsi+TPasMPJob.State]
  jns @Done
  xor edx,edx
  lock xchg qword ptr [rsi+TPasMPJob.ParentJob],rdx
@@ -2581,8 +2581,8 @@ end;
 {$else}
 begin
  while assigned(Job) and
-       (Job^.CompletedAndActiveChildJobs>=0) and
-       (InterlockedDecrement(Job^.CompletedAndActiveChildJobs)<0) do begin
+       (Job^.State>=0) and
+       (InterlockedDecrement(Job^.State)<0) do begin
   Job:=InterlockedExchangePointer(pointer(Job^.ParentJob),nil);
  end;
 end;
@@ -2683,7 +2683,7 @@ begin
   JobWorkerThread:=GetJobWorkerThread;
   SpinCount:=0;
   CountMaxSpinCount:=128;
-  while Job^.CompletedAndActiveChildJobs>=0 do begin
+  while Job^.State>=0 do begin
    if assigned(JobWorkerThread) then begin
     NextJob:=JobWorkerThread.GetJob;
     if assigned(NextJob) then begin
@@ -2718,7 +2718,7 @@ begin
    Done:=true;
    for JobIndex:=0 to CountJobs-1 do begin
     Job:=Jobs[JobIndex];
-    if assigned(Job) and (Job^.CompletedAndActiveChildJobs>=0) then begin
+    if assigned(Job) and (Job^.State>=0) then begin
      Done:=false;
      break;
     end;
