@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-08-14-28-0000                       *
+ *                        Version 2016-02-08-14-52-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -307,7 +307,8 @@ type TPasMPAvailableCPUCores=array of longint;
 
      TPasMP=class;
 
-     TPasMPMutex=class
+     TPasMPMutex=class{$ifndef PasMPUseConditionVariables}(TCriticalSection){$endif}
+{$ifdef PasMPUseConditionVariables}
 {$ifdef Windows}
       private
        fCriticalSection:TRTLCriticalSection;
@@ -324,8 +325,13 @@ type TPasMPAvailableCPUCores=array of longint;
        destructor Destroy; override;
        procedure Acquire; {$ifdef CAN_INLINE}inline;{$endif}
        procedure Release; {$ifdef CAN_INLINE}inline;{$endif}
+{$else}
+      protected
+       fCacheLineFillUp:array[0..(64-sizeof(TRTLCriticalSection))-1] of byte;
+{$endif}
      end;
 
+{$ifdef PasMPUseConditionVariables}
 {$ifdef Windows}
      PPasMPConditionVariable=^TPasMPConditionVariable;
      TPasMPConditionVariable=record
@@ -347,6 +353,7 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure WakeUpAll; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure Wait(const Mutex:TPasMPMutex;const dwMilliSeconds:longword=INFINITE); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
      end;
+{$endif}
 
      PPasMPJob=^TPasMPJob;
 
@@ -679,10 +686,12 @@ type qword=int64;
 {$ifdef Windows}
 function SwitchToThread:BOOL; external 'kernel32.dll' name 'SwitchToThread';
 function SetThreadIdealProcessor(hThread:THANDLE;dwIdealProcessor:longword):longword; stdcall; external 'kernel32.dll' name 'SetThreadIdealProcessor';
+{$ifdef PasMPUseConditionVariables}
 procedure InitializeConditionVariable(ConditionVariable:PPasMPConditionVariable); stdcall; external 'kernel32.dll' name 'InitializeConditionVariable';
 procedure SleepConditionVariableCS(ConditionVariable:PPasMPConditionVariable;CriticalSection:PRTLCriticalSection;dwMilliSeconds:longword); stdcall; external 'kernel32.dll' name 'SleepConditionVariableCS';
 procedure WakeConditionVariable(ConditionVariable:PPasMPConditionVariable); stdcall; external 'kernel32.dll' name 'WakeConditionVariable';
 procedure WakeAllConditionVariable(ConditionVariable:PPasMPConditionVariable); stdcall; external 'kernel32.dll' name 'WakeAllConditionVariable';
+{$endif}
 {$else}
 {$ifdef Linux}
 const _SC_UIO_MAXIOV=60;
@@ -693,8 +702,10 @@ type cpu_set_p=^cpu_set_t;
 
      ppthread_mutex_t=^pthread_mutex_t;
      ppthread_mutexattr_t=^pthread_mutexattr_t;
+{$ifdef PasMPUseConditionVariables}
      ppthread_cond_t=^pthread_cond_t;
      ppthread_condattr_t=^pthread_condattr_t;
+{$endif}
 
 {$linklib c}
 function sysconf(__name:longint):longint; cdecl; external 'c' name 'sysconf';
@@ -711,12 +722,14 @@ function pthread_mutex_trylock(__mutex:ppthread_mutex_t):longint; cdecl; externa
 function pthread_mutex_lock(__mutex:ppthread_mutex_t):longint; cdecl; external 'c' name 'pthread_mutex_lock';
 function pthread_mutex_unlock(__mutex:ppthread_mutex_t):longint; cdecl; external 'c' name 'pthread_mutex_unlock';
 
+{$ifdef PasMPUseConditionVariables}
 function pthread_cond_init(__cond:ppthread_cond_t;__cond_attr:ppthread_condattr_t):longint; cdecl; external 'c' name 'pthread_cond_init';
 function pthread_cond_destroy(__cond:ppthread_cond_t):longint; cdecl; external 'c' name 'pthread_cond_destroy';
 function pthread_cond_signal(__cond:ppthread_cond_t):longint; cdecl; external 'c' name 'pthread_cond_signal';
 function pthread_cond_broadcast(__cond:ppthread_cond_t):longint; cdecl; external 'c' name 'pthread_cond_broadcast';
 function pthread_cond_wait(__cond:ppthread_cond_t; __mutex:ppthread_mutex_t):longint; cdecl; external 'c' name 'pthread_cond_wait';
 function pthread_cond_timedwait(__cond:ppthread_cond_t;__mutex:ppthread_mutex_t;__abstime:PTimeSpec):longint; cdecl; external 'c' name 'pthread_cond_timedwait';
+{$endif}
 
 {$endif}
 {$endif}
@@ -1069,6 +1082,7 @@ end;
 {$ifend}
 {$endif}
 
+{$ifdef PasMPUseConditionVariables}
 constructor TPasMPMutex.Create;
 begin
  inherited Create;
@@ -1106,7 +1120,9 @@ begin
  pthread_mutex_unlock(@fMutex);
 {$endif}
 end;
+{$endif}
 
+{$ifdef PasMPUseConditionVariables}
 constructor TPasMPCondition.Create;
 begin
  inherited Create;
@@ -1161,6 +1177,7 @@ begin
  pthread_cond_broadcast(@fConditionVariable);
 {$endif}
 end;
+{$endif}
 
 procedure Yield; {$ifdef CAN_INLINE}inline;{$endif}
 {$ifdef Windows}
