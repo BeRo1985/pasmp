@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-08-12-46-0000                       *
+ *                        Version 2016-02-08-14-18-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -199,6 +199,12 @@ unit PasMP;
 {$ifend}
 {$endif}
 
+{$ifdef Windows}
+{$define PasMPUseConditionVariables}
+{$else}
+{$undef PasMPUseConditionVariables}
+{$endif}
+
 interface
 
 uses {$ifdef Windows}
@@ -339,7 +345,7 @@ type TPasMPAvailableCPUCores=array of longint;
        destructor Destroy; override;
        procedure WakeUp; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure WakeUpAll; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       procedure Wait(Mutex:TPasMPMutex); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure Wait(const Mutex:TPasMPMutex;const dwMilliSeconds:longword=INFINITE); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
      end;
 
      PPasMPJob=^TPasMPJob;
@@ -489,6 +495,9 @@ type TPasMPAvailableCPUCores=array of longint;
 {$endif}
        fSystemThread:TPasMPWorkerSystemThread;
        fIsReadyEvent:TEvent;
+{$ifndef PasMPUseConditionVariables}
+       fWakeUpEvent:TEvent;
+{$endif}
        fJobAllocator:TPasMPJobAllocator;
        fJobQueue:TPasMPJobQueue;
 {$ifdef UseXorShift128}
@@ -540,7 +549,9 @@ type TPasMPAvailableCPUCores=array of longint;
        fJobWorkerThreads:array of TPasMPJobWorkerThread;
        fCountJobWorkerThreads:longint;
        fSystemIsReadyEvent:TEvent;
+{$ifdef PasMPUseConditionVariables}
        fWakeUpCondition:TPasMPCondition;
+{$endif}
        fMutex:TPasMPMutex;
        fJobAllocatorMutex:TPasMPMutex;
        fJobAllocator:TPasMPJobAllocator;
@@ -551,6 +562,9 @@ type TPasMPAvailableCPUCores=array of longint;
 {$endif}
        class procedure DestroyGlobalInstance;
        function GetJobWorkerThread:TPasMPJobWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
+{$ifndef PasMPUseConditionVariables}
+       procedure WakeUpAll;
+{$endif}
        function GlobalAllocateJob:PPasMPJob;
        procedure GlobalFreeJob(const Job:PPasMPJob);
        function AllocateJob(const MethodCode,MethodData,Data:pointer;const ParentJob:PPasMPJob;const Flags:longword):PPasMPJob; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
@@ -1098,7 +1112,7 @@ begin
 {$ifdef Windows}
  InitializeConditionVariable(@fConditionVariable);
 {$else}
- pthread_cond_init(@fConditionVariable,Nil);
+ pthread_cond_init(@fConditionVariable,nil);
 {$endif}
 end;
 
@@ -1111,14 +1125,23 @@ begin
  inherited Destroy;
 end;
 
-procedure TPasMPCondition.Wait(Mutex:TPasMPMutex); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-begin
+procedure TPasMPCondition.Wait(const Mutex:TPasMPMutex;const dwMilliSeconds:longword=INFINITE); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef Windows}
- SleepConditionVariableCS(@fConditionVariable,@Mutex.fCriticalSection,INFINITE);
-{$else}
- pthread_cond_wait(@fConditionVariable,@Mutex.fMutex);
-{$endif}
+begin
+ SleepConditionVariableCS(@fConditionVariable,@Mutex.fCriticalSection,dwMilliSeconds);
 end;
+{$else}
+var TimeSpec_:TTimeSpec;
+begin
+ if dwMilliSeconds=INFINITE then begin
+  pthread_cond_wait(@fConditionVariable,@Mutex.fMutex);
+ end else begin
+  TimeSpec_.tv_sec:=dwMilliSeconds div 1000;
+  TimeSpec_.tv_nsec:=(dwMilliSeconds mod 1000)*1000000000;
+  pthread_cond_timedwait(@fConditionVariable,@Mutex.fMutex,@TimeSpec_);
+ end;
+end;
+{$endif}
 
 procedure TPasMPCondition.WakeUp; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 begin
@@ -1908,6 +1931,9 @@ begin
  fJobAllocator:=TPasMPJobAllocator.Create(self);
  fJobQueue:=TPasMPJobQueue.Create(fPasMPInstance);
  fIsReadyEvent:=TEvent.Create(nil,false,false,'');
+{$ifndef PasMPUseConditionVariables}
+ fWakeUpEvent:=TEvent.Create(nil,false,false,'');
+{$endif}
  fThreadIndex:=AThreadIndex;
 {$ifdef UseXorShift128}
  fXorShift128x:=(longword(AThreadIndex+1)*83492791) or 1;
@@ -1934,11 +1960,18 @@ destructor TPasMPJobWorkerThread.Destroy;
 begin
  if assigned(fSystemThread) then begin
   fSystemThread.Terminate;
+{$ifdef PasMPUseConditionVariables}
   fPasMPInstance.fWakeUpCondition.WakeUpAll;
+{$else}
+  fPasMPInstance.WakeUpAll;
+{$endif}
   fSystemThread.WaitFor;
   fSystemThread.Free;
  end;
  fIsReadyEvent.Free;
+{$ifndef PasMPUseConditionVariables}
+ fWakeUpEvent.Free;
+{$endif}
  fJobQueue.Free;
  fJobAllocator.Free;
  inherited Destroy;
@@ -2083,16 +2116,24 @@ end;
 
 procedure TPasMPJobWorkerThread.ThreadProc;
 var SpinCount,CountMaxSpinCount:longint;
+{$ifdef PasMPUseConditionVariables}
     ConditionMutex:TPasMPMutex;
+{$endif}
     Job:PPasMPJob;
 begin
  ThreadInitialization;
+{$ifdef PasMPUseConditionVariables}
  ConditionMutex:=TPasMPMutex.Create;
  try
   ConditionMutex.Acquire;
   try
+{$endif}
    fPasMPInstance.fSystemIsReadyEvent.WaitFor(INFINITE);
+{$ifdef PasMPUseConditionVariables}
    fPasMPInstance.fWakeUpCondition.Wait(ConditionMutex);
+{$else}
+   fWakeUpEvent.WaitFor(INFINITE);
+{$endif}
    SpinCount:=0;
    CountMaxSpinCount:=128;
    while not fSystemThread.Terminated do begin
@@ -2104,17 +2145,24 @@ begin
      if SpinCount<CountMaxSpinCount then begin
       inc(SpinCount);
      end else begin
+{$ifdef PasMPUseConditionVariables}
       fPasMPInstance.fWakeUpCondition.Wait(ConditionMutex);
+{$else}
+      fWakeUpEvent.WaitFor(INFINITE);
+{$endif}
+      Yield;
       SpinCount:=0;
      end;
     end;
    end;
+{$ifdef PasMPUseConditionVariables}
   finally
    ConditionMutex.Release;
   end;
  finally
   ConditionMutex.Free;
  end;
+{$endif}
 end;
 
 constructor TPasMPScope.Create(const APasMPInstance:TPasMP);
@@ -2209,7 +2257,9 @@ begin
 
  fSystemIsReadyEvent:=TEvent.Create(nil,true,false,'');
 
+{$ifdef PasMPUseConditionVariables}
  fWakeUpCondition:=TPasMPCondition.Create;
+{$endif}
 
  fJobWorkerThreads:=nil;
  SetLength(fJobWorkerThreads,fCountJobWorkerThreads);
@@ -2249,12 +2299,20 @@ begin
    JobWorkerThread.fSystemThread.Terminate;
   end;
  end;
+{$ifdef PasMPUseConditionVariables}
  fWakeUpCondition.WakeUpAll;
+{$else}
+ WakeUpAll;
+{$endif}
  for Index:=0 to fCountJobWorkerThreads-1 do begin
   JobWorkerThread:=fJobWorkerThreads[Index];
   if assigned(JobWorkerThread.fSystemThread) then begin
    while JobWorkerThread.fSystemThread.ReturnValue=0 do begin
+{$ifdef PasMPUseConditionVariables}
     fWakeUpCondition.WakeUpAll;
+{$else}
+    WakeUpAll;
+{$endif}
     Yield;
    end;
    JobWorkerThread.fSystemThread.WaitFor;
@@ -2273,7 +2331,9 @@ begin
  fJobAllocator.Free;
  fJobAllocatorMutex.Free;
  fSystemIsReadyEvent.Free;
+{$ifdef PasMPUseConditionVariables}
  fWakeUpCondition.Free;
+{$endif}
 {$ifndef UseThreadLocalStorage}
  fJobWorkerThreadHashTableMutex.Free;
 {$endif}
@@ -2358,6 +2418,16 @@ begin
  result:=fJobWorkerThreadHashTable[ThreadIDHash and PasMPJobWorkerThreadHashTableMask];
  while assigned(result) and (result.fThreadID<>ThreadID) do begin
   result:=result.fNext;
+ end;
+end;
+{$endif}
+
+{$ifndef PasMPUseConditionVariables}
+procedure TPasMP.WakeUpAll;
+var Index:longint;
+begin
+ for Index:=0 to fCountJobWorkerThreads-1 do begin
+  fJobWorkerThreads[Index].fWakeUpEvent.SetEvent;
  end;
 end;
 {$endif}
@@ -2642,7 +2712,11 @@ end;
 procedure TPasMP.ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 begin
  if JobWorkerThread.fJobQueue.HasJobs then begin
+{$ifdef PasMPUseConditionVariables}
   fWakeUpCondition.WakeUpAll;
+{$else}
+  WakeUpAll;
+{$endif}
  end;
  if assigned(Job^.Method.Data) then begin
   if assigned(Job^.Method.Code) then begin
@@ -2668,7 +2742,11 @@ begin
   end else begin
    fJobQueue.PushJob(Job);
   end;
+{$ifdef PasMPUseConditionVariables}
   fWakeUpCondition.WakeUpAll;
+{$else}
+  WakeUpAll;
+{$endif}
  end;
 end;
 
@@ -2688,7 +2766,11 @@ begin
    end;
   end;
  end;
+{$ifdef PasMPUseConditionVariables}
  fWakeUpCondition.WakeUpAll;
+{$else}
+ WakeUpAll;
+{$endif}
 end;
 
 procedure TPasMP.Wait(const Job:PPasMPJob);
