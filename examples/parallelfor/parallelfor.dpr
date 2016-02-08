@@ -24,6 +24,7 @@ var FakeAtomicOperationMutex:TPasMPMutex;
     Index,Sum:longint;
     Cells:TCells;
 
+{$ifndef fpc}
 {$if not ((CompilerVersion>=20) and not defined(fpc))}
 procedure ParallelForJobFunction(const Job:PPasMPJob;const ThreadIndex:longint;const Data:pointer;const FromIndex,ToIndex:longint);
 var Index:longint;
@@ -41,6 +42,7 @@ begin
  Sleep(100); // simulate some extra work load
 end;
 {$ifend}
+{$endif}
 
 begin
 
@@ -52,6 +54,7 @@ begin
 
  FakeAtomicOperationMutex:=TPasMPMutex.Create;
  try
+{$ifndef fpc}
 {$if (CompilerVersion>=20) and not defined(fpc)}
   GlobalPasMP.Invoke(GlobalPasMP.ParallelFor(@Cells,
                                              1,
@@ -76,6 +79,9 @@ begin
 {$else}
   GlobalPasMP.Invoke(GlobalPasMP.ParallelFor(@Cells,1,N,ParallelForJobFunction,16,8)); // <= Invoke = Run+Wait+Release into a single call
 {$ifend}
+{$else}
+  GlobalPasMP.Invoke(GlobalPasMP.ParallelFor(@Cells,1,N,ParallelForJobFunction,16,8)); // <= Invoke = Run+Wait+Release into a single call
+{$endif}
  finally
   FakeAtomicOperationMutex.Free;
  end;
