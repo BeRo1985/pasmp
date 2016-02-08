@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-08-14-52-0000                       *
+ *                        Version 2016-02-08-15-06-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -556,6 +556,7 @@ type TPasMPAvailableCPUCores=array of longint;
        fJobWorkerThreads:array of TPasMPJobWorkerThread;
        fCountJobWorkerThreads:longint;
        fSleepingJobWorkerThreads:longint;
+       fWorkingJobWorkerThreads:longint;
        fSystemIsReadyEvent:TEvent;
 {$ifdef PasMPUseConditionVariables}
        fWakeUpCondition:TPasMPCondition;
@@ -2159,7 +2160,9 @@ begin
    while not fSystemThread.Terminated do begin
     Job:=GetJob;
     if assigned(Job) then begin
+     InterlockedIncrement(fPasMPInstance.fWorkingJobWorkerThreads);
      fPasMPInstance.ExecuteJob(Job,self);
+     InterlockedDecrement(fPasMPInstance.fWorkingJobWorkerThreads);
      SpinCount:=0;
     end else begin
      if SpinCount<CountMaxSpinCount then begin
@@ -2702,8 +2705,10 @@ begin
  JobTask:=TPasMPJobTask(pointer(Job^.Method.Data));
  JobTask.fThreadIndex:=ThreadIndex;
 
- // First try to spread
- JobTask.Spread;
+ if fWorkingJobWorkerThreads=(ord(ThreadIndex<>0) and 1) then begin
+  // First try to spread, when all worker threads (except us) are jobless
+  JobTask.Spread;
+ end;
 
  if ((Job^.InternalData and PasMPJobFlagHasOwnerWorkerThread)<>0) and
     (longint(Job^.InternalData and PasMPJobThreadIndexMask)<>ThreadIndex) then begin
@@ -3033,7 +3038,12 @@ begin
    if Count<=Granularity then begin
     ParallelForJobFunctionProcess(Job,ThreadIndex);
    end else begin
-    CountJobs:=Count div Granularity;
+    if fWorkingJobWorkerThreads=(ord(ThreadIndex<>0) and 1) then begin
+     // Only try to spread, when all worker threads (except us) are jobless
+     CountJobs:=Count div Granularity;
+    end else begin
+     CountJobs:=1;
+    end;
     if CountJobs<1 then begin
      CountJobs:=1;
     end else if CountJobs>length(NewJobs) then begin
@@ -3178,7 +3188,12 @@ begin
   if Count<=Granularity then begin
    ParallelForJobFunctionProcess(Job,ThreadIndex);
   end else begin
-   CountJobs:=Count div Granularity;
+   if fWorkingJobWorkerThreads=(ord(ThreadIndex<>0) and 1) then begin
+    // Only try to spread, when all worker threads (except us) are jobless
+    CountJobs:=Count div Granularity;
+   end else begin
+    CountJobs:=1;
+   end;
    if CountJobs<1 then begin
     CountJobs:=1;
    end else if CountJobs>length(NewJobs) then begin
