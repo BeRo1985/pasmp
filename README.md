@@ -7,7 +7,7 @@ License: zlib
 
 - Low-level-based design with optional high-level-based constructs
 - Designed for fully-strict fork-join model in mind (because it's less error-prone to work with it than with terminally-strict fork-join for my taste), but it can be also abused for more flexible models, the only important thing is, that you're releasing the jobs again as soon as they are completed (the simplest weay would be by calling TPasMP.Reset per workload-frame), otherwise you'll have memory leaks.
-- Work-first lock-free Chase-Lev work-stealing
+- Work-first lock-free work-stealing dynamic-sized Chase-Lev queue/deque (where only the resizing code part of it isn't lock-free)
 - Lock-free job memory allocator (al least lock-free on x86-32 and x86-64 targets)
 - Parallel-for pattern
 - Parallel intro sort (direct and indirect)
