@@ -30,7 +30,7 @@ begin
  Sleep(100); // simulate some workload
 end;
 
-var RootJob,ChildJob:PPasMPJob;
+var RootJob:PPasMPJob;
     i:longint;
 begin
 
@@ -42,11 +42,12 @@ begin
  try
   RootJob:=GlobalPasMP.Acquire(RootJobFunction);
   for i:=1 to N do begin
-   GlobalPasMP.Run(GlobalPasMP.Acquire(ChildJobFunction,nil,RootJob));
+   GlobalPasMP.Run(GlobalPasMP.Acquire(ChildJobFunction,nil,RootJob,PasMPJobFlagFreeOnRelease));
   end;
   GlobalPasMP.Run(RootJob);
   GlobalPasMP.Wait(RootJob);
-  GlobalPasMP.Reset; // <= Release all aquired jobs and do the resized pool memory allocator garbage collector if needed
+  // if you don't use the PasMPJobFlagFreeOnRelease flag in this case, then you must do also:
+  // GlobalPasMP.Reset; // <= Release all aquired jobs
  finally
   FakeAtomicOperationMutex.Free;
  end;
