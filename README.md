@@ -13,7 +13,7 @@ License: zlib
 - Parallel-for pattern
 - Parallel intro sort (direct and indirect)
 - Parellel merge sort (direct and indirect)
-- Optional singleton usage option (besides the option of usage of multiple PasMP instances)
+- Optional strict singleton usage option per global PasMPUseAsStrictSingletonInstance define (besides the option of usage of multiple PasMP instances)
 - Compatible with FreePascal >= 2.6.x and Delphi >= 7
 - Cross platform (Windows, Linux, etc.)
  
