@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-10-17-57-0000                       *
+ *                        Version 2016-02-10-18-01-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -212,11 +212,11 @@ uses {$ifdef Windows}
         {$ifdef usecthreads}
          cthreads,
         {$endif}
-        BaseUnix,Unix,UnixType,
+        BaseUnix,Unix,UnixType,PThreads,
         {$ifdef Linux}
          Linux,
         {$else}
-         PThreads,ctypes,sysctl,
+         ctypes,sysctl,
         {$endif}
        {$endif}
       {$endif}
@@ -1180,11 +1180,11 @@ begin
    0:begin
     result:=wrSignaled;
    end;
-   ETIMEDOUT:begin
+   ESysETIMEDOUT:begin
     result:=wrTimeout;
     exit;
    end;
-   EINVAL:begin
+   ESysEINVAL:begin
     result:=wrAbandoned;
     exit;
    end;
