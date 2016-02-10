@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-10-18-01-0000                       *
+ *                        Version 2016-02-10-18-24-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -583,6 +583,7 @@ type TPasMPAvailableCPUCores=array of longint;
        fWorkingJobWorkerThreads:longint;
        fSystemIsReadyEvent:TEvent;
 {$ifdef PasMPUseConditionVariables}
+       fWakeUpCounter:longint; // for spurious-wakeup-detection 
        fWakeUpMutex:TPasMPMutex;
        fWakeUpCondition:TPasMPCondition;
 {$else}
@@ -2474,6 +2475,7 @@ begin
  fSystemIsReadyEvent:=TEvent.Create(nil,true,false,'');
 
 {$ifdef PasMPUseConditionVariables}
+ fWakeUpCounter:=0;
  fWakeUpMutex:=TPasMPMutex.Create;
  fWakeUpCondition:=TPasMPCondition.Create;
 {$else}
@@ -2652,11 +2654,15 @@ end;
 
 {$ifdef PasMPUseConditionVariables}
 procedure TPasMP.WaitForWakeUp;
+var SavedWakeUpCounter:longint;
 begin
  fWakeUpMutex.Acquire;
  try
   InterlockedIncrement(fSleepingJobWorkerThreads);
-  fWakeUpCondition.Wait(fWakeUpMutex);
+  SavedWakeUpCounter:=fWakeUpCounter;
+  repeat
+   fWakeUpCondition.Wait(fWakeUpMutex);
+  until SavedWakeUpCounter<>fWakeUpCounter;
   InterlockedDecrement(fSleepingJobWorkerThreads);
  finally
   fWakeUpMutex.Release;
@@ -2666,7 +2672,13 @@ end;
 procedure TPasMP.WakeUpAll;
 begin
  if fSleepingJobWorkerThreads>0 then begin
-  fWakeUpCondition.WakeUpAll;
+  fWakeUpMutex.Acquire;
+  try
+   inc(fWakeUpCounter);
+   fWakeUpCondition.WakeUpAll;
+  finally
+   fWakeUpMutex.Release;
+  end;
  end;
 end;
 {$else}
