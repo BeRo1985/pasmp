@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-10-10-25-0000                       *
+ *                        Version 2016-02-10-12-17-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -572,6 +572,7 @@ type TPasMPAvailableCPUCores=array of longint;
        function GetJobWorkerThread:TPasMPJobWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
        procedure WaitForWakeUp;
        procedure WakeUpAll;
+       function CanSpread:boolean;
        function GlobalAllocateJob:PPasMPJob;
        procedure GlobalFreeJob(const Job:PPasMPJob);
        function AllocateJob(const MethodCode,MethodData,Data:pointer;const ParentJob:PPasMPJob;const Flags:longword):PPasMPJob; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
@@ -1778,7 +1779,7 @@ end;
 
 function TPasMPJobQueue.HasJobs:boolean;
 begin
- result:=fQueueBottom>=fQueueTop;
+ result:=fQueueBottom>fQueueTop;
 end;
 
 procedure TPasMPJobQueue.Resize(const QueueBottom,QueueTop:longint);
@@ -2399,6 +2400,20 @@ begin
  result:=GlobalPasMP;
 end;
 
+procedure TPasMP.Reset;
+var Index:longint;
+begin
+ fJobAllocator.FreeJobs;
+ for Index:=0 to fCountJobWorkerThreads-1 do begin
+  fJobWorkerThreads[Index].fJobAllocator.FreeJobs;
+ end;
+end;
+
+function TPasMP.CreateScope:TPasMPScope; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+ result:=TPasMPScope.Create(self);
+end;
+
 class function TPasMP.IsJobCompleted(const Job:PPasMPJob):boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 begin
  result:=assigned(Job) and (Job^.State<0);
@@ -2478,19 +2493,27 @@ begin
  end;
 end;
 {$endif}
-
-procedure TPasMP.Reset;
-var Index:longint;
+                         
+function TPasMP.CanSpread:boolean;
+var CurrentJobWorkerThread,JobWorkerThread:TPasMPJobWorkerThread;
+    ThreadIndex,Index:longint;
 begin
- fJobAllocator.FreeJobs;
- for Index:=0 to fCountJobWorkerThreads-1 do begin
-  fJobWorkerThreads[Index].fJobAllocator.FreeJobs;
+ result:=false;
+ CurrentJobWorkerThread:=GetJobWorkerThread;
+ if assigned(CurrentJobWorkerThread) then begin
+  ThreadIndex:=CurrentJobWorkerThread.fThreadIndex;
+  if ((ThreadIndex=0) and (fWorkingJobWorkerThreads=0)) or ((ThreadIndex<>0) and (fWorkingJobWorkerThreads=1)) then begin
+   for Index:=0 to fCountJobWorkerThreads-1 do begin
+    JobWorkerThread:=fJobWorkerThreads[Index];
+    if (JobWorkerThread<>CurrentJobWorkerThread) and JobWorkerThread.fJobQueue.HasJobs then begin
+     // We are not alone with work.
+     exit;
+    end;
+   end;
+   // We are alone with work.
+   result:=true;
+  end;
  end;
-end;
-
-function TPasMP.CreateScope:TPasMPScope; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-begin
- result:=TPasMPScope.Create(self);
 end;
 
 function TPasMP.GlobalAllocateJob:PPasMPJob;
@@ -2726,7 +2749,7 @@ begin
  JobTask:=TPasMPJobTask(pointer(Job^.Method.Data));
  JobTask.fThreadIndex:=ThreadIndex;
 
- if fWorkingJobWorkerThreads=(ord(ThreadIndex<>0) and 1) then begin
+ if CanSpread then begin
   // First try to spread, when all worker threads (except us) are jobless
   JobTask.Spread;
  end;
@@ -2957,6 +2980,7 @@ type PPasMPParallelForReferenceProcedureStartJobData=^TPasMPParallelForReference
       LastIndex:longint;
       Granularity:longint;
       Depth:longint;
+      CanSpread:longbool;
      end;
 
      PPasMPParallelForReferenceProcedureJobData=^TPasMPParallelForReferenceProcedureJobData;
@@ -3044,7 +3068,7 @@ begin
    if Count<=Granularity then begin
     ParallelForJobFunctionProcess(Job,ThreadIndex);
    end else begin
-    if fWorkingJobWorkerThreads=(ord(ThreadIndex<>0) and 1) then begin
+    if JobData^.CanSpread then begin
      // Only try to spread, when all worker threads (except us) are jobless
      CountJobs:=Count div Granularity;
     end else begin
@@ -3096,6 +3120,7 @@ begin
  JobData^.LastIndex:=LastIndex;
  JobData^.Granularity:=Granularity;
  JobData^.Depth:=Depth;
+ JobData^.CanSpread:=CanSpread;
 end;
 {$endif}
 
@@ -3107,6 +3132,7 @@ type PPasMPParallelForStartJobData=^TPasMPParallelForStartJobData;
       LastIndex:longint;
       Granularity:longint;
       Depth:longint;
+      CanSpread:longbool;
      end;
 
      PPasMPParallelForJobData=^TPasMPParallelForJobData;
@@ -3195,7 +3221,7 @@ begin
   if Count<=Granularity then begin
    ParallelForJobFunctionProcess(Job,ThreadIndex);
   end else begin
-   if fWorkingJobWorkerThreads=(ord(ThreadIndex<>0) and 1) then begin
+   if JobData^.CanSpread then begin
     // Only try to spread, when all worker threads (except us) are jobless
     CountJobs:=Count div Granularity;
    end else begin
@@ -3248,6 +3274,7 @@ begin
   JobData^.Granularity:=Granularity;
  end;
  JobData^.Depth:=Depth;
+ JobData^.CanSpread:=CanSpread;
 end;
 
 function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:longint;const ParallelForMethod:TPasMPParallelForMethod;const Granularity:longint=1;const Depth:longint=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil):PPasMPJob;
