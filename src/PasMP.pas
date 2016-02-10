@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-10-12-27-0000                       *
+ *                        Version 2016-02-10-12-35-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1911,9 +1911,9 @@ begin
     result:=nil;
    end;
 {$if (defined(CPU386) or defined(CPUx86_64))}
-   fQueueBottom:=QueueBottom+1;
+   fQueueBottom:=QueueTop+1;
 {$else}
-   InterlockedExchange(fQueueBottom,QueueBottom+1);
+   InterlockedExchange(fQueueBottom,QueueTop+1);
 {$ifend}
   end else begin
    // There's still more than one item left in the queue
@@ -1921,9 +1921,9 @@ begin
  end else begin
   // Deque was already empty
 {$if (defined(CPU386) or defined(CPUx86_64))}
-  fQueueBottom:=QueueBottom+1;
+  fQueueBottom:=QueueTop;
 {$else}
-  InterlockedExchange(fQueueBottom,QueueBottom+1);
+  InterlockedExchange(fQueueBottom,QueueTop);
 {$ifend}
   result:=nil;
  end;
