@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-10-10-12-0000                       *
+ *                        Version 2016-02-10-10-25-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -207,15 +207,17 @@ interface
 uses {$ifdef Windows}
       Windows,MMSystem,
      {$else}
-      {$ifdef Unix}
-       {$ifdef usecthreads}
-        cthreads,
-       {$endif}
-       BaseUnix,Unix,UnixType,
-       {$ifdef Linux}
-        Linux,
-       {$else}
-        ctypes,sysctl,
+      {$ifdef fpc}
+       {$ifdef Unix}
+        {$ifdef usecthreads}
+         cthreads,
+        {$endif}
+        BaseUnix,Unix,UnixType,
+        {$ifdef Linux}
+         Linux,
+        {$else}
+         PThreads,ctypes,sysctl,
+        {$endif}
        {$endif}
       {$endif}
      {$endif}
@@ -704,7 +706,10 @@ type cpu_set_p=^cpu_set_t;
      ppthread_condattr_t=^pthread_condattr_t;
 {$endif}
 
+{$ifdef fpc}
 {$linklib c}
+{$endif}
+
 function sysconf(__name:longint):longint; cdecl; external 'c' name 'sysconf';
 
 function sched_getaffinity(pid:ptruint;cpusetsize:longint;cpuset:pointer):longint; cdecl; external 'c' name 'sched_getaffinity';
@@ -727,7 +732,6 @@ function pthread_cond_broadcast(__cond:ppthread_cond_t):longint; cdecl; external
 function pthread_cond_wait(__cond:ppthread_cond_t; __mutex:ppthread_mutex_t):longint; cdecl; external 'c' name 'pthread_cond_wait';
 function pthread_cond_timedwait(__cond:ppthread_cond_t;__mutex:ppthread_mutex_t;__abstime:PTimeSpec):longint; cdecl; external 'c' name 'pthread_cond_timedwait';
 {$endif}
-
 {$endif}
 {$endif}
 
@@ -1086,7 +1090,11 @@ begin
 {$ifdef Windows}
  InitializeCriticalSection(fCriticalSection);
 {$else}
+{$ifdef Unix}
  pthread_mutex_init(@fMutex,nil);
+{$else}
+ {$error Unsupported target platform}
+{$endif}
 {$endif}
 end;
 
@@ -1095,7 +1103,11 @@ begin
 {$ifdef Windows}
  DeleteCriticalSection(fCriticalSection);
 {$else}
+{$ifdef Unix}
  pthread_mutex_destroy(@fMutex);
+{$else}
+ {$error Unsupported target platform}
+{$endif}
 {$endif}
  inherited Destroy;
 end;
@@ -1105,7 +1117,11 @@ begin
 {$ifdef Windows}
  EnterCriticalSection(fCriticalSection);
 {$else}
+{$ifdef Unix}
  pthread_mutex_lock(@fMutex);
+{$else}
+ {$error Unsupported target platform}
+{$endif}
 {$endif}
 end;
 
@@ -1114,7 +1130,11 @@ begin
 {$ifdef Windows}
  LeaveCriticalSection(fCriticalSection);
 {$else}
+{$ifdef Unix}
  pthread_mutex_unlock(@fMutex);
+{$else}
+ {$error Unsupported target platform}
+{$endif}
 {$endif}
 end;
 {$endif}
@@ -1126,7 +1146,11 @@ begin
 {$ifdef Windows}
  InitializeConditionVariable(@fConditionVariable);
 {$else}
+{$ifdef Unix}
  pthread_cond_init(@fConditionVariable,nil);
+{$else}
+ {$error Unsupported target platform}
+{$endif}
 {$endif}
 end;
 
@@ -1134,7 +1158,11 @@ destructor TPasMPCondition.Destroy;
 begin
 {$ifdef Windows}
 {$else}
+{$ifdef Unix}
  pthread_cond_destroy(@fConditionVariable);
+{$else}
+ {$error Unsupported target platform}
+{$endif}
 {$endif}
  inherited Destroy;
 end;
@@ -1145,6 +1173,7 @@ begin
  SleepConditionVariableCS(@fConditionVariable,@Mutex.fCriticalSection,dwMilliSeconds);
 end;
 {$else}
+{$ifdef Unix}
 var TimeSpec_:TTimeSpec;
 begin
  if dwMilliSeconds=INFINITE then begin
@@ -1155,6 +1184,9 @@ begin
   pthread_cond_timedwait(@fConditionVariable,@Mutex.fMutex,@TimeSpec_);
  end;
 end;
+{$else}
+ {$error Unsupported target platform}
+{$endif}
 {$endif}
 
 procedure TPasMPCondition.WakeUp; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
@@ -1162,7 +1194,11 @@ begin
 {$ifdef Windows}
  WakeConditionVariable(@fConditionVariable);
 {$else}
+{$ifdef Unix}
  pthread_cond_signal(@fConditionVariable);
+{$else}
+ {$error Unsupported target platform}
+{$endif}
 {$endif}
 end;
 
@@ -1171,7 +1207,11 @@ begin
 {$ifdef Windows}
  WakeAllConditionVariable(@fConditionVariable);
 {$else}
+{$ifdef Unix}
  pthread_cond_broadcast(@fConditionVariable);
+{$else}
+ {$error Unsupported target platform}
+{$endif}
 {$endif}
 end;
 {$endif}
