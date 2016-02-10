@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-10-12-17-0000                       *
+ *                        Version 2016-02-10-12-27-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2506,11 +2506,11 @@ begin
    for Index:=0 to fCountJobWorkerThreads-1 do begin
     JobWorkerThread:=fJobWorkerThreads[Index];
     if (JobWorkerThread<>CurrentJobWorkerThread) and JobWorkerThread.fJobQueue.HasJobs then begin
-     // We are not alone with work.
+     // We are not alone with queued work.
      exit;
     end;
    end;
-   // We are alone with work.
+   // We are alone with queued work.
    result:=true;
   end;
  end;
