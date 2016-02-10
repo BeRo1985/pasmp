@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-10-12-35-0000                       *
+ *                        Version 2016-02-10-17-57-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -241,6 +241,12 @@ const PasMPAllocatorPoolBucketBits=12;
       PasMPJobFlagHasOwnerWorkerThread=longword(longword(1) shl (PasMPJobThreadIndexBits+1));
       PasMPJobFlagReleaseOnFinish=longword(longword(1) shl (PasMPJobThreadIndexBits+2));
 
+{$ifndef Windows}
+{$ifndef fpc}
+      INFINITE=longword(-1);
+{$endif}
+{$endif}
+
 type TPasMPAvailableCPUCores=array of longint;
 
      PPasMPPtrUInt=^TPasMPPtrUInt;
@@ -305,6 +311,28 @@ type TPasMPAvailableCPUCores=array of longint;
      end;
 
      TPasMP=class;
+
+     TPasMPSemaphore=class
+      private
+       fInitialCount:longint;
+       fMaximumCount:longint;
+{$ifdef Windows}
+       fHandle:THandle;
+{$else}
+{$ifdef unix}
+       fHandle:longint;
+{$else}
+       fCurrentCount:longint;
+       fCriticalSection:TCriticalSection;
+       fEvent:TEvent;
+{$endif}
+{$endif}
+      public
+       constructor Create(const InitialCount,MaximumCount:longint);
+       destructor Destroy; override;
+       function Acquire(const AcquireCount:longint=1):TWaitResult;
+       function Release(const ReleaseCount:longint=1):longint;
+     end;
 
      TPasMPMutex=class{$ifndef PasMPUseConditionVariables}(TCriticalSection){$endif}
 {$ifdef PasMPUseConditionVariables}
@@ -1082,6 +1110,170 @@ begin
  ReadWriteBarrier;
 end;
 {$ifend}
+{$endif}
+
+constructor TPasMPSemaphore.Create(const InitialCount,MaximumCount:longint);
+begin
+ inherited Create;
+ fInitialCount:=InitialCount;
+ fMaximumCount:=MaximumCount;
+{$ifdef Windows}
+ fHandle:=CreateSemaphore(nil,InitialCount,MaximumCount,nil);
+{$else}
+{$ifdef unix}
+ sem_init(@fHandle,0,InitialCount);
+{$else}
+ fCurrentCount:=fInitialCount;
+ fCriticalSection:=TCriticalSection.Create;
+ fEvent:=TEvent.Create(nil,false,false,'');
+{$endif}
+{$endif}
+end;
+
+destructor TPasMPSemaphore.Destroy;
+begin
+{$ifdef Windows}
+ CloseHandle(fHandle);
+{$else}
+{$ifdef unix}
+ sem_destroy(@fHandle);
+{$else}
+ fEvent.Free;
+ fCriticalSection.Free;
+{$endif}
+{$endif}
+ inherited Destroy;
+end;
+
+function TPasMPSemaphore.Acquire(const AcquireCount:longint=1):TWaitResult;
+{$ifdef Windows}
+var Counter:longint;
+begin
+ result:=wrError;
+ for Counter:=1 to AcquireCount do begin
+  case WaitForSingleObject(fHandle,INFINITE) of
+   WAIT_OBJECT_0:begin
+    result:=wrSignaled;
+   end;
+   WAIT_TIMEOUT:begin
+    result:=wrTimeout;
+    exit;
+   end;
+   WAIT_ABANDONED:begin
+    result:=wrAbandoned;
+    exit;
+   end;
+   else begin
+    result:=wrError;
+    exit;
+   end;
+  end;
+ end;
+end;
+{$else}
+{$ifdef unix}
+var Counter:longint;
+begin
+ result:=wrError;
+ for Counter:=1 to AcquireCount do begin
+  case sem_wait(@fHandle) of
+   0:begin
+    result:=wrSignaled;
+   end;
+   ETIMEDOUT:begin
+    result:=wrTimeout;
+    exit;
+   end;
+   EINVAL:begin
+    result:=wrAbandoned;
+    exit;
+   end;
+   else begin
+    result:=wrError;
+    exit;
+   end;
+  end;
+ end;
+end;
+{$else}
+var Counter:longint;
+    Done:boolean;
+begin
+ result:=wrError;
+ for Counter:=1 to AcquireCount do begin
+  result:=wrSignaled;
+  repeat
+   fCriticalSection.Enter;
+   try
+    Done:=fCurrentCount<>0;
+    if Done then begin
+     dec(fCurrentCount);
+    end;
+   finally
+    fCriticalSection.Leave;
+   end;
+   if Done then begin
+    break;
+   end;
+   result:=fEvent.WaitFor(INFINITE);
+  until result<>wrSignaled;
+  if result<>wrSignaled then begin
+   exit;
+  end;
+ end;
+end;
+{$endif}
+{$endif}
+
+function TPasMPSemaphore.Release(const ReleaseCount:longint=1):longint;
+{$ifdef Windows}
+begin
+ ReleaseSemaphore(fHandle,ReleaseCount,@result);
+end;
+{$else}
+{$ifdef unix}
+var Counter:longint;
+begin
+ result:=0;
+ while result<ReleaseCount do begin
+  case sem_post(@fHandle) of
+   0:begin
+    inc(result);
+   end;
+   else begin
+    break;
+   end;
+  end;
+ end;
+end;
+{$else}
+var WakeUp:boolean;
+begin
+ WakeUp:=false;
+ fCriticalSection.Enter;
+ try
+  if ((fCurrentCount+ReleaseCount)<fCurrentCount) or
+     ((fCurrentCount+ReleaseCount)>fMaximumCount) then begin
+   // Invalid release count
+   result:=0;
+  end else begin
+   if fCurrentCount<>0 then begin
+    // There can't be any thread to wake up if the value of fCurrentCount isn't zero
+    inc(fCurrentCount,ReleaseCount);
+   end else begin
+    fCurrentCount:=ReleaseCount;
+    WakeUp:=true;
+   end;
+   result:=fCurrentCount;
+  end;
+ finally
+  fCriticalSection.Leave;
+ end;
+ if WakeUp then begin
+  fEvent.SetEvent;
+ end;
+end;
+{$endif}
 {$endif}
 
 {$ifdef PasMPUseConditionVariables}
