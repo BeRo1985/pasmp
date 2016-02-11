@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-11-10-43-0000                       *
+ *                        Version 2016-02-11-11-42-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -494,6 +494,27 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure Release; {$if defined(Unix)}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$else}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$ifend}{$ifend}
      end;
 
+     TPasMPBarrier=class
+{$ifdef unix}
+      private
+       fBarrier:pthread_barrier_t;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_barrier_t))-1] of byte;
+{$else}
+      private
+       fCount:longint;
+       fTotal:longint;
+       fMutex:TPasMPMutex;
+       fConditionVariable:TPasMPConditionVariable;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*2)+SizeOf(TPasMPMutex)+SizeOf(TPasMPConditionVariable)))-1] of byte;
+{$endif}
+      public
+       constructor Create(const Count:longint);
+       destructor Destroy; override;
+       function Wait:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+     end;
+
      PPasMPJob=^TPasMPJob;
 
 {$ifdef HAS_ANONYMOUS_METHODS}
@@ -782,6 +803,8 @@ var GlobalPasMP:TPasMP=nil; // "Optional" singleton-like global PasMP instance
     GPasMP:TPasMP absolute GlobalPasMP; // A shorter name for lazy peoples
 
 implementation
+
+const PasMPBarrierFlag=longint(1) shl 30;
 
 {$ifdef UseThreadLocalStorage}
 {$if defined(UseThreadLocalStorageX8632) or defined(UseThreadLocalStorageX8664)}
@@ -2487,6 +2510,79 @@ end;
 {$endif}
 {$endif}
 {$ifend}
+
+constructor TPasMPBarrier.Create(const Count:longint);
+begin
+ inherited Create;
+{$ifdef unix}
+ pthread_barrier_init(@fBarrier,nil,Count);
+{$else}
+ fCount:=Count;
+ fTotal:=0;
+ fMutex:=TPasMPMutex.Create;
+ fConditionVariable:=TPasMPConditionVariable.Create;
+{$endif}
+end;
+
+destructor TPasMPBarrier.Destroy;
+begin
+{$ifdef unix}
+ pthread_barrier_destroy(@fBarrier);
+{$else}
+ fMutex.Acquire;
+ try
+  while fTotal>PasMPBarrierFlag do begin
+   // Wait until everyone exits the barrier
+   fConditionVariable.Wait(fMutex,INFINITE);
+  end;
+ finally
+  fMutex.Release;
+ end;
+ fConditionVariable.Free;
+ fMutex.Free;
+{$endif}
+ inherited Destroy;
+end;
+
+function TPasMPBarrier.Wait:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef unix}
+begin
+ result:=pthread_barrier_wait(@fBarrier)=PTHREAD_BARRIER_SERIAL_THREAD;
+end;
+{$else}
+begin
+ fMutex.Acquire;
+ try
+  while fTotal>PasMPBarrierFlag do begin
+   // Wait until everyone exits the barrier
+   fConditionVariable.Wait(fMutex,INFINITE);
+  end;
+  if fTotal=PasMPBarrierFlag then begin
+   // Are we the first to enter?
+   fTotal:=0;
+  end;
+  inc(fTotal);
+  if fTotal=fCount then begin
+   inc(fTotal,PasMPBarrierFlag-1);
+   fConditionVariable.Broadcast;
+   result:=true;
+  end else begin
+   while fTotal<PasMPBarrierFlag do begin
+    // Wait until enough threads enter the barrier
+    fConditionVariable.Wait(fMutex,INFINITE);
+   end;
+   dec(fTotal);
+   if ftotal=PasMPBarrierFlag then begin
+    // Get entering threads to wake up
+    fConditionVariable.Broadcast;
+   end;
+   result:=false;
+  end;
+ finally
+  fMutex.Release;
+ end;
+end;
+{$endif}
 
 constructor TPasMPJobTask.Create;
 begin
