@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-11-10-26-0000                       *
+ *                        Version 2016-02-11-10-32-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -419,6 +419,27 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure ReleaseWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure ReadToWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure WriteToRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+     end;
+
+     TPasMPSlimReaderWriterLock=class
+      private
+{$ifdef Windows}
+       fSRWLock:TPasMPSRWLock;
+{$else}
+{$ifdef unix}
+       fReadWriteLock:pthread_rwlock_t;
+{$else}
+       fCount:longint;
+       fMutex:TPasMPMutex;
+       fConditionVariable:TPasMPConditionVariable;
+{$endif}
+{$endif}
+      public
+       constructor Create;
+       destructor Destroy; override;
+       procedure Acquire; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       function TryAcquire:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure Release; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
      end;
 
      TPasMPSpinLock=class
@@ -2166,6 +2187,111 @@ begin
    fConditionVariable.Wait(fMutex,INFINITE);
   end;
   inc(fReaders);
+ finally
+  fMutex.Release;
+ end;
+end;
+{$endif}
+{$endif}
+
+constructor TPasMPSlimReaderWriterLock.Create;
+begin
+ inherited Create;
+{$ifdef Windows}
+ InitializeSRWLock(@fSRWLock);
+{$else}
+{$ifdef unix}
+ pthread_rwlock_init(@fReadWriteLock,nil);
+{$else}
+ fCount:=0;
+ fMutex:=TPasMPMutex.Create;
+ fConditionVariable:=TPasMPConditionVariable.Create;
+{$endif}
+{$endif}
+end;
+
+destructor TPasMPSlimReaderWriterLock.Destroy;
+begin
+{$ifdef Windows}
+{$else}
+{$ifdef unix}
+ pthread_rwlock_destroy(@fReadWriteLock);
+{$else}
+ fConditionVariable.Free;
+ fMutex.Free;
+{$endif}
+{$endif}
+ inherited Destroy;
+end;
+
+procedure TPasMPSlimReaderWriterLock.Acquire; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ AcquireSRWLockExclusive(@fSRWLock);
+end;
+{$else}
+{$ifdef unix}
+begin
+ pthread_rwlock_wrlock(@fReadWriteLock);
+end;
+{$else}
+begin
+ fMutex.Acquire;
+ try
+  while fCount<>0 do begin
+   fConditionVariable.Wait(fMutex,INFINITE);
+  end;
+  inc(fCount);
+ finally
+  fMutex.Release;
+ end;
+end;
+{$endif}
+{$endif}
+
+function TPasMPSlimReaderWriterLock.TryAcquire:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ result:=TryAcquireSRWLockExclusive(@fSRWLock);
+end;
+{$else}
+{$ifdef unix}
+begin
+ result:=pthread_rwlock_trywrlock(@fReadWriteLock)=0;
+end;
+{$else}
+begin
+ fMutex.Acquire;
+ try
+  result:=fCount=0;
+  if result then begin
+   inc(fCount);
+  end;
+ finally
+  fMutex.Release;
+ end;
+end;
+{$endif}
+{$endif}
+
+procedure TPasMPSlimReaderWriterLock.Release; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ ReleaseSRWLockExclusive(@fSRWLock);
+end;
+{$else}
+{$ifdef unix}
+begin
+ pthread_rwlock_unlock(@fReadWriteLock);
+end;
+{$else}
+begin
+ fMutex.Acquire;
+ try
+  dec(fCount);
+  if fCount=0 then begin
+   fConditionVariable.Broadcast;
+  end;
  finally
   fMutex.Release;
  end;
