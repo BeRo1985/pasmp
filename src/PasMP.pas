@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-11-11-57-0000                       *
+ *                        Version 2016-02-11-12-15-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -240,6 +240,8 @@ const PasMPAllocatorPoolBucketBits=12;
 
       PasMPCPUCacheLineSize=64;
 
+      PasMPOnceInit={$ifdef Unix}PTHREAD_ONCE_INIT{$else}0{$endif};
+
 {$ifndef Windows}
 {$ifndef fpc}
       INFINITE=longword(-1);
@@ -310,6 +312,11 @@ type TPasMPAvailableCPUCores=array of longint;
      end;
 
      TPasMP=class;
+
+     PPasMPOnce=^TPasMPOnce;
+     TPasMPOnce={$ifdef unix}pthread_once_t{$else}longint{$endif};
+
+     TPasMPOnceInitRoutine={$ifdef fpc}TProcedure{$else}procedure{$endif};
 
      TPasMPEvent=class(TEvent);
 
@@ -877,6 +884,8 @@ procedure MemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 
 procedure Yield; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 
+function Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean;
+
 function GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):longint;
 
 implementation
@@ -1428,6 +1437,42 @@ begin
   dec(Size,SizeOf(byte));
  end;
 end;
+
+function Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean;
+{$ifdef Unix}
+begin
+ result:=pthread_once(@OnceControl,InitRoutine)=0;
+end;
+{$else}
+var SavedOnceControl:TPasMPOnce;
+begin
+ result:=false;
+ SavedOnceControl:=OnceControl;
+ ReadWriteBarrier;
+ while SavedOnceControl<>1 do begin
+  if SavedOnceControl=0 then begin
+   if InterlockedCompareExchange(OnceControl,2,0)=0 then begin
+    try
+     InitRoutine;
+    finally
+     OnceControl:=1;
+    end;
+    result:=true;
+    exit;
+   end;
+  end;
+{$ifdef cpu386}
+  asm
+   db $f3,$90 // pause (rep nop)
+  end;
+{$else}
+  Yield;
+{$endif}
+  ReadWriteBarrier;
+  SavedOnceControl:=OnceControl;
+ end;
+end;
+{$endif}
 
 function GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):longint;
 {$ifdef Windows}
