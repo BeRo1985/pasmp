@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-11-10-32-0000                       *
+ *                        Version 2016-02-11-10-43-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -238,6 +238,8 @@ const PasMPAllocatorPoolBucketBits=12;
       PasMPJobFlagHasOwnerWorkerThread=longword(longword(1) shl (PasMPJobThreadIndexBits+1));
       PasMPJobFlagReleaseOnFinish=longword(longword(1) shl (PasMPJobThreadIndexBits+2));
 
+      PasMPCPUCacheLineSize=64;
+
 {$ifndef Windows}
 {$ifndef fpc}
       INFINITE=longword(-1);
@@ -319,13 +321,13 @@ type TPasMPAvailableCPUCores=array of longint;
       private
        fCriticalSection:TRTLCriticalSection;
       protected
-       fCacheLineFillUp:array[0..(64-sizeof(TRTLCriticalSection))-1] of byte;
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TRTLCriticalSection))-1] of byte;
 {$else}
 {$ifdef Unix}
       private
        fMutex:pthread_mutex_t;
       protected
-       fCacheLineFillUp:array[0..(64-sizeof(pthread_mutex_t))-1] of byte;
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_mutex_t))-1] of byte;
 {$endif}
 {$endif}
       public
@@ -335,7 +337,7 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure Release; {$ifdef CAN_INLINE}inline;{$endif}
 {$else}
       protected
-       fCacheLineFillUp:array[0..(64-sizeof(TRTLCriticalSection))-1] of byte;
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TRTLCriticalSection))-1] of byte;
 {$ifend}
      end;
 
@@ -345,18 +347,26 @@ type TPasMPAvailableCPUCores=array of longint;
 {$endif}
 
      TPasMPConditionVariable=class
-      private
 {$ifdef Windows}
+      private
        fConditionVariable:TPasMPConditionVariableData;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPConditionVariableData))-1] of byte;
 {$else}
 {$ifdef unix}
+      private
        fConditionVariable:pthread_cond_t;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_cond_t))-1] of byte;
 {$else}
+      private
        fWaitCounter:longint;
        fReleaseCounter:longint;
        fGenerationCounter:longint;
        fMutex:TPasMPMutex;
        fEvent:TPasMPEvent;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*3)+SizeOf(TPasMPMutex)+SizeOf(TPasMPEvent)))-1] of byte;
 {$endif}
 {$endif}
       public
@@ -373,13 +383,19 @@ type TPasMPAvailableCPUCores=array of longint;
        fMaximumCount:longint;
 {$ifdef Windows}
        fHandle:THandle;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*2)+SizeOf(THandle)))-1] of byte;
 {$else}
 {$ifdef unix}
        fHandle:longint;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-(SizeOf(longint)*3))-1] of byte;
 {$else}
        fCurrentCount:longint;
        fMutex:TPasMPMutex;
        fEvent:TPasMPEvent;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*3)+SizeOf(TPasMPMutex)+SizeOf(TPasMPEvent)))-1] of byte;
 {$endif}
 {$endif}
       public
@@ -395,17 +411,25 @@ type TPasMPAvailableCPUCores=array of longint;
 {$endif}
 
      TPasMPMultiReaderSingleWriterLock=class
-      private
 {$ifdef Windows}
+      private
        fSRWLock:TPasMPSRWLock;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSRWLock))-1] of byte;
 {$else}
 {$ifdef unix}
+      private
        fReadWriteLock:pthread_rwlock_t;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_rwlock_t))-1] of byte;
 {$else}
+      private
        fReaders:longint;
        fWriters:longint;
        fMutex:TPasMPMutex;
        fConditionVariable:TPasMPConditionVariable;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*2)+SizeOf(TPasMPMutex)+SizeOf(TPasMPConditionVariable)))-1] of byte;
 {$endif}
 {$endif}
       public
@@ -422,16 +446,24 @@ type TPasMPAvailableCPUCores=array of longint;
      end;
 
      TPasMPSlimReaderWriterLock=class
-      private
 {$ifdef Windows}
+      private
        fSRWLock:TPasMPSRWLock;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSRWLock))-1] of byte;
 {$else}
 {$ifdef unix}
+      private
        fReadWriteLock:pthread_rwlock_t;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_rwlock_t))-1] of byte;
 {$else}
+      private
        fCount:longint;
        fMutex:TPasMPMutex;
        fConditionVariable:TPasMPConditionVariable;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-(SizeOf(longint)+SizeOf(TPasMPMutex)+SizeOf(TPasMPConditionVariable)))-1] of byte;
 {$endif}
 {$endif}
       public
@@ -443,11 +475,16 @@ type TPasMPAvailableCPUCores=array of longint;
      end;
 
      TPasMPSpinLock=class
-      private
 {$ifdef unix}
+      private
        fSpinLock:pthread_spinlock_t;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_spinlock_t))-1] of byte;
 {$else}
+      private
        fState:longint;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(longint))-1] of byte;
 {$endif}
       public
        constructor Create;
@@ -513,7 +550,7 @@ type TPasMPAvailableCPUCores=array of longint;
         // for 32-bit targets: use one whole cache line (1x 64 bytes = 16x 32-bit pointers/integers) to avoid false sharing (1 cache line => 64 bytes on the most CPUs) and also to have some free place for meta data
         // for 64-bit targets: use two whole cache lines (2x 64 bytes = 16x 64-bit pointers/integers) to avoid false sharing (1 cache line => 64 bytes on the most CPUs) and also to have some free place for meta data
         // and so on . . .
-        FillUp:array[0..(16*SizeOf(pointer))-1] of byte;
+        FillUp:array[0..(PasMPCPUCacheLineSize*(SizeOf(TPasMPPtrUInt) div SizeOf(longword)))-1] of byte;
        );
      end;
 
@@ -1508,14 +1545,14 @@ begin
   Align:=RoundUpToPowerOfTwo(Align);
  end;
  Mask:=Align-1;
- inc(Size,((Align shl 1)+sizeof(pointer)));
+ inc(Size,((Align shl 1)+SizeOf(pointer)));
  GetMem(Original,Size);
  FillChar(Original^,Size,#0);
- Aligned:=pointer(ptruint(ptruint(Original)+sizeof(pointer)));
+ Aligned:=pointer(ptruint(ptruint(Original)+SizeOf(pointer)));
  if (Align>1) and ((ptruint(Aligned) and Mask)<>0) then begin
   inc(ptruint(Aligned),ptruint(ptruint(Align)-(ptruint(Aligned) and Mask)));
  end;
- pointer(pointer(ptruint(ptruint(Aligned)-sizeof(pointer)))^):=Original;
+ pointer(pointer(ptruint(ptruint(Aligned)-SizeOf(pointer)))^):=Original;
  pointer(pointer(@p)^):=Aligned;
 end;
 
@@ -1524,7 +1561,7 @@ var pp:pointer;
 begin
  pp:=pointer(pointer(@p)^);
  if assigned(pp) then begin
-  pp:=pointer(pointer(ptruint(ptruint(pp)-sizeof(pointer)))^);
+  pp:=pointer(pointer(ptruint(ptruint(pp)-SizeOf(pointer)))^);
   FreeMem(pp);
  end;
 end;
@@ -4373,7 +4410,7 @@ type PPasMPParallelIndirectIntroSortJobData=^TPasMPParallelIndirectIntroSortJobD
 
 procedure TPasMP.ParallelIndirectIntroSortJobFunction(const Job:PPasMPJob;const ThreadIndex:longint);
 type PPointers=^TPointers;
-     TPointers=array[0..($7fffffff div sizeof(pointer))-1] of pointer;
+     TPointers=array[0..($7fffffff div SizeOf(pointer))-1] of pointer;
 var NewJobs:array[0..1] of PPasMPJob;
     JobData,NewJobData:PPasMPParallelIndirectIntroSortJobData;
     Left,Right,Size,Parent,Child,Middle,i,j:longint;
@@ -4775,7 +4812,7 @@ type PPasMPParallelIndirectMergeSortData=^TPasMPParallelIndirectMergeSortData;
 
 procedure TPasMP.ParallelIndirectMergeSortJobFunction(const Job:PPasMPJob;const ThreadIndex:longint);
 type PPointers=^TPointers;
-     TPointers=array[0..($7fffffff div sizeof(pointer))-1] of pointer;
+     TPointers=array[0..($7fffffff div SizeOf(pointer))-1] of pointer;
 var ChildJobs:array[0..1] of PPasMPJob;
     JobData,ChildJobData:PPasMPParallelIndirectMergeSortJobData;
     Left,Right,Size,Middle,i,j,iA,iB,iC,Count:longint;
