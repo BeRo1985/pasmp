@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-11-12-20-0000                       *
+ *                        Version 2016-02-11-17-08-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -520,6 +520,26 @@ type TPasMPAvailableCPUCores=array of longint;
        constructor Create(const Count:longint);
        destructor Destroy; override;
        function Wait:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+     end;
+
+     PPasMPLockFreeSingleProducerSingleConsumerRingBufferData=^TPasMPLockFreeSingleProducerSingleConsumerRingBufferData;
+     TPasMPLockFreeSingleProducerSingleConsumerRingBufferData=array[0..$7ffffffe] of byte;
+
+     TPasMPLockFreeSingleProducerSingleConsumerRingBuffer=class
+      private
+       fSize:longint;
+       fReadPos:longint;
+       fWritePos:longint;
+       fData:PPasMPLockFreeSingleProducerSingleConsumerRingBufferData;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*3)+SizeOf(PPasMPLockFreeSingleProducerSingleConsumerRingBufferData)))-1] of byte;
+      public
+       constructor Create(const Size:longint);
+       destructor Destroy; override;
+       function Read(const Buffer:pointer;const Bytes:longint):longint;
+       function Write(const Buffer:pointer;const Bytes:longint):longint;
+       function Used:longint;
+       function Free:longint;
      end;
 
      PPasMPJob=^TPasMPJob;
@@ -1448,7 +1468,13 @@ var SavedOnceControl:TPasMPOnce;
 begin
  result:=false;
  SavedOnceControl:=OnceControl;
+{$ifdef CPU386}
+ asm
+  mfence
+ end;
+{$else}
  ReadWriteBarrier;
+{$endif}
  while SavedOnceControl<>1 do begin
   if SavedOnceControl=0 then begin
    if InterlockedCompareExchange(OnceControl,2,0)=0 then begin
@@ -1468,7 +1494,13 @@ begin
 {$else}
   Yield;
 {$endif}
+{$ifdef CPU386}
+  asm
+   mfence
+  end;
+{$else}
   ReadWriteBarrier;
+{$endif}
   SavedOnceControl:=OnceControl;
  end;
 end;
@@ -2706,6 +2738,181 @@ begin
 end;
 {$endif}
 
+constructor TPasMPLockFreeSingleProducerSingleConsumerRingBuffer.Create(const Size:longint);
+begin
+ inherited Create;
+ if Size>1 then begin
+  fSize:=Size;
+ end else begin
+  fSize:=1;
+ end;
+ GetMem(fData,fSize);
+ FillChar(fData^,fSize,AnsiChar(#0));
+ fReadPos:=0;
+ fWritePos:=0;
+end;
+
+destructor TPasMPLockFreeSingleProducerSingleConsumerRingBuffer.Destroy;
+begin
+ FreeMem(fData);
+ inherited Destroy;
+end;
+
+function TPasMPLockFreeSingleProducerSingleConsumerRingBuffer.Read(const Buffer:pointer;const Bytes:longint):longint;
+var Total,LocalReadPos,LocalWritePos,ToRead,Len:longint;
+    p:PAnsiChar;
+begin
+ p:=pointer(Buffer);
+ Len:=Bytes;
+{$ifdef CPU386}
+ asm
+  mfence
+ end;
+{$else}
+ ReadWriteBarrier;
+{$endif}
+ LocalReadPos:=fReadPos;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ ReadDependencyBarrier;
+{$else}
+ ReadBarrier;
+{$ifend}
+ LocalWritePos:=fWritePos;
+ if LocalWritePos>=LocalReadPos then begin
+  Total:=LocalWritePos-LocalReadPos;
+ end else begin
+  Total:=(fSize-LocalReadPos)+LocalWritePos;
+ end;
+ while Total>=fSize do begin
+  dec(Total,fSize);
+ end;
+ if Len>Total then begin
+  Len:=Total;
+ end else begin
+  Total:=Len;
+ end;
+ while Len>0 do begin
+  if (LocalReadPos+Len)>fSize then begin
+   ToRead:=fSize-LocalReadPos;
+   Move(fData^[LocalReadPos],p^,ToRead);
+   inc(p,ToRead);
+   dec(Len,ToRead);
+   LocalReadPos:=0;
+  end else begin
+   Move(fData^[LocalReadPos],p^,Len);
+   inc(LocalReadPos,Len);
+   break;
+  end;
+ end;
+ while LocalReadPos>=fSize do begin
+  dec(LocalReadPos,fSize);
+ end;
+{$ifdef CPU386}
+ asm
+  mfence
+ end;
+{$else}
+ ReadWriteBarrier;
+{$endif}
+ fReadPos:=LocalReadPos;
+ result:=Total;
+end;
+
+function TPasMPLockFreeSingleProducerSingleConsumerRingBuffer.Write(const Buffer:pointer;const Bytes:longint):longint;
+var Total,LocalReadPos,LocalWritePos,ToWrite,Len:longint;
+    p:PAnsiChar;
+begin
+{$ifdef CPU386}
+ asm
+  mfence
+ end;
+{$else}
+ ReadWriteBarrier;
+{$endif}
+ LocalReadPos:=fReadPos;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ ReadDependencyBarrier;
+{$else}
+ ReadBarrier;
+{$ifend}
+ LocalWritePos:=fWritePos;
+ if LocalWritePos>=LocalReadPos then begin
+  Total:=LocalWritePos-LocalReadPos;
+ end else begin
+  Total:=(fSize-LocalReadPos)+LocalWritePos;
+ end;
+ while Total>=fSize do begin
+  dec(Total,fSize);
+ end;
+ Total:=fSize-Total;
+ Len:=Bytes;
+ if Total>=Len then begin
+  p:=pointer(Buffer);
+  if Len>Total then begin
+   Len:=Total;
+  end;
+  while Len>0 do begin
+   if (LocalWritePos+Len)>fSize then begin
+    ToWrite:=fSize-LocalWritePos;
+    Move(p^,fData^[LocalWritePos],ToWrite);
+    inc(p,ToWrite);
+    dec(Len,ToWrite);
+    LocalWritePos:=0;
+   end else begin
+    Move(p^,fData^[LocalWritePos],Len);
+    inc(LocalWritePos,Len);
+    break;
+   end;
+  end;
+  while LocalWritePos>=fSize do begin
+   dec(LocalWritePos,fSize);
+  end;
+{$ifdef CPU386}
+  asm
+   mfence
+  end;
+{$else}
+  ReadWriteBarrier;
+{$endif}
+  fWritePos:=LocalWritePos;
+  result:=Total;
+ end else begin
+  result:=0;
+ end;
+end;
+
+function TPasMPLockFreeSingleProducerSingleConsumerRingBuffer.Used:longint;
+var LocalReadPos,LocalWritePos:longint;
+begin
+{$ifdef CPU386}
+ asm
+  mfence
+ end;
+{$else}
+ ReadWriteBarrier;
+{$endif}
+ LocalReadPos:=fReadPos;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ ReadDependencyBarrier;
+{$else}
+ ReadBarrier;
+{$ifend}
+ LocalWritePos:=fWritePos;
+ if LocalWritePos>=LocalReadPos then begin
+  result:=LocalWritePos-LocalReadPos;
+ end else begin
+  result:=(fSize-LocalReadPos)+LocalWritePos;
+ end;
+ while result>=fSize do begin
+  dec(result,fSize);
+ end;
+end;
+
+function TPasMPLockFreeSingleProducerSingleConsumerRingBuffer.Free:longint;
+begin
+ result:=fSize-Used;
+end;
+
 constructor TPasMPJobTask.Create;
 begin
  inherited Create;
@@ -2952,7 +3159,9 @@ begin
  begin
   // Acquire single-writer-side of lock
   repeat
-{$if not (defined(CPU386) or defined(CPUx86_64))}
+{$if defined(CPU386) or defined(CPUx86_64)}
+   ReadDependencyBarrier;
+{$else}
    ReadBarrier;
 {$ifend}
    QueueLockState:=fQueueLockState and longint(longword($fffffffe));
@@ -2962,12 +3171,16 @@ begin
     Yield;
    end;
   until false;
-{$if not (defined(CPU386) or defined(CPUx86_64))}
+{$if defined(CPU386) or defined(CPUx86_64)}
+  ReadDependencyBarrier;
+{$else}
   ReadBarrier;
 {$ifend}
   while fQueueLockState<>1 do begin
    Yield;
-{$if not (defined(CPU386) or defined(CPUx86_64))}
+{$if defined(CPU386) or defined(CPUx86_64)}
+   ReadDependencyBarrier;
+{$else}
    ReadBarrier;
 {$ifend}
   end;
@@ -2983,9 +3196,13 @@ begin
   SetLength(fQueueJobs,0);
   fQueueJobs:=NewJobs;
   NewJobs:=nil;
-{$if not (defined(CPU386) or defined(CPUx86_64))}
+{$ifdef CPU386}
+  asm
+   mfence
+  end;
+{$else}
   ReadWriteBarrier;
-{$ifend}
+{$endif}
  finally
   // Release single-writer-side of lock
   InterlockedExchangeAdd(fQueueLockState,0);
@@ -3002,13 +3219,13 @@ begin
  ReadBarrier;
 {$ifend}
  QueueBottom:=fQueueBottom;
-{$if (defined(CPU386) or defined(CPUx86_64))}
+{$if defined(CPU386) or defined(CPUx86_64)}
  ReadDependencyBarrier;
 {$else}
  ReadBarrier;
 {$ifend}
  QueueTop:=fQueueTop;
-{$if (defined(CPU386) or defined(CPUx86_64))}
+{$if defined(CPU386) or defined(CPUx86_64)}
  ReadDependencyBarrier;
 {$else}
  ReadBarrier;
@@ -3018,19 +3235,16 @@ begin
   Resize(QueueBottom,QueueTop);
  end;
  fQueueJobs[QueueBottom and fQueueMask]:=AJob;
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- WriteBarrier;
-{$ifend}
 {$ifdef CPU386}
  asm
   mfence
  end;
 {$else}
-{$ifndef CPUx86_64}
+{$ifdef CPUx86_64}
  ReadWriteBarrier;
 {$endif}
 {$endif}
-{$if (defined(CPU386) or defined(CPUx86_64))}
+{$if defined(CPU386) or defined(CPUx86_64)}
  fQueueBottom:=QueueBottom+1;
 {$else}
  InterlockedExchange(fQueueBottom,QueueBottom+1);
@@ -3044,7 +3258,7 @@ begin
  ReadBarrier;
 {$ifend}
  QueueBottom:=fQueueBottom-1;
-{$if (defined(CPU386) or defined(CPUx86_64))}
+{$if defined(CPU386) or defined(CPUx86_64)}
  ReadDependencyBarrier;
 {$else}
  ReadBarrier;
@@ -3055,13 +3269,11 @@ begin
   mfence
  end;
 {$else}
-{$ifndef CPUx86_64}
  ReadWriteBarrier;
-{$endif}
 {$endif}
  QueueTop:=fQueueTop;
  if QueueTop<=QueueBottom then begin
-{$if (defined(CPU386) or defined(CPUx86_64))}
+{$if defined(CPU386) or defined(CPUx86_64)}
   ReadDependencyBarrier;
 {$else}
   ReadBarrier;
@@ -3072,7 +3284,7 @@ begin
     // Failed race against steal operation
     result:=nil;
    end;
-{$if (defined(CPU386) or defined(CPUx86_64))}
+{$if defined(CPU386) or defined(CPUx86_64)}
    fQueueBottom:=QueueTop+1;
 {$else}
    InterlockedExchange(fQueueBottom,QueueTop+1);
@@ -3082,7 +3294,7 @@ begin
   end;
  end else begin
   // Deque was already empty
-{$if (defined(CPU386) or defined(CPUx86_64))}
+{$if defined(CPU386) or defined(CPUx86_64)}
   fQueueBottom:=QueueTop;
 {$else}
   InterlockedExchange(fQueueBottom,QueueTop);
@@ -3109,7 +3321,7 @@ begin
    ReadBarrier;
 {$ifend}
    QueueTop:=fQueueTop;
-{$if (defined(CPU386) or defined(CPUx86_64))}
+{$if defined(CPU386) or defined(CPUx86_64)}
    ReadDependencyBarrier;
 {$else}
    ReadBarrier;
@@ -3117,7 +3329,7 @@ begin
    QueueBottom:=fQueueBottom;
    if QueueTop<QueueBottom then begin
     // Non-empty queue.
-{$if (defined(CPU386) or defined(CPUx86_64))}
+{$if defined(CPU386) or defined(CPUx86_64)}
     ReadDependencyBarrier;
 {$else}
     ReadBarrier;
