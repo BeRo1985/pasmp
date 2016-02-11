@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-11-12-15-0000                       *
+ *                        Version 2016-02-11-12-18-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -240,7 +240,7 @@ const PasMPAllocatorPoolBucketBits=12;
 
       PasMPCPUCacheLineSize=64;
 
-      PasMPOnceInit={$ifdef Unix}PTHREAD_ONCE_INIT{$else}0{$endif};
+      PasMPOnceInit={$ifdef Linux}PTHREAD_ONCE_INIT{$else}0{$endif};
 
 {$ifndef Windows}
 {$ifndef fpc}
@@ -314,7 +314,7 @@ type TPasMPAvailableCPUCores=array of longint;
      TPasMP=class;
 
      PPasMPOnce=^TPasMPOnce;
-     TPasMPOnce={$ifdef unix}pthread_once_t{$else}longint{$endif};
+     TPasMPOnce={$ifdef Linux}pthread_once_t{$else}longint{$endif};
 
      TPasMPOnceInitRoutine={$ifdef fpc}TProcedure{$else}procedure{$endif};
 
@@ -1439,7 +1439,7 @@ begin
 end;
 
 function Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean;
-{$ifdef Unix}
+{$ifdef Linux}
 begin
  result:=pthread_once(@OnceControl,InitRoutine)=0;
 end;
