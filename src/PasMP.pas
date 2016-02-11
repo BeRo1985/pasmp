@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-11-07-38-0000                       *
+ *                        Version 2016-02-11-08-13-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -392,14 +392,14 @@ type TPasMPAvailableCPUCores=array of longint;
 
      TPasMPMultiReaderSingleWriterLock=class
       private
-       fReaders:longint;
-       fWriters:longint;
 {$ifdef Windows}
        fSRWLock:TPasMPSRWLock;
 {$else}
 {$ifdef unix}
        fReadWriteLock:pthread_rwlock_t;
 {$else}
+       fReaders:longint;
+       fWriters:longint;
        fMutex:TPasMPMutex;
        fConditionVariable:TPasMPConditionVariable;
 {$endif}
@@ -415,8 +415,6 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure ReleaseWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure ReadToWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure WriteToRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       function Readers:longint; {$ifdef caninline}inline;{$endif}
-       function Writers:longint; {$ifdef caninline}inline;{$endif}
      end;
 
      PPasMPJob=^TPasMPJob;
@@ -1920,14 +1918,14 @@ end;
 constructor TPasMPMultiReaderSingleWriterLock.Create;
 begin
  inherited Create;
- fReaders:=0;
- fWriters:=0;
 {$ifdef Windows}
  InitializeSRWLock(@fSRWLock);
 {$else}
 {$ifdef unix}
  pthread_rwlock_init(@fReadWriteLock,nil);
 {$else}
+ fReaders:=0;
+ fWriters:=0;
  fMutex:=TPasMPMutex.Create;
  fConditionVariable:=TPasMPConditionVariable.Create;
 {$endif}
@@ -1952,13 +1950,11 @@ procedure TPasMPMultiReaderSingleWriterLock.AcquireRead; {$ifdef fpc}{$ifdef CAN
 {$ifdef Windows}
 begin
  AcquireSRWLockShared(@fSRWLock);
- InterlockedIncrement(fReaders);
 end;
 {$else}
 {$ifdef unix}
 begin
  pthread_rwlock_rdlock(@fReadWriteLock);
- InterlockedIncrement(fReaders);
 end;
 {$else}
 var State:longint;
@@ -1980,17 +1976,11 @@ function TPasMPMultiReaderSingleWriterLock.TryAcquireRead:boolean; {$ifdef fpc}{
 {$ifdef Windows}
 begin
  result:=TryAcquireSRWLockShared(@fSRWLock);
- if result then begin
-  InterlockedIncrement(fReaders);
- end;
 end;
 {$else}
 {$ifdef unix}
 begin
  result:=pthread_rwlock_tryrdlock(@fReadWriteLock)=0;
- if result then begin
-  InterlockedIncrement(fReaders);
- end;
 end;
 {$else}
 var State:longint;
@@ -2012,13 +2002,11 @@ procedure TPasMPMultiReaderSingleWriterLock.ReleaseRead; {$ifdef fpc}{$ifdef CAN
 {$ifdef Windows}
 begin
  ReleaseSRWLockShared(@fSRWLock);
- InterlockedDecrement(fReaders);
 end;
 {$else}
 {$ifdef unix}
 begin
  pthread_rwlock_unlock(@fReadWriteLock);
- InterlockedDecrement(fReaders);
 end;
 {$else}
 begin
@@ -2039,13 +2027,11 @@ procedure TPasMPMultiReaderSingleWriterLock.AcquireWrite; {$ifdef fpc}{$ifdef CA
 {$ifdef Windows}
 begin
  AcquireSRWLockExclusive(@fSRWLock);
- InterlockedIncrement(fWriters);
 end;
 {$else}
 {$ifdef unix}
 begin
  pthread_rwlock_wrlock(@fReadWriteLock);
- InterlockedIncrement(fWriters);
 end;
 {$else}
 begin
@@ -2066,17 +2052,11 @@ function TPasMPMultiReaderSingleWriterLock.TryAcquireWrite:boolean; {$ifdef fpc}
 {$ifdef Windows}
 begin
  result:=TryAcquireSRWLockExclusive(@fSRWLock);
- if result then begin
-  InterlockedIncrement(fWriters);
- end;
 end;
 {$else}
 {$ifdef unix}
 begin
  result:=pthread_rwlock_trywrlock(@fReadWriteLock)=0;
- if result then begin
-  InterlockedIncrement(fWriters);
- end;
 end;
 {$else}
 begin
@@ -2097,13 +2077,11 @@ procedure TPasMPMultiReaderSingleWriterLock.ReleaseWrite; {$ifdef fpc}{$ifdef CA
 {$ifdef Windows}
 begin
  ReleaseSRWLockExclusive(@fSRWLock);
- InterlockedDecrement(fWriters);
 end;
 {$else}
 {$ifdef unix}
 begin
  pthread_rwlock_unlock(@fReadWriteLock);
- InterlockedDecrement(fWriters);
 end;
 {$else}
 begin
@@ -2124,17 +2102,13 @@ procedure TPasMPMultiReaderSingleWriterLock.ReadToWrite; {$ifdef fpc}{$ifdef CAN
 {$ifdef Windows}
 begin
  ReleaseSRWLockShared(@fSRWLock);
- InterlockedDecrement(fReaders);
  AcquireSRWLockExclusive(@fSRWLock);
- InterlockedIncrement(fWriters);
 end;
 {$else}
 {$ifdef unix}
 begin
  pthread_rwlock_unlock(@fReadWriteLock);
- InterlockedDecrement(fReaders);
  pthread_rwlock_wrlock(@fReadWriteLock);
- InterlockedIncrement(fWriters);
 end;
 {$else}
 begin
@@ -2156,17 +2130,13 @@ procedure TPasMPMultiReaderSingleWriterLock.WriteToRead; {$ifdef fpc}{$ifdef CAN
 {$ifdef Windows}
 begin
  ReleaseSRWLockExclusive(@fSRWLock);
- InterlockedDecrement(fWriters);
  AcquireSRWLockShared(@fSRWLock);
- InterlockedIncrement(fReaders);
 end;
 {$else}
 {$ifdef unix}
 begin
  pthread_rwlock_unlock(@fReadWriteLock);
- InterlockedDecrement(fWriters);
  pthread_rwlock_rdlock(@fReadWriteLock);
- InterlockedIncrement(fReaders);
 end;
 {$else}
 begin
@@ -2177,50 +2147,6 @@ begin
    fConditionVariable.Wait(fMutex,INFINITE);
   end;
   inc(fReaders);
- finally
-  fMutex.Release;
- end;
-end;
-{$endif}
-{$endif}
-
-function TPasMPMultiReaderSingleWriterLock.Readers:longint; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
-begin
- result:=fReaders;
-end;
-{$else}
-{$ifdef unix}
-begin
- result:=fReaders;
-end;
-{$else}
-begin
- fMutex.Acquire;
- try
-  result:=fReaders;
- finally
-  fMutex.Release;
- end;
-end;
-{$endif}
-{$endif}
-
-function TPasMPMultiReaderSingleWriterLock.Writers:longint; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
-begin
- result:=fWriters;
-end;
-{$else}
-{$ifdef unix}
-begin
- result:=fWriters;
-end;
-{$else}
-begin
- fMutex.Acquire;
- try
-  result:=fWriters;
  finally
   fMutex.Release;
  end;
