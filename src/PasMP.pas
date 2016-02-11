@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-11-12-18-0000                       *
+ *                        Version 2016-02-11-12-20-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -884,7 +884,7 @@ procedure MemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 
 procedure Yield; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 
-function Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean;
+function Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean; {$ifdef Linux}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
 
 function GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):longint;
 
@@ -1437,8 +1437,8 @@ begin
   dec(Size,SizeOf(byte));
  end;
 end;
-
-function Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean;
+ 
+function Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean; {$ifdef Linux}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
 {$ifdef Linux}
 begin
  result:=pthread_once(@OnceControl,InitRoutine)=0;
