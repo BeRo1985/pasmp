@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-11-05-21-0000                       *
+ *                        Version 2016-02-11-07-38-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -359,9 +359,7 @@ type TPasMPAvailableCPUCores=array of longint;
 
 {$ifdef Windows}
      PPasMPConditionVariableData=^TPasMPConditionVariableData;
-     TPasMPConditionVariableData=record
-      x:pointer;
-     end;
+     TPasMPConditionVariableData=pointer;
 {$endif}
 
      TPasMPConditionVariable=class
@@ -385,6 +383,40 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure Signal; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure Broadcast; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        function Wait(const Mutex:TPasMPMutex;const dwMilliSeconds:longword=INFINITE):TWaitResult; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+     end;
+
+{$ifdef Windows}
+     PPasMPSRWLock=^TPasMPSRWLock;
+     TPasMPSRWLock=pointer;
+{$endif}
+
+     TPasMPMultiReaderSingleWriterLock=class
+      private
+       fReaders:longint;
+       fWriters:longint;
+{$ifdef Windows}
+       fSRWLock:TPasMPSRWLock;
+{$else}
+{$ifdef unix}
+       fReadWriteLock:pthread_rwlock_t;
+{$else}
+       fMutex:TPasMPMutex;
+       fConditionVariable:TPasMPConditionVariable;
+{$endif}
+{$endif}
+      public
+       constructor Create;
+       destructor Destroy; override;
+       procedure AcquireRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       function TryAcquireRead:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure ReleaseRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure AcquireWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       function tryAcquireWrite:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure ReleaseWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure ReadToWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure WriteToRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       function Readers:longint; {$ifdef caninline}inline;{$endif}
+       function Writers:longint; {$ifdef caninline}inline;{$endif}
      end;
 
      PPasMPJob=^TPasMPJob;
@@ -714,12 +746,24 @@ type qword=int64;
 {$endif}
 
 {$ifdef Windows}
+
 function SwitchToThread:BOOL; external 'kernel32.dll' name 'SwitchToThread';
+
 function SetThreadIdealProcessor(hThread:THANDLE;dwIdealProcessor:longword):longword; stdcall; external 'kernel32.dll' name 'SetThreadIdealProcessor';
+
 procedure InitializeConditionVariable(ConditionVariable:PPasMPConditionVariableData); stdcall; external 'kernel32.dll' name 'InitializeConditionVariable';
 function SleepConditionVariableCS(ConditionVariable:PPasMPConditionVariableData;CriticalSection:PRTLCriticalSection;dwMilliSeconds:longword):bool; stdcall; external 'kernel32.dll' name 'SleepConditionVariableCS';
 procedure WakeConditionVariable(ConditionVariable:PPasMPConditionVariableData); stdcall; external 'kernel32.dll' name 'WakeConditionVariable';
 procedure WakeAllConditionVariable(ConditionVariable:PPasMPConditionVariableData); stdcall; external 'kernel32.dll' name 'WakeAllConditionVariable';
+
+procedure InitializeSRWLock(SRWLock:PPasMPSRWLock); stdcall; external 'kernel32.dll' name 'AcquireSRWLockShared';
+procedure AcquireSRWLockShared(SRWLock:PPasMPSRWLock); stdcall; external 'kernel32.dll' name 'AcquireSRWLockShared';
+function TryAcquireSRWLockShared(SRWLock:PPasMPSRWLock):bool; stdcall; external 'kernel32.dll' name 'TryAcquireSRWLockShared';
+procedure ReleaseSRWLockShared(SRWLock:PPasMPSRWLock); stdcall; external 'kernel32.dll' name 'ReleaseSRWLockShared';
+procedure AcquireSRWLockExclusive(SRWLock:PPasMPSRWLock); stdcall; external 'kernel32.dll' name 'AcquireSRWLockExclusive';
+function TryAcquireSRWLockExclusive(SRWLock:PPasMPSRWLock):bool; stdcall; external 'kernel32.dll' name 'TryAcquireSRWLockExclusive';
+procedure ReleaseSRWLockExclusive(SRWLock:PPasMPSRWLock); stdcall; external 'kernel32.dll' name 'ReleaseSRWLockExclusive';
+
 {$else}
 {$ifdef Linux}
 const _SC_UIO_MAXIOV=60;
@@ -728,13 +772,17 @@ const _SC_UIO_MAXIOV=60;
 type cpu_set_p=^cpu_set_t;
      cpu_set_t=int64;
 
-     ppthread_mutex_t=^pthread_mutex_t;
+{$ifdef fpc}
+{$linklib c}
+{$else}
+type ppthread_mutex_t=^pthread_mutex_t;
      ppthread_mutexattr_t=^pthread_mutexattr_t;
+
      ppthread_cond_t=^pthread_cond_t;
      ppthread_condattr_t=^pthread_condattr_t;
 
-{$ifdef fpc}
-{$linklib c}
+     Ppthread_rwlock_t=^tpthread_rwlock_t;
+     Ppthread_rwlockattr_t=^pthread_rwlockattr_t;
 {$endif}
 
 function sysconf(__name:longint):longint; cdecl; external 'c' name 'sysconf';
@@ -745,6 +793,7 @@ function sched_setaffinity(pid:ptruint;cpusetsize:longint;cpuset:pointer):longin
 function pthread_setaffinity_np(pid:ptruint;cpusetsize:longint;cpuset:pointer):longint; cdecl; external 'c' name 'pthread_setaffinity_np';
 function pthread_getaffinity_np(pid:ptruint;cpusetsize:longint;cpuset:pointer):longint; cdecl; external 'c' name 'pthread_getaffinity_np';
 
+{$ifndef fpc}
 function pthread_mutex_init(__mutex:ppthread_mutex_t;__mutex_attr:ppthread_mutexattr_t):longint; cdecl; external 'c' name 'pthread_mutex_init';
 function pthread_mutex_destroy(__mutex:ppthread_mutex_t):longint; cdecl; external 'c' name 'pthread_mutex_destroy';
 function pthread_mutex_trylock(__mutex:ppthread_mutex_t):longint; cdecl; external 'c' name 'pthread_mutex_trylock';
@@ -757,7 +806,19 @@ function pthread_cond_signal(__cond:ppthread_cond_t):longint; cdecl; external 'c
 function pthread_cond_broadcast(__cond:ppthread_cond_t):longint; cdecl; external 'c' name 'pthread_cond_broadcast';
 function pthread_cond_wait(__cond:ppthread_cond_t; __mutex:ppthread_mutex_t):longint; cdecl; external 'c' name 'pthread_cond_wait';
 function pthread_cond_timedwait(__cond:ppthread_cond_t;__mutex:ppthread_mutex_t;__abstime:PTimeSpec):longint; cdecl; external 'c' name 'pthread_cond_timedwait';
-{$endif}                       
+
+function pthread_rwlock_init(__rwlock:Ppthread_rwlock_t;__attr:Ppthread_rwlockattr_t):longint; cdecl; external 'c' name 'pthread_rwlock_init';
+function pthread_rwlock_destroy(__rwlock:Ppthread_rwlock_t):longint; cdecl; external 'c' name 'pthread_rwlock_destroy';
+function pthread_rwlock_rdlock(__rwlock:Ppthread_rwlock_t):longint; cdecl; external 'c' name 'pthread_rwlock_rdlock';
+function pthread_rwlock_tryrdlock(__rwlock:Ppthread_rwlock_t):longint; cdecl; external 'c' name 'pthread_rwlock_tryrdlock';
+function pthread_rwlock_timedrdlock(__rwlock:Ppthread_rwlock_t;__abstime:Ptimespec):longint; cdecl; external 'c' name 'pthread_rwlock_timedrdlock';
+function pthread_rwlock_wrlock(__rwlock:Ppthread_rwlock_t):longint; cdecl; external 'c' name 'pthread_rwlock_wrlock';
+function pthread_rwlock_trywrlock(__rwlock:Ppthread_rwlock_t):longint; cdecl; external 'c' name 'pthread_rwlock_trywrlock';
+function pthread_rwlock_timedwrlock(__rwlock:Ppthread_rwlock_t;__abstime:Ptimespec):longint; cdecl; external 'c' name 'pthread_rwlock_timedwrlock';
+function pthread_rwlock_unlock(__rwlock:Ppthread_rwlock_t):longint; cdecl; external 'c' name 'pthread_rwlock_unlock';
+{$endif}
+
+{$endif}
 {$endif}
 
 {$ifdef CPU386}
@@ -1108,428 +1169,6 @@ end;
 {$ifend}
 {$endif}
 
-constructor TPasMPSemaphore.Create(const InitialCount,MaximumCount:longint);
-begin
- inherited Create;
- fInitialCount:=InitialCount;
- fMaximumCount:=MaximumCount;
-{$ifdef Windows}
- fHandle:=CreateSemaphore(nil,InitialCount,MaximumCount,nil);
-{$else}
-{$ifdef unix}
- sem_init(@fHandle,0,InitialCount);
-{$else}
- fCurrentCount:=fInitialCount;
- fCriticalSection:=TCriticalSection.Create;
- fEvent:=TEvent.Create(nil,false,false,'');
-{$endif}
-{$endif}
-end;
-
-destructor TPasMPSemaphore.Destroy;
-begin
-{$ifdef Windows}
- CloseHandle(fHandle);
-{$else}
-{$ifdef unix}
- sem_destroy(@fHandle);
-{$else}
- fEvent.Free;
- fCriticalSection.Free;
-{$endif}
-{$endif}
- inherited Destroy;
-end;
-
-function TPasMPSemaphore.Acquire(const AcquireCount:longint=1):TWaitResult;
-{$ifdef Windows}
-var Counter:longint;
-begin
- result:=wrError;
- for Counter:=1 to AcquireCount do begin
-  case WaitForSingleObject(fHandle,INFINITE) of
-   WAIT_OBJECT_0:begin
-    result:=wrSignaled;
-   end;
-   WAIT_TIMEOUT:begin
-    result:=wrTimeOut;
-    exit;
-   end;
-   WAIT_ABANDONED:begin
-    result:=wrAbandoned;
-    exit;
-   end;
-   else begin
-    result:=wrError;
-    exit;
-   end;
-  end;
- end;
-end;
-{$else}
-{$ifdef unix}
-var Counter:longint;
-begin
- result:=wrError;
- for Counter:=1 to AcquireCount do begin
-  case sem_wait(@fHandle) of
-   0:begin
-    result:=wrSignaled;
-   end;
-   ESysETIMEDOUT:begin
-    result:=wrTimeOut;
-    exit;
-   end;
-   ESysEINVAL:begin
-    result:=wrAbandoned;
-    exit;
-   end;
-   else begin
-    result:=wrError;
-    exit;
-   end;
-  end;
- end;
-end;
-{$else}
-var Counter:longint;
-    Done:boolean;
-begin
- result:=wrError;
- for Counter:=1 to AcquireCount do begin
-  result:=wrSignaled;
-  repeat
-   fCriticalSection.Enter;
-   try
-    Done:=fCurrentCount<>0;
-    if Done then begin
-     dec(fCurrentCount);
-    end;
-   finally
-    fCriticalSection.Leave;
-   end;
-   if Done then begin
-    break;
-   end;
-   result:=fEvent.WaitFor(INFINITE);
-  until result<>wrSignaled;
-  if result<>wrSignaled then begin
-   exit;
-  end;
- end;
-end;
-{$endif}
-{$endif}
-
-function TPasMPSemaphore.Release(const ReleaseCount:longint=1):longint;
-{$ifdef Windows}
-begin
- ReleaseSemaphore(fHandle,ReleaseCount,@result);
-end;
-{$else}
-{$ifdef unix}
-var Counter:longint;
-begin
- result:=0;
- while result<ReleaseCount do begin
-  case sem_post(@fHandle) of
-   0:begin
-    inc(result);
-   end;
-   else begin
-    break;
-   end;
-  end;
- end;
-end;
-{$else}
-var WakeUp:boolean;
-begin
- WakeUp:=false;
- fCriticalSection.Enter;
- try
-  if ((fCurrentCount+ReleaseCount)<fCurrentCount) or
-     ((fCurrentCount+ReleaseCount)>fMaximumCount) then begin
-   // Invalid release count
-   result:=0;
-  end else begin
-   if fCurrentCount<>0 then begin
-    // There can't be any thread to wake up if the value of fCurrentCount isn't zero
-    inc(fCurrentCount,ReleaseCount);
-   end else begin
-    fCurrentCount:=ReleaseCount;
-    WakeUp:=true;
-   end;
-   result:=fCurrentCount;
-  end;
- finally
-  fCriticalSection.Leave;
- end;
- if WakeUp then begin
-  fEvent.SetEvent;
- end;
-end;
-{$endif}
-{$endif}
-
-{$if defined(Windows) or defined(Unix)}
-constructor TPasMPMutex.Create;
-begin
- inherited Create;
-{$ifdef Windows}
- InitializeCriticalSection(fCriticalSection);
-{$else}
-{$ifdef Unix}
- pthread_mutex_init(@fMutex,nil);
-{$else}
- {$error Unsupported target platform}
-{$endif}
-{$endif}
-end;
-
-destructor TPasMPMutex.Destroy;
-begin
-{$ifdef Windows}
- DeleteCriticalSection(fCriticalSection);
-{$else}
-{$ifdef Unix}
- pthread_mutex_destroy(@fMutex);
-{$else}
- {$error Unsupported target platform}
-{$endif}
-{$endif}
- inherited Destroy;
-end;
-
-procedure TPasMPMutex.Acquire; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-begin
-{$ifdef Windows}
- EnterCriticalSection(fCriticalSection);
-{$else}
-{$ifdef Unix}
- pthread_mutex_lock(@fMutex);
-{$else}
- {$error Unsupported target platform}
-{$endif}
-{$endif}
-end;
-
-procedure TPasMPMutex.Release; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-begin
-{$ifdef Windows}
- LeaveCriticalSection(fCriticalSection);
-{$else}
-{$ifdef Unix}
- pthread_mutex_unlock(@fMutex);
-{$else}
- {$error Unsupported target platform}
-{$endif}
-{$endif}
-end;
-{$ifend}
-
-constructor TPasMPConditionVariable.Create;
-begin
- inherited Create;
-{$ifdef Windows}
- InitializeConditionVariable(@fConditionVariable);
-{$else}
-{$ifdef Unix}
- pthread_cond_init(@fConditionVariable,nil);
-{$else}
- fWaitCounter:=0;
- fMutex:=TPasMPMutex.Create;
- fReleaseCounter:=0;
- fGenerationCounter:=0;
- fEvent:=TEvent.Create(nil,true,false,'');
-{$endif}
-{$endif}
-end;
-
-destructor TPasMPConditionVariable.Destroy;
-begin
-{$ifdef Windows}
-{$else}
-{$ifdef Unix}
- pthread_cond_destroy(@fConditionVariable);
-{$else}
- fMutex.Free;
- fEvent.Free;
-{$endif}
-{$endif}
- inherited Destroy;
-end;
-
-function TPasMPConditionVariable.Wait(const Mutex:TPasMPMutex;const dwMilliSeconds:longword=INFINITE):TWaitResult; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
-begin
- if SleepConditionVariableCS(@fConditionVariable,@Mutex.fCriticalSection,dwMilliSeconds) then begin
-  result:=wrSignaled;
- end else begin
-  case GetLastError of
-   ERROR_TIMEOUT:begin
-    result:=wrTimeOut;
-   end;      
-   else begin
-    result:=wrError;
-   end;
-  end;
- end;
-end;
-{$else}
-{$ifdef Unix}
-var TimeSpec_:TTimeSpec;
-begin
- if dwMilliSeconds=INFINITE then begin
-  case pthread_cond_wait(@fConditionVariable,@Mutex.fMutex) of
-   0:begin
-    result:=wrSignaled;
-   end;
-   ESysETIMEDOUT:begin
-    result:=wrTimeOut;
-   end;
-   ESysEINVAL:begin
-    result:=wrAbandoned;
-   end;
-   else begin
-    result:=wrError;
-   end;
-  end;
- end else begin
-  TimeSpec_.tv_sec:=dwMilliSeconds div 1000;
-  TimeSpec_.tv_nsec:=(dwMilliSeconds mod 1000)*1000000000;
-  case pthread_cond_timedwait(@fConditionVariable,@Mutex.fMutex,@TimeSpec_) of
-   0:begin
-    result:=wrSignaled;
-   end;
-   ESysETIMEDOUT:begin
-    result:=wrTimeOut;
-   end;
-   ESysEINVAL:begin
-    result:=wrAbandoned;
-   end;
-   else begin
-    result:=wrError;
-   end;
-  end;
- end;
-end;
-{$else}
-var SavedGenerationCounter:longint;
-    WaitDone,WasLastWaiter:boolean;
-begin
-
- result:=wrError;
-
- fMutex.Acquire;
- try
-  inc(fWaitCounter);
-  SavedGenerationCounter:=fGenerationCounter;
- finally
-  fMutex.Release;
- end;
-
- Mutex.Release;
- try
-  repeat
-   case fEvent.WaitFor(dwMilliSeconds) of
-    wrSignaled:begin
-     try
-      WaitDone:=(fReleaseCounter>0) and (SavedGenerationCounter<>fGenerationCounter);
-     finally
-      fMutex.Release;
-     end;
-     if WaitDone then begin
-      result:=wrSignaled;
-     end;
-    end;
-    wrTimeOut:begin
-     WaitDone:=true;
-     result:=wrTimeOut;
-    end;
-    wrAbandoned:begin
-     WaitDone:=true;
-     result:=wrAbandoned;
-    end;
-    else begin
-     WaitDone:=true;
-     result:=wrError;
-    end;
-   end;
-  until WaitDone;
- finally
-  Mutex.Acquire;
- end;
-
- fMutex.Acquire;
- try
-  dec(fWaitCounter);
-  dec(fReleaseCounter);
-  WasLastWaiter:=fReleaseCounter=0;
- finally
-  fMutex.Release;
- end;
-
- if WasLastWaiter then begin
-  fEvent.ResetEvent;
- end;
-
-end;
-{$endif}
-{$endif}
-
-procedure TPasMPConditionVariable.Signal; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
-begin
- WakeConditionVariable(@fConditionVariable);
-end;
-{$else}
-{$ifdef Unix}
-begin
- pthread_cond_signal(@fConditionVariable);
-end;
-{$else}
-begin
- fMutex.Acquire;
- try
-  if fWaitCounter>fReleaseCounter then begin
-   inc(fReleaseCounter);
-   inc(fGenerationCounter);
-   fEvent.SetEvent;
-  end;
- finally
-  fMutex.Release;
- end;
-end;
-{$endif}
-{$endif}
-
-procedure TPasMPConditionVariable.Broadcast; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
-begin
- WakeAllConditionVariable(@fConditionVariable);
-end;
-{$else}
-{$ifdef Unix}
-begin
- pthread_cond_broadcast(@fConditionVariable);
-end;
-{$else}
-begin
- fMutex.Acquire;
- try
-  if fWaitCounter>0 then begin
-   fReleaseCounter:=fWaitCounter;
-   inc(fGenerationCounter);
-   fEvent.SetEvent;
-  end;
- finally
-  fMutex.Release;
- end;
-end;
-{$endif}
-{$endif}
-
 procedure Yield; {$ifdef CAN_INLINE}inline;{$endif}
 {$ifdef Windows}
 begin
@@ -1856,6 +1495,738 @@ function GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}longword{$endif}):
 begin
  result:=(ThreadID*83492791) xor ((ThreadID shr 24)*19349669) xor ((ThreadID shr 16)*73856093) xor ((ThreadID shr 8)*50331653);
 end;
+
+constructor TPasMPSemaphore.Create(const InitialCount,MaximumCount:longint);
+begin
+ inherited Create;
+ fInitialCount:=InitialCount;
+ fMaximumCount:=MaximumCount;
+{$ifdef Windows}
+ fHandle:=CreateSemaphore(nil,InitialCount,MaximumCount,nil);
+{$else}
+{$ifdef unix}
+ sem_init(@fHandle,0,InitialCount);
+{$else}
+ fCurrentCount:=fInitialCount;
+ fCriticalSection:=TCriticalSection.Create;
+ fEvent:=TEvent.Create(nil,false,false,'');
+{$endif}
+{$endif}
+end;
+
+destructor TPasMPSemaphore.Destroy;
+begin
+{$ifdef Windows}
+ CloseHandle(fHandle);
+{$else}
+{$ifdef unix}
+ sem_destroy(@fHandle);
+{$else}
+ fEvent.Free;
+ fCriticalSection.Free;
+{$endif}
+{$endif}
+ inherited Destroy;
+end;
+
+function TPasMPSemaphore.Acquire(const AcquireCount:longint=1):TWaitResult;
+{$ifdef Windows}
+var Counter:longint;
+begin
+ result:=wrError;
+ for Counter:=1 to AcquireCount do begin
+  case WaitForSingleObject(fHandle,INFINITE) of
+   WAIT_OBJECT_0:begin
+    result:=wrSignaled;
+   end;
+   WAIT_TIMEOUT:begin
+    result:=wrTimeOut;
+    exit;
+   end;
+   WAIT_ABANDONED:begin
+    result:=wrAbandoned;
+    exit;
+   end;
+   else begin
+    result:=wrError;
+    exit;
+   end;
+  end;
+ end;
+end;
+{$else}
+{$ifdef unix}
+var Counter:longint;
+begin
+ result:=wrError;
+ for Counter:=1 to AcquireCount do begin
+  case sem_wait(@fHandle) of
+   0:begin
+    result:=wrSignaled;
+   end;
+   ESysETIMEDOUT:begin
+    result:=wrTimeOut;
+    exit;
+   end;
+   ESysEINVAL:begin
+    result:=wrAbandoned;
+    exit;
+   end;
+   else begin
+    result:=wrError;
+    exit;
+   end;
+  end;
+ end;
+end;
+{$else}
+var Counter:longint;
+    Done:boolean;
+begin
+ result:=wrError;
+ for Counter:=1 to AcquireCount do begin
+  result:=wrSignaled;
+  repeat
+   fCriticalSection.Enter;
+   try
+    Done:=fCurrentCount<>0;
+    if Done then begin
+     dec(fCurrentCount);
+    end;
+   finally
+    fCriticalSection.Leave;
+   end;
+   if Done then begin
+    break;
+   end;
+   result:=fEvent.WaitFor(INFINITE);
+  until result<>wrSignaled;
+  if result<>wrSignaled then begin
+   exit;
+  end;
+ end;
+end;
+{$endif}
+{$endif}
+
+function TPasMPSemaphore.Release(const ReleaseCount:longint=1):longint;
+{$ifdef Windows}
+begin
+ ReleaseSemaphore(fHandle,ReleaseCount,@result);
+end;
+{$else}
+{$ifdef unix}
+begin
+ result:=0;
+ while result<ReleaseCount do begin
+  case sem_post(@fHandle) of
+   0:begin
+    inc(result);
+   end;
+   else begin
+    break;
+   end;
+  end;
+ end;
+end;
+{$else}
+var WakeUp:boolean;
+begin
+ WakeUp:=false;
+ fCriticalSection.Enter;
+ try
+  if ((fCurrentCount+ReleaseCount)<fCurrentCount) or
+     ((fCurrentCount+ReleaseCount)>fMaximumCount) then begin
+   // Invalid release count
+   result:=0;
+  end else begin
+   if fCurrentCount<>0 then begin
+    // There can't be any thread to wake up if the value of fCurrentCount isn't zero
+    inc(fCurrentCount,ReleaseCount);
+   end else begin
+    fCurrentCount:=ReleaseCount;
+    WakeUp:=true;
+   end;
+   result:=fCurrentCount;
+  end;
+ finally
+  fCriticalSection.Leave;
+ end;
+ if WakeUp then begin
+  fEvent.SetEvent;
+ end;
+end;
+{$endif}
+{$endif}
+
+{$if defined(Windows) or defined(Unix)}
+constructor TPasMPMutex.Create;
+begin
+ inherited Create;
+{$ifdef Windows}
+ InitializeCriticalSection(fCriticalSection);
+{$else}
+{$ifdef Unix}
+ pthread_mutex_init(@fMutex,nil);
+{$else}
+ {$error Unsupported target platform}
+{$endif}
+{$endif}
+end;
+
+destructor TPasMPMutex.Destroy;
+begin
+{$ifdef Windows}
+ DeleteCriticalSection(fCriticalSection);
+{$else}
+{$ifdef Unix}
+ pthread_mutex_destroy(@fMutex);
+{$else}
+ {$error Unsupported target platform}
+{$endif}
+{$endif}
+ inherited Destroy;
+end;
+
+procedure TPasMPMutex.Acquire; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+{$ifdef Windows}
+ EnterCriticalSection(fCriticalSection);
+{$else}
+{$ifdef Unix}
+ pthread_mutex_lock(@fMutex);
+{$else}
+ {$error Unsupported target platform}
+{$endif}
+{$endif}
+end;
+
+procedure TPasMPMutex.Release; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+{$ifdef Windows}
+ LeaveCriticalSection(fCriticalSection);
+{$else}
+{$ifdef Unix}
+ pthread_mutex_unlock(@fMutex);
+{$else}
+ {$error Unsupported target platform}
+{$endif}
+{$endif}
+end;
+{$ifend}
+
+constructor TPasMPConditionVariable.Create;
+begin
+ inherited Create;
+{$ifdef Windows}
+ InitializeConditionVariable(@fConditionVariable);
+{$else}
+{$ifdef Unix}
+ pthread_cond_init(@fConditionVariable,nil);
+{$else}
+ fWaitCounter:=0;
+ fMutex:=TPasMPMutex.Create;
+ fReleaseCounter:=0;
+ fGenerationCounter:=0;
+ fEvent:=TEvent.Create(nil,true,false,'');
+{$endif}
+{$endif}
+end;
+
+destructor TPasMPConditionVariable.Destroy;
+begin
+{$ifdef Windows}
+{$else}
+{$ifdef Unix}
+ pthread_cond_destroy(@fConditionVariable);
+{$else}
+ fMutex.Free;
+ fEvent.Free;
+{$endif}
+{$endif}
+ inherited Destroy;
+end;
+
+function TPasMPConditionVariable.Wait(const Mutex:TPasMPMutex;const dwMilliSeconds:longword=INFINITE):TWaitResult; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ if SleepConditionVariableCS(@fConditionVariable,@Mutex.fCriticalSection,dwMilliSeconds) then begin
+  result:=wrSignaled;
+ end else begin
+  case GetLastError of
+   ERROR_TIMEOUT:begin
+    result:=wrTimeOut;
+   end;      
+   else begin
+    result:=wrError;
+   end;
+  end;
+ end;
+end;
+{$else}
+{$ifdef Unix}
+var TimeSpec_:TTimeSpec;
+begin
+ if dwMilliSeconds=INFINITE then begin
+  case pthread_cond_wait(@fConditionVariable,@Mutex.fMutex) of
+   0:begin
+    result:=wrSignaled;
+   end;
+   ESysETIMEDOUT:begin
+    result:=wrTimeOut;
+   end;
+   ESysEINVAL:begin
+    result:=wrAbandoned;
+   end;
+   else begin
+    result:=wrError;
+   end;
+  end;
+ end else begin
+  TimeSpec_.tv_sec:=dwMilliSeconds div 1000;
+  TimeSpec_.tv_nsec:=(dwMilliSeconds mod 1000)*1000000000;
+  case pthread_cond_timedwait(@fConditionVariable,@Mutex.fMutex,@TimeSpec_) of
+   0:begin
+    result:=wrSignaled;
+   end;
+   ESysETIMEDOUT:begin
+    result:=wrTimeOut;
+   end;
+   ESysEINVAL:begin
+    result:=wrAbandoned;
+   end;
+   else begin
+    result:=wrError;
+   end;
+  end;
+ end;
+end;
+{$else}
+var SavedGenerationCounter:longint;
+    WaitDone,WasLastWaiter:boolean;
+begin
+
+ result:=wrError;
+
+ fMutex.Acquire;
+ try
+  inc(fWaitCounter);
+  SavedGenerationCounter:=fGenerationCounter;
+ finally
+  fMutex.Release;
+ end;
+
+ Mutex.Release;
+ try
+  repeat
+   case fEvent.WaitFor(dwMilliSeconds) of
+    wrSignaled:begin
+     try
+      WaitDone:=(fReleaseCounter>0) and (SavedGenerationCounter<>fGenerationCounter);
+     finally
+      fMutex.Release;
+     end;
+     if WaitDone then begin
+      result:=wrSignaled;
+     end;
+    end;
+    wrTimeOut:begin
+     WaitDone:=true;
+     result:=wrTimeOut;
+    end;
+    wrAbandoned:begin
+     WaitDone:=true;
+     result:=wrAbandoned;
+    end;
+    else begin
+     WaitDone:=true;
+     result:=wrError;
+    end;
+   end;
+  until WaitDone;
+ finally
+  Mutex.Acquire;
+ end;
+
+ fMutex.Acquire;
+ try
+  dec(fWaitCounter);
+  dec(fReleaseCounter);
+  WasLastWaiter:=fReleaseCounter=0;
+ finally
+  fMutex.Release;
+ end;
+
+ if WasLastWaiter then begin
+  fEvent.ResetEvent;
+ end;
+
+end;
+{$endif}
+{$endif}
+
+procedure TPasMPConditionVariable.Signal; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ WakeConditionVariable(@fConditionVariable);
+end;
+{$else}
+{$ifdef Unix}
+begin
+ pthread_cond_signal(@fConditionVariable);
+end;
+{$else}
+begin
+ fMutex.Acquire;
+ try
+  if fWaitCounter>fReleaseCounter then begin
+   inc(fReleaseCounter);
+   inc(fGenerationCounter);
+   fEvent.SetEvent;
+  end;
+ finally
+  fMutex.Release;
+ end;
+end;
+{$endif}
+{$endif}
+
+procedure TPasMPConditionVariable.Broadcast; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ WakeAllConditionVariable(@fConditionVariable);
+end;
+{$else}
+{$ifdef Unix}
+begin
+ pthread_cond_broadcast(@fConditionVariable);
+end;
+{$else}
+begin
+ fMutex.Acquire;
+ try
+  if fWaitCounter>0 then begin
+   fReleaseCounter:=fWaitCounter;
+   inc(fGenerationCounter);
+   fEvent.SetEvent;
+  end;
+ finally
+  fMutex.Release;
+ end;
+end;
+{$endif}
+{$endif}
+
+constructor TPasMPMultiReaderSingleWriterLock.Create;
+begin
+ inherited Create;
+ fReaders:=0;
+ fWriters:=0;
+{$ifdef Windows}
+ InitializeSRWLock(@fSRWLock);
+{$else}
+{$ifdef unix}
+ pthread_rwlock_init(@fReadWriteLock,nil);
+{$else}
+ fMutex:=TPasMPMutex.Create;
+ fConditionVariable:=TPasMPConditionVariable.Create;
+{$endif}
+{$endif}
+end;
+
+destructor TPasMPMultiReaderSingleWriterLock.Destroy;
+begin
+{$ifdef Windows}
+{$else}
+{$ifdef unix}
+ pthread_rwlock_destroy(@fReadWriteLock);
+{$else}
+ fConditionVariable.Free;
+ fMutex.Free;
+{$endif}
+{$endif}
+ inherited Destroy;
+end;
+
+procedure TPasMPMultiReaderSingleWriterLock.AcquireRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ AcquireSRWLockShared(@fSRWLock);
+ InterlockedIncrement(fReaders);
+end;
+{$else}
+{$ifdef unix}
+begin
+ pthread_rwlock_rdlock(@fReadWriteLock);
+ InterlockedIncrement(fReaders);
+end;
+{$else}
+var State:longint;
+begin
+ fMutex.Acquire;
+ try
+  while fWriters<>0 do begin
+   fConditionVariable.Wait(fMutex,INFINITE);
+  end;
+  inc(fReaders);
+ finally
+  fMutex.Release;
+ end;
+end;
+{$endif}
+{$endif}
+
+function TPasMPMultiReaderSingleWriterLock.TryAcquireRead:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ result:=TryAcquireSRWLockShared(@fSRWLock);
+ if result then begin
+  InterlockedIncrement(fReaders);
+ end;
+end;
+{$else}
+{$ifdef unix}
+begin
+ result:=pthread_rwlock_tryrdlock(@fReadWriteLock)=0;
+ if result then begin
+  InterlockedIncrement(fReaders);
+ end;
+end;
+{$else}
+var State:longint;
+begin
+ fMutex.Acquire;
+ try
+  result:=fWriters=0;
+  if result then begin
+   inc(fReaders);
+  end;
+ finally
+  fMutex.Release;
+ end;
+end;
+{$endif}
+{$endif}
+
+procedure TPasMPMultiReaderSingleWriterLock.ReleaseRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ ReleaseSRWLockShared(@fSRWLock);
+ InterlockedDecrement(fReaders);
+end;
+{$else}
+{$ifdef unix}
+begin
+ pthread_rwlock_unlock(@fReadWriteLock);
+ InterlockedDecrement(fReaders);
+end;
+{$else}
+begin
+ fMutex.Acquire;
+ try
+  dec(fReaders);
+  if fReaders=0 then begin
+   fConditionVariable.Broadcast;
+  end;
+ finally
+  fMutex.Release;
+ end;
+end;
+{$endif}
+{$endif}
+
+procedure TPasMPMultiReaderSingleWriterLock.AcquireWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ AcquireSRWLockExclusive(@fSRWLock);
+ InterlockedIncrement(fWriters);
+end;
+{$else}
+{$ifdef unix}
+begin
+ pthread_rwlock_wrlock(@fReadWriteLock);
+ InterlockedIncrement(fWriters);
+end;
+{$else}
+begin
+ fMutex.Acquire;
+ try
+  while (fReaders<>0) or (fWriters<>0) do begin
+   fConditionVariable.Wait(fMutex,INFINITE);
+  end;
+  inc(fWriters);
+ finally
+  fMutex.Release;
+ end;
+end;
+{$endif}
+{$endif}
+
+function TPasMPMultiReaderSingleWriterLock.TryAcquireWrite:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ result:=TryAcquireSRWLockExclusive(@fSRWLock);
+ if result then begin
+  InterlockedIncrement(fWriters);
+ end;
+end;
+{$else}
+{$ifdef unix}
+begin
+ result:=pthread_rwlock_trywrlock(@fReadWriteLock)=0;
+ if result then begin
+  InterlockedIncrement(fWriters);
+ end;
+end;
+{$else}
+begin
+ fMutex.Acquire;
+ try
+  result:=(fReaders=0) and (fWriters=0);
+  if result then begin
+   inc(fWriters);
+  end;
+ finally
+  fMutex.Release;
+ end;
+end;
+{$endif}
+{$endif}
+
+procedure TPasMPMultiReaderSingleWriterLock.ReleaseWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ ReleaseSRWLockExclusive(@fSRWLock);
+ InterlockedDecrement(fWriters);
+end;
+{$else}
+{$ifdef unix}
+begin
+ pthread_rwlock_unlock(@fReadWriteLock);
+ InterlockedDecrement(fWriters);
+end;
+{$else}
+begin
+ fMutex.Acquire;
+ try
+  dec(fWriters);
+  if fWriters=0 then begin
+   fConditionVariable.Broadcast;
+  end;
+ finally
+  fMutex.Release;
+ end;
+end;
+{$endif}
+{$endif}
+
+procedure TPasMPMultiReaderSingleWriterLock.ReadToWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ ReleaseSRWLockShared(@fSRWLock);
+ InterlockedDecrement(fReaders);
+ AcquireSRWLockExclusive(@fSRWLock);
+ InterlockedIncrement(fWriters);
+end;
+{$else}
+{$ifdef unix}
+begin
+ pthread_rwlock_unlock(@fReadWriteLock);
+ InterlockedDecrement(fReaders);
+ pthread_rwlock_wrlock(@fReadWriteLock);
+ InterlockedIncrement(fWriters);
+end;
+{$else}
+begin
+ fMutex.Acquire;
+ try
+  dec(fReaders);
+  while (fWriters<>0) and (fReaders<>0) do begin
+   fConditionVariable.Wait(fMutex,INFINITE);
+  end;
+  inc(fWriters);
+ finally
+  fMutex.Release;
+ end;
+end;
+{$endif}
+{$endif}
+
+procedure TPasMPMultiReaderSingleWriterLock.WriteToRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ ReleaseSRWLockExclusive(@fSRWLock);
+ InterlockedDecrement(fWriters);
+ AcquireSRWLockShared(@fSRWLock);
+ InterlockedIncrement(fReaders);
+end;
+{$else}
+{$ifdef unix}
+begin
+ pthread_rwlock_unlock(@fReadWriteLock);
+ InterlockedDecrement(fWriters);
+ pthread_rwlock_rdlock(@fReadWriteLock);
+ InterlockedIncrement(fReaders);
+end;
+{$else}
+begin
+ fMutex.Acquire;
+ try
+  dec(fWriters);
+  while fWriters<>0 do begin
+   fConditionVariable.Wait(fMutex,INFINITE);
+  end;
+  inc(fReaders);
+ finally
+  fMutex.Release;
+ end;
+end;
+{$endif}
+{$endif}
+
+function TPasMPMultiReaderSingleWriterLock.Readers:longint; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ result:=fReaders;
+end;
+{$else}
+{$ifdef unix}
+begin
+ result:=fReaders;
+end;
+{$else}
+begin
+ fMutex.Acquire;
+ try
+  result:=fReaders;
+ finally
+  fMutex.Release;
+ end;
+end;
+{$endif}
+{$endif}
+
+function TPasMPMultiReaderSingleWriterLock.Writers:longint; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ result:=fWriters;
+end;
+{$else}
+{$ifdef unix}
+begin
+ result:=fWriters;
+end;
+{$else}
+begin
+ fMutex.Acquire;
+ try
+  result:=fWriters;
+ finally
+  fMutex.Release;
+ end;
+end;
+{$endif}
+{$endif}
 
 constructor TPasMPJobTask.Create;
 begin
