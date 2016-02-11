@@ -15,7 +15,8 @@ License: zlib
 - Parellel merge sort (direct and indirect)
 - Optional strict singleton usage option per global PasMPUseAsStrictSingletonInstance define (besides the option of usage of multiple PasMP instances)
 - Compatible with FreePascal >= 2.6.x and Delphi >= 7
-- Cross platform (Windows, Linux, etc.)
+- Cross platform (Windows (needs Vista or higher, so no XP, no 9x, no NT 3.0, no NT 4.x), Linux, etc.)
+
  
 
 
