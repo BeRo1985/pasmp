@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-11-05-18-0000                       *
+ *                        Version 2016-02-11-05-21-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -198,8 +198,6 @@ unit PasMP;
  // count and less OS-API calls than with the FPC_THREADVAR_RELOCATE variant
 {$ifend}
 {$endif}
-
-{$define PasMPUseConditionVariables}
 
 interface
 
@@ -589,13 +587,9 @@ type TPasMPAvailableCPUCores=array of longint;
        fSleepingJobWorkerThreads:longint;
        fWorkingJobWorkerThreads:longint;
        fSystemIsReadyEvent:TEvent;
-{$ifdef PasMPUseConditionVariables}
        fWakeUpCounter:longint;
        fWakeUpMutex:TPasMPMutex;
        fWakeUpConditionVariable:TPasMPConditionVariable;
-{$else}
-       fWakeUpEvent:TEvent;
-{$endif}
        fMutex:TPasMPMutex;
        fJobAllocatorMutex:TPasMPMutex;
        fJobAllocator:TPasMPJobAllocator;
@@ -2600,13 +2594,9 @@ begin
  
  fSystemIsReadyEvent:=TEvent.Create(nil,true,false,'');
 
-{$ifdef PasMPUseConditionVariables}
  fWakeUpCounter:=0;
  fWakeUpMutex:=TPasMPMutex.Create;
  fWakeUpConditionVariable:=TPasMPConditionVariable.Create;
-{$else}
- fWakeUpEvent:=TEvent.Create(nil,true,false,'');
-{$endif}
 
  fJobWorkerThreads:=nil;
  SetLength(fJobWorkerThreads,fCountJobWorkerThreads);
@@ -2670,12 +2660,8 @@ begin
  fJobAllocator.Free;
  fJobAllocatorMutex.Free;
  fSystemIsReadyEvent.Free;
-{$ifdef PasMPUseConditionVariables}
  fWakeUpConditionVariable.Free;
  fWakeUpMutex.Free;
-{$else}
- fWakeUpEvent.Free;
-{$endif}
 {$ifndef UseThreadLocalStorage}
  fJobWorkerThreadHashTableMutex.Free;
 {$endif}
@@ -2778,7 +2764,6 @@ begin
 end;
 {$endif}
 
-{$ifdef PasMPUseConditionVariables}
 procedure TPasMP.WaitForWakeUp;
 var SavedWakeUpCounter:longint;
 begin
@@ -2807,22 +2792,6 @@ begin
   end;
  end;
 end;
-{$else}
-procedure TPasMP.WaitForWakeUp;
-begin
- InterlockedIncrement(fSleepingJobWorkerThreads);
- fWakeUpEvent.ResetEvent;
- fWakeUpEvent.WaitFor(INFINITE);
- InterlockedDecrement(fSleepingJobWorkerThreads);
-end;
-
-procedure TPasMP.WakeUpAll;
-begin
- if fSleepingJobWorkerThreads>0 then begin
-  fWakeUpEvent.SetEvent;
- end;
-end;
-{$endif}
                          
 function TPasMP.CanSpread:boolean;
 var CurrentJobWorkerThread,JobWorkerThread:TPasMPJobWorkerThread;
