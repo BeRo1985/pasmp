@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-11-11-42-0000                       *
+ *                        Version 2016-02-11-11-53-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -802,6 +802,81 @@ var GlobalPasMP:TPasMP=nil; // "Optional" singleton-like global PasMP instance
 
     GPasMP:TPasMP absolute GlobalPasMP; // A shorter name for lazy peoples
 
+{$ifndef fpc}
+{$ifdef CPU386}
+function InterlockedCompareExchange64(var Target:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+{$endif}
+{$ifdef CPUx86_64}
+function InterlockedCompareExchange128(var Target:TPasMPInt128;const NewValue,Comperand:TPasMPInt128):TPasMPInt128; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+{$endif}
+{$endif}
+
+{$ifndef fpc}
+{$ifdef CPU386}
+function InterlockedDecrement(var Target:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedIncrement(var Target:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedExchange(var Target:longint;Source:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedExchangePointer(var Target:pointer;Source:pointer):pointer; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedExchangeAdd(var Target:longint;Source:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedCompareExchange(var Target:longint;NewValue,Comperand:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+{$else}
+{$ifdef CPUx86_64}
+function InterlockedDecrement(var Target:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedDecrement64(var Target:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedIncrement(var Target:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedIncrement64(var Target:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedExchange(var Target:longint;Source:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedExchange64(var Target:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedExchangePointer(var Target:pointer;Source:pointer):pointer; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedExchangeAdd(var Target:longint;Source:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedExchangeAdd64(var Target:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedCompareExchange(var Target:longint;NewValue,Comperand:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedCompareExchange64(var Target:int64;NewValue,Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+{$else}
+function InterlockedDecrement(var Target:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function InterlockedIncrement(var Target:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function InterlockedExchange(var Target:longint;Source:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function InterlockedExchangePointer(var Target:pointer;Source:pointer):pointer; {$ifdef CAN_INLINE}inline;{$endif}
+function InterlockedExchangeAdd(var Target:longint;Source:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function InterlockedCompareExchange(var Target:longint;NewValue,Comperand:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function InterlockedCompareExchange64(var Target:int64;NewValue,Comperand:int64):int64; {$ifdef CAN_INLINE}inline;{$endif}
+{$endif}
+{$endif}
+{$endif}
+
+{$ifdef fpc}
+procedure MemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+{$else}
+{$if CompilerVersion>=25}
+procedure ReadBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure ReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure ReadWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure WriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+{$else}
+{$ifdef CPU386}
+procedure ReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure ReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure ReadWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure WriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$else}
+{$ifdef CPUx64}
+procedure ReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure ReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure ReadWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure WriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$else}
+procedure ReadBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure ReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure ReadWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure WriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+{$endif}
+{$endif}
+procedure MemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+{$ifend}
+{$endif}
+
+procedure Yield; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+
 implementation
 
 const PasMPBarrierFlag=longint(1) shl 30;
@@ -1267,7 +1342,7 @@ end;
 {$ifend}
 {$endif}
 
-procedure Yield; {$ifdef CAN_INLINE}inline;{$endif}
+procedure Yield; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef Windows}
 begin
  SwitchToThread;
