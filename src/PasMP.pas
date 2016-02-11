@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-11-08-13-0000                       *
+ *                        Version 2016-02-11-08-34-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -415,6 +415,16 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure ReleaseWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure ReadToWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure WriteToRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+     end;
+
+     TPasMPSpinLock=class
+      private
+       fState:longint;
+      public
+       constructor Create;
+       destructor Destroy; override;
+       procedure Acquire; {$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$ifend}
+       procedure Release; {$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$ifend}
      end;
 
      PPasMPJob=^TPasMPJob;
@@ -2150,6 +2160,97 @@ begin
  finally
   fMutex.Release;
  end;
+end;
+{$endif}
+{$endif}
+
+constructor TPasMPSpinLock.Create;
+begin
+ inherited Create;
+ fState:=0;
+end;
+
+destructor TPasMPSpinLock.Destroy;
+begin
+ inherited Destroy;
+end;
+
+procedure TPasMPSpinLock.Acquire; {$ifdef cpu386}assembler; register;
+asm
+ @TryAgain:
+  xor edx,edx
+  dec edx
+  lock cmpxchg dword ptr [eax+TPasMPSpinLock.fState],edx
+  jz @TryDone
+   db $f3,$90 // pause (rep nop)
+   jmp @TryAgain
+ @TryDone:
+end;
+{$else}{$ifdef cpux86_64}assembler; register;
+{$ifdef Windows}
+asm
+ // Win64 ABI
+ // rcx = self
+ // rdx = Temporary
+ @TryAgain:
+  xor edx,edx
+  dec edx
+  lock cmpxchg dword ptr [rcx+TPasMPSpinLock.fState],edx
+  jz @TryDone
+   pause
+   jmp @TryAgain
+ @TryDone:
+end;
+{$else}
+asm
+ // System V ABI
+ // rdi = self
+ // rsi = Temporary
+ @TryAgain:
+  xor esi,esi
+  dec esi
+  lock cmpxchg dword ptr [rdi+TPasMPSpinLock.fState],esi
+  jz @TryDone
+   pause
+   jmp @TryAgain
+ @TryDone:
+end;
+{$endif}
+{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+ while InterlockedCompareExchange(fState,-1,0)<>0 do begin
+  Yield;
+ end;
+end;
+{$endif}
+{$endif}
+
+procedure TPasMPSpinLock.Release; {$ifdef cpu386}assembler; register;
+asm
+ xor edx,edx
+ lock xchg dword ptr [eax+TPasMPSpinLock.fState],edx
+end;
+{$else}{$ifdef cpux86_64}assembler; register;
+{$ifdef Windows}
+asm
+ // Win64 ABI
+ // rcx = self
+ // rdx = Temporary
+ xor edx,edx
+ lock xchg dword ptr [rcx+TPasMPSpinLock.fState],edx
+end;
+{$else}
+asm
+ // System V ABI
+ // rdi = self
+ // rsi = Temporary
+ xor esi,esi
+ lock xchg dword ptr [rdi+TPasMPSpinLock.fState],esi
+end;
+{$endif}
+{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+ InterlockedExchange(fState,0);
 end;
 {$endif}
 {$endif}
