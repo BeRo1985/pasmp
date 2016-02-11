@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-11-08-40-0000                       *
+ *                        Version 2016-02-11-09-01-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -423,12 +423,17 @@ type TPasMPAvailableCPUCores=array of longint;
 
      TPasMPSpinLock=class
       private
+{$ifdef unix}
+       fSpinLock:pthread_spinlock_t;
+{$else}
        fState:longint;
+{$endif}
       public
        constructor Create;
        destructor Destroy; override;
-       procedure Acquire; {$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$ifend}
-       procedure Release; {$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$ifend}
+       procedure Acquire; {$if defined(Unix)}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$else}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$ifend}{$ifend}
+       function TryAcquire:longbool; {$if defined(Unix)}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$else}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$ifend}{$ifend}
+       procedure Release; {$if defined(Unix)}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$else}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$ifend}{$ifend}
      end;
 
      PPasMPJob=^TPasMPJob;
@@ -1765,8 +1770,7 @@ begin
 end;
 {$endif}
 {$endif}
-
-
+         
 constructor TPasMPSemaphore.Create(const InitialCount,MaximumCount:longint);
 begin
  inherited Create;
@@ -2172,15 +2176,26 @@ end;
 constructor TPasMPSpinLock.Create;
 begin
  inherited Create;
+{$ifdef Unix}
+ pthread_spin_init(@fSpinLock,0);
+{$else}
  fState:=0;
+{$endif}
 end;
 
 destructor TPasMPSpinLock.Destroy;
 begin
+{$ifdef Unix}
+ pthread_spin_destroy(@fSpinLock);
+{$endif}
  inherited Destroy;
 end;
 
-procedure TPasMPSpinLock.Acquire; {$ifdef cpu386}assembler; register;
+procedure TPasMPSpinLock.Acquire; {$if defined(Unix)}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+ pthread_spin_lock(@fSpinLock);
+end;
+{$else}{$ifdef cpu386}assembler; register;
 asm
  @TryAgain:
   xor edx,edx
@@ -2229,8 +2244,63 @@ begin
 end;
 {$endif}
 {$endif}
+{$ifend}
 
-procedure TPasMPSpinLock.Release; {$ifdef cpu386}assembler; register;
+function TPasMPSpinLock.TryAcquire:longbool; {$if defined(Unix)}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+ result:=pthread_spin_trylock(@fSpinLock)=0;
+end;
+{$else}{$ifdef cpu386}assembler; register;
+asm
+ xor eax,eax
+ xor edx,edx
+ dec edx
+ lock cmpxchg dword ptr [eax+TPasMPSpinLock.fState],edx
+ jnz @Failed
+  not eax
+ @Failed:
+end;
+{$else}{$ifdef cpux86_64}assembler; register;
+{$ifdef Windows}
+asm
+ // Win64 ABI
+ // rcx = self
+ // rdx = Temporary
+ xor rax,rax
+ xor edx,edx
+ dec edx
+ lock cmpxchg dword ptr [rcx+TPasMPSpinLock.fState],edx
+ jnz @Failed
+  not rax
+ @Failed:
+end;
+{$else}
+asm
+ // System V ABI
+ // rdi = self
+ // rsi = Temporary
+ xor rax,rax
+ xor esi,esi
+ dec esi
+ lock cmpxchg dword ptr [rdi+TPasMPSpinLock.fState],esi
+ jnz @Failed
+  not rax
+ @Failed:
+end;
+{$endif}
+{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+ result:=InterlockedCompareExchange(fState,-1,0)=0;
+end;
+{$endif}
+{$endif}
+{$ifend}
+
+procedure TPasMPSpinLock.Release; {$if defined(Unix)}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+ pthread_spin_unlock(@fSpinLock);
+end;
+{$else}{$ifdef cpu386}assembler; register;
 asm
  xor edx,edx
  lock xchg dword ptr [eax+TPasMPSpinLock.fState],edx
@@ -2259,6 +2329,7 @@ begin
 end;
 {$endif}
 {$endif}
+{$ifend}
 
 constructor TPasMPJobTask.Create;
 begin
