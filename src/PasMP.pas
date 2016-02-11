@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-11-11-53-0000                       *
+ *                        Version 2016-02-11-11-57-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -876,6 +876,8 @@ procedure MemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 {$endif}
 
 procedure Yield; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+
+function GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):longint;
 
 implementation
 
