@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-11-09-01-0000                       *
+ *                        Version 2016-02-11-10-26-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2197,43 +2197,50 @@ begin
 end;
 {$else}{$ifdef cpu386}assembler; register;
 asm
- @TryAgain:
-  xor edx,edx
-  dec edx
-  lock cmpxchg dword ptr [eax+TPasMPSpinLock.fState],edx
-  jz @TryDone
-   db $f3,$90 // pause (rep nop)
-   jmp @TryAgain
- @TryDone:
+ test dword ptr [eax+TPasMPSpinLock.fState],1
+ jnz @SpinLoop
+@TryAgain:
+ lock bts dword ptr [eax+TPasMPSpinLock.fState],0
+ jnc @TryDone
+@SpinLoop:
+ db $f3,$90 // pause (rep nop)
+ test dword ptr [eax+TPasMPSpinLock.fState],1
+ jnz @SpinLoop
+ jmp @TryAgain
+@TryDone:
 end;
 {$else}{$ifdef cpux86_64}assembler; register;
 {$ifdef Windows}
 asm
  // Win64 ABI
  // rcx = self
- // rdx = Temporary
- @TryAgain:
-  xor edx,edx
-  dec edx
-  lock cmpxchg dword ptr [rcx+TPasMPSpinLock.fState],edx
-  jz @TryDone
-   pause
-   jmp @TryAgain
- @TryDone:
+ test dword ptr [rcx+TPasMPSpinLock.fState],1
+ jnz @SpinLoop
+@TryAgain:
+ lock bts dword ptr [rcx+TPasMPSpinLock.fState],0
+ jnc @TryDone
+@SpinLoop:
+ pause
+ test dword ptr [rcx+TPasMPSpinLock.fState],1
+ jnz @SpinLoop
+ jmp @TryAgain
+@TryDone:
 end;
 {$else}
 asm
  // System V ABI
  // rdi = self
- // rsi = Temporary
- @TryAgain:
-  xor esi,esi
-  dec esi
-  lock cmpxchg dword ptr [rdi+TPasMPSpinLock.fState],esi
-  jz @TryDone
-   pause
-   jmp @TryAgain
- @TryDone:
+ test dword ptr [edi+TPasMPSpinLock.fState],1
+ jnz @SpinLoop
+@TryAgain:
+ lock bts dword ptr [rdi+PasMPSpinLock.fState],0
+ jnc @TryDone
+@SpinLoop:
+ pause
+ test dword ptr [rdi+TPasMPSpinLock.fState],1
+ jnz @SpinLoop
+ jmp @TryAgain
+@TryDone:
 end;
 {$endif}
 {$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
@@ -2253,10 +2260,8 @@ end;
 {$else}{$ifdef cpu386}assembler; register;
 asm
  xor eax,eax
- xor edx,edx
- dec edx
- lock cmpxchg dword ptr [eax+TPasMPSpinLock.fState],edx
- jnz @Failed
+ lock bts dword ptr [eax+TPasMPSpinLock.fState],0
+ jc @Failed
   not eax
  @Failed:
 end;
@@ -2265,12 +2270,9 @@ end;
 asm
  // Win64 ABI
  // rcx = self
- // rdx = Temporary
  xor rax,rax
- xor edx,edx
- dec edx
- lock cmpxchg dword ptr [rcx+TPasMPSpinLock.fState],edx
- jnz @Failed
+ lock bts dword ptr [rcx+TPasMPSpinLock.fState],0
+ jc @Failed
   not rax
  @Failed:
 end;
@@ -2278,12 +2280,9 @@ end;
 asm
  // System V ABI
  // rdi = self
- // rsi = Temporary
  xor rax,rax
- xor esi,esi
- dec esi
- lock cmpxchg dword ptr [rdi+TPasMPSpinLock.fState],esi
- jnz @Failed
+ lock bts dword ptr [rdi+TPasMPSpinLock.fState],0
+ jc @Failed
   not rax
  @Failed:
 end;
@@ -2302,25 +2301,20 @@ begin
 end;
 {$else}{$ifdef cpu386}assembler; register;
 asm
- xor edx,edx
- lock xchg dword ptr [eax+TPasMPSpinLock.fState],edx
+ mov dword ptr [eax+TPasMPSpinLock.fState],0
 end;
 {$else}{$ifdef cpux86_64}assembler; register;
 {$ifdef Windows}
 asm
  // Win64 ABI
  // rcx = self
- // rdx = Temporary
- xor edx,edx
- lock xchg dword ptr [rcx+TPasMPSpinLock.fState],edx
+ mov dword ptr [rcx+TPasMPSpinLock.fState],0
 end;
 {$else}
 asm
  // System V ABI
  // rdi = self
- // rsi = Temporary
- xor esi,esi
- lock xchg dword ptr [rdi+TPasMPSpinLock.fState],esi
+ mov dword ptr [rdi+TPasMPSpinLock.fState],0
 end;
 {$endif}
 {$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
