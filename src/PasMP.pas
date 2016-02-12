@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-11-17-08-0000                       *
+ *                        Version 2016-02-12-18-05-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -103,6 +103,7 @@ unit PasMP;
  {$else}
   {$undef HAS_TYPE_UTF8STRING}
  {$ifend}
+ {$define HAS_GENERICS}
 {$else}
  {$realcompatibility off}
  {$localsymbols on}
@@ -142,6 +143,7 @@ unit PasMP;
  {$if CompilerVersion>=20}
   {$define CAN_INLINE}
   {$define HAS_ANONYMOUS_METHODS}
+  {$define HAS_GENERICS}
  {$ifend}
  {$if CompilerVersion>=25}
   {$define HAS_WEAK}
@@ -541,6 +543,28 @@ type TPasMPAvailableCPUCores=array of longint;
        function Used:longint;
        function Free:longint;
      end;
+
+{$ifdef HAS_GENERICS}
+     TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>=class
+      private
+       fSize:longint;
+       fFilled:longint;
+       fReadPos:longint;
+       fWritePos:longint;
+       fData:array of T;
+      public
+       constructor Create(const Size:longint);
+       destructor Destroy; override;
+       function PeekForPush:pointer;
+       function Push(const Item:T):boolean; overload;
+       function Push:boolean; overload;
+       function PeekForPop:pointer;
+       function Pop:boolean; overload;
+       function Pop(out Item:T):boolean; overload;
+       function Used:longint;
+       function Free:longint;
+     end;
+{$endif}
 
      PPasMPJob=^TPasMPJob;
 
@@ -2912,6 +2936,165 @@ function TPasMPLockFreeSingleProducerSingleConsumerRingBuffer.Free:longint;
 begin
  result:=fSize-Used;
 end;
+
+{$ifdef HAS_GENERICS}
+constructor TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.Create(const Size:longint);
+begin
+ inherited Create;
+ if Size>1 then begin
+  fSize:=Size;
+ end else begin
+  fSize:=1;
+ end;
+ fData:=nil;
+ SetLength(fData,fSize);
+ fFilled:=0;
+ fReadPos:=0;
+ fWritePos:=0;
+end;
+
+destructor TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.Destroy;
+begin
+ SetLength(fData,0);
+ inherited Destroy;
+end;
+
+function TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.PeekForPush:pointer;
+var LocalWritePos:longint;
+begin
+ ReadWriteBarrier;
+ if fFilled<fSize then begin
+{$if defined(CPU386) or defined(CPUx86_64)}
+  ReadDependencyBarrier;
+{$else}
+  ReadBarrier;
+{$ifend}
+  LocalWritePos:=fWritePos;
+  result:=@fData[LocalWritePos];
+ end else begin
+  result:=nil;
+ end;
+end;
+
+function TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.Push:boolean;
+var LocalWritePos:longint;
+begin
+ ReadWriteBarrier;
+ result:=fFilled<fSize;
+ if result then begin
+{$if defined(CPU386) or defined(CPUx86_64)}
+  ReadDependencyBarrier;
+{$else}
+  ReadBarrier;
+{$ifend}
+  LocalWritePos:=fWritePos;
+  inc(LocalWritePos);
+  while LocalWritePos>=fSize do begin
+   dec(LocalWritePos,fSize);
+  end;
+  ReadWriteBarrier;
+  fWritePos:=LocalWritePos;
+  InterlockedIncrement(fFilled);
+ end;
+end;
+
+function TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.Push(const Item:T):boolean;
+var LocalWritePos:longint;
+begin
+ ReadWriteBarrier;
+ result:=fFilled<fSize;
+ if result then begin
+{$if defined(CPU386) or defined(CPUx86_64)}
+  ReadDependencyBarrier;
+{$else}
+  ReadBarrier;
+{$ifend}
+  LocalWritePos:=fWritePos;
+  fData[LocalWritePos]:=Item;
+  inc(LocalWritePos);
+  while LocalWritePos>=fSize do begin
+   dec(LocalWritePos,fSize);
+  end;
+  ReadWriteBarrier;
+  fWritePos:=LocalWritePos;
+  InterlockedIncrement(fFilled);
+ end;
+end;
+
+function TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.PeekForPop:pointer;
+var LocalReadPos:longint;
+begin
+ ReadWriteBarrier;
+ if fFilled<fSize then begin
+{$if defined(CPU386) or defined(CPUx86_64)}
+  ReadDependencyBarrier;
+{$else}
+  ReadBarrier;
+{$ifend}
+  LocalReadPos:=fReadPos;
+  result:=@fData[LocalReadPos];
+ end else begin
+  result:=nil;
+ end;
+end;
+
+function TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.Pop:boolean;
+var LocalReadPos:longint;
+begin
+ ReadWriteBarrier;
+ result:=fFilled>0;
+ if result then begin
+{$if defined(CPU386) or defined(CPUx86_64)}
+  ReadDependencyBarrier;
+{$else}
+  ReadBarrier;
+{$ifend}
+  LocalReadPos:=fReadPos;
+  inc(LocalReadPos);
+  while LocalReadPos>=fSize do begin
+   dec(LocalReadPos,fSize);
+  end;
+  ReadWriteBarrier;
+  fReadPos:=LocalReadPos;
+  InterlockedDecrement(fFilled);
+ end;
+end;
+
+function TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.Pop(out Item:T):boolean;
+var LocalReadPos:longint;
+begin
+ ReadWriteBarrier;
+ result:=fFilled>0;
+ if result then begin
+{$if defined(CPU386) or defined(CPUx86_64)}
+  ReadDependencyBarrier;
+{$else}
+  ReadBarrier;
+{$ifend}
+  LocalReadPos:=fReadPos;
+  Item:=fData[LocalReadPos];
+  inc(LocalReadPos);
+  while LocalReadPos>=fSize do begin
+   dec(LocalReadPos,fSize);
+  end;
+  ReadWriteBarrier;
+  fReadPos:=LocalReadPos;
+  InterlockedDecrement(fFilled);
+ end;
+end;
+
+function TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.Used:longint;
+begin
+ ReadWriteBarrier;
+ result:=fFilled;
+end;
+
+function TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.Free:longint;
+begin
+ ReadWriteBarrier;
+ result:=fSize-fFilled;
+end;
+{$endif}
 
 constructor TPasMPJobTask.Create;
 begin
