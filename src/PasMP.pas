@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-13-19-59-0000                       *
+ *                        Version 2016-02-13-20-19-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -630,15 +630,15 @@ type TPasMPAvailableCPUCores=array of longint;
      TPasMPJobWorkerThread=class;
 
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-     PPasMPSingleLinkedListNativeMachineWord=^TPasMPSingleLinkedListNativeMachineWord;
-     TPasMPSingleLinkedListNativeMachineWord=record
+     PPasMPTaggedPointer=^TPasMPTaggedPointer;
+     TPasMPTaggedPointer=record
       case longint of
        0:(
-        Next:pointer;
-        ABA:TPasMPPtrUInt;
+        PointerValue:pointer;
+        TagValue:TPasMPPtrUInt;
        );
        1:(
-        FreeHead:{$ifdef CPU64}TPasMPInt128{$else}TPasMPInt64{$endif};
+        Value:{$ifdef CPU64}TPasMPInt128{$else}TPasMPInt64{$endif};
        );
      end;
 {$endif}
@@ -654,7 +654,7 @@ type TPasMPAvailableCPUCores=array of longint;
        );                                           // 20 / 32
        1:(
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-        SingleLinkedList:TPasMPSingleLinkedListNativeMachineWord;
+        SingleLinkedList:TPasMPTaggedPointer;
 {$else}
         Next:pointer;
 {$endif}
@@ -699,7 +699,7 @@ type TPasMPAvailableCPUCores=array of longint;
       private
        fJobWorkerThread:TPasMPJobWorkerThread;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-       fFreeJobs:PPasMPSingleLinkedListNativeMachineWord;
+       fFreeJobs:PPasMPTaggedPointer;
 {$else}
        fFreeJobs:PPasMPJob;
        fMutex:TPasMPMutex;
@@ -3606,9 +3606,9 @@ begin
  GetMemAligned(fMemoryPoolBuckets[0],SizeOf(TPasMPJobAllocatorMemoryPoolBucket),SizeOf(TPasMPJob));
  fCountAllocatedJobs:=0;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- GetMemAligned(fFreeJobs,SizeOf(TPasMPSingleLinkedListNativeMachineWord),SizeOf(TPasMPSingleLinkedListNativeMachineWord));
- fFreeJobs^.FreeHead.Lo:=0;
- fFreeJobs^.FreeHead.Hi:=0;
+ GetMemAligned(fFreeJobs,SizeOf(TPasMPTaggedPointer),SizeOf(TPasMPTaggedPointer));
+ fFreeJobs^.PointerValue:=nil;
+ fFreeJobs^.TagValue:=0;
 {$else}
  fFreeJobs:=nil;
 {$endif}
@@ -3647,29 +3647,29 @@ end;
 function TPasMPJobAllocator.AllocateJob:PPasMPJob; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 var JobIndex,MemoryPoolBucketIndex:longint;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-    OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:{$ifdef CPU64}TPasMPInt128{$else}TPasMPInt64{$endif};
+    OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:TPasMPTaggedPointer;
 {$endif}
 begin
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- if fFreeJobs^.FreeHead.Lo<>0 then begin
+ if assigned(fFreeJobs^.PointerValue) then begin
   repeat
 {$ifdef CPU64}
-   NextHead.Lo:=0;
-   NextHead.Hi:=0;
-   OriginalHead:=InterlockedCompareExchange128(fFreeJobs^.FreeHead,NextHead,NextHead);
+   NextHead.PointerValue:=nil;
+   NextHead.TagValue:=0;
+   OriginalHead.Value:=InterlockedCompareExchange128(fFreeJobs^.Value,NextHead.Value,NextHead.Value);
 {$else}
-   OriginalHead.Value:=InterlockedCompareExchange64(fFreeJobs^.FreeHead.Value,-1,-1);
+   OriginalHead.Value.Value:=InterlockedCompareExchange64(fFreeJobs^.Value.Value,-1,-1);
 {$endif}
-   if OriginalHead.Lo<>0 then begin
-    NextHead.Hi:=OriginalHead.Hi+1;
-    NextHead.Lo:=PPasMPJob(pointer(TPasMPPtrUInt(OriginalHead.Lo)))^.SingleLinkedList.FreeHead.Lo;
+   if assigned(OriginalHead.PointerValue) then begin
+    NextHead.TagValue:=OriginalHead.TagValue+1;
+    NextHead.PointerValue:=PPasMPJob(OriginalHead.PointerValue)^.SingleLinkedList.PointerValue;
 {$ifdef CPU64}
-    ResultHead:=InterlockedCompareExchange128(fFreeJobs^.FreeHead,NextHead,OriginalHead);
-    if (ResultHead.Lo=OriginalHead.Lo) and (ResultHead.Hi=OriginalHead.Hi) then begin
+    ResultHead.Value:=InterlockedCompareExchange128(fFreeJobs^.Value,NextHead.Value,OriginalHead.Value);
+    if (ResultHead.PointerValue=OriginalHead.PointerValue) and (ResultHead.TagValue=OriginalHead.TagValue) then begin
      break;
     end;
 {$else}
-    if InterlockedCompareExchange64(fFreeJobs^.FreeHead.Value,NextHead.Value,OriginalHead.Value)=OriginalHead.Value then begin
+    if InterlockedCompareExchange64(fFreeJobs^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)=OriginalHead.Value.Value then begin
      break;
     end;
 {$endif}
@@ -3677,7 +3677,7 @@ begin
     break;
    end;
   until false;
-  result:=PPasMPJob(pointer(TPasMPPtrUInt(OriginalHead.Lo)));
+  result:=PPasMPJob(OriginalHead.PointerValue);
   if assigned(result) then begin
    exit;
   end;
@@ -3713,8 +3713,8 @@ procedure TPasMPJobAllocator.FreeJobs; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$e
 begin
  fCountAllocatedJobs:=0;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- fFreeJobs^.FreeHead.Lo:=0;
- fFreeJobs^.FreeHead.Hi:=0;
+ fFreeJobs^.PointerValue:=nil;
+ fFreeJobs^.TagValue:=0;
 {$else}
  fFreeJobs:=nil;
 {$endif}
@@ -3722,29 +3722,29 @@ end;
 
 procedure TPasMPJobAllocator.FreeJob(const Job:PPasMPJob);
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-var OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:{$ifdef CPU64}TPasMPInt128{$else}TPasMPInt64{$endif};
+var OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:TPasMPTaggedPointer;
 {$endif}
 begin
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
  repeat
 {$ifdef CPU64}
-  NextHead.Lo:=0;
-  NextHead.Hi:=0;
-  OriginalHead:=InterlockedCompareExchange128(fFreeJobs^.FreeHead,NextHead,NextHead);
+  NextHead.PointerValue:=nil;
+  NextHead.TagValue:=0;
+  OriginalHead.Value:=InterlockedCompareExchange128(fFreeJobs^.Value,NextHead.Value,NextHead.Value);
 {$else}
-  OriginalHead.Value:=InterlockedCompareExchange64(fFreeJobs^.FreeHead.Value,-1,-1);
+  OriginalHead.Value.Value:=InterlockedCompareExchange64(fFreeJobs^.Value.Value,-1,-1);
 {$endif}
-  Job^.SingleLinkedList.FreeHead.Lo:=OriginalHead.Lo;
-  NextHead.Hi:=OriginalHead.Hi+1;
-  NextHead.Lo:=TPasMPPtrUInt(Job);
+  Job^.SingleLinkedList.PointerValue:=OriginalHead.PointerValue;
+  NextHead.PointerValue:=Job;
+  NextHead.TagValue:=OriginalHead.TagValue+1;
 {$ifdef CPU64}
-  ResultHead:=InterlockedCompareExchange128(fFreeJobs^.FreeHead,NextHead,OriginalHead);
-  if (ResultHead.Lo=OriginalHead.Lo) and (ResultHead.Hi=OriginalHead.Hi) then begin
+  ResultHead.Value:=InterlockedCompareExchange128(fFreeJobs^.Value,NextHead.Value,OriginalHead.Value);
+  if (ResultHead.PointerValue=OriginalHead.PointerValue) and (ResultHead.TagValue=OriginalHead.TagValue) then begin
    break;
   end;
  until false;
 {$else}
- until InterlockedCompareExchange64(fFreeJobs^.FreeHead.Value,NextHead.Value,OriginalHead.Value)=OriginalHead.Value;
+ until InterlockedCompareExchange64(fFreeJobs^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)=OriginalHead.Value.Value;
 {$endif}
 {$else}
  fMutex.Acquire;
