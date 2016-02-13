@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-13-12-19-0000                       *
+ *                        Version 2016-02-13-15-59-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -244,6 +244,20 @@ const PasMPAllocatorPoolBucketBits=12;
 
       PasMPOnceInit={$ifdef Linux}PTHREAD_ONCE_INIT{$else}0{$endif};
 
+      PasMPVersionMajor=1000000;
+      PasMPVersionMinor=1000;
+      PasMPVersionRelease=1;
+
+{$ifndef FPC}
+      // Delphi evaluates every $IF-directive even if it is disabled by a surrounding, so it's then a error in Delphi, and for to avoid it, we define dummys here.
+      FPC_VERSION=0;
+      FPC_RELEASE=0;
+      FPC_PATCH=0;
+      FPC_FULLVERSION=(FPC_VERSION*10000)+(FPC_RELEASE*100)+(FPC_PATCH*1);
+{$endif}
+
+//    FPC_VERSION_PASMP=(FPC_VERSION*PasMPVersionMajor)+(FPC_RELEASE*PasMPVersionMinor)+(FPC_PATCH*PasMPVersionRelease);
+
 {$ifndef Windows}
 {$ifndef fpc}
       INFINITE=longword(-1);
@@ -324,6 +338,7 @@ type TPasMPAvailableCPUCores=array of longint;
 
      TPasMPCriticalSection=class(TCriticalSection);
 
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPMutex=class{$if not (defined(Windows) or defined(Unix))}(TCriticalSection){$ifend}
 {$if defined(Windows) or defined(Unix)}
 {$ifdef Windows}
@@ -349,12 +364,14 @@ type TPasMPAvailableCPUCores=array of longint;
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TRTLCriticalSection))-1] of byte;
 {$ifend}
      end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$ifdef Windows}
      PPasMPConditionVariableData=^TPasMPConditionVariableData;
      TPasMPConditionVariableData=pointer;
 {$endif}
 
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPConditionVariable=class
 {$ifdef Windows}
       private
@@ -385,7 +402,9 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure Broadcast; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        function Wait(const Mutex:TPasMPMutex;const dwMilliSeconds:longword=INFINITE):TWaitResult; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
      end;     
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPSemaphore=class
       private
        fInitialCount:longint;
@@ -413,12 +432,14 @@ type TPasMPAvailableCPUCores=array of longint;
        function Acquire(const AcquireCount:longint=1):TWaitResult;
        function Release(const ReleaseCount:longint=1):longint;
      end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$ifdef Windows}
      PPasMPSRWLock=^TPasMPSRWLock;
      TPasMPSRWLock=pointer;
 {$endif}
 
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPMultiReaderSingleWriterLock=class
 {$ifdef Windows}
       private
@@ -448,12 +469,14 @@ type TPasMPAvailableCPUCores=array of longint;
        function TryAcquireRead:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure ReleaseRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure AcquireWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       function tryAcquireWrite:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       function TryAcquireWrite:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure ReleaseWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure ReadToWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure WriteToRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
      end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPSlimReaderWriterLock=class
 {$ifdef Windows}
       private
@@ -482,7 +505,9 @@ type TPasMPAvailableCPUCores=array of longint;
        function TryAcquire:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure Release; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
      end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPSpinLock=class
 {$ifdef unix}
       private
@@ -502,7 +527,9 @@ type TPasMPAvailableCPUCores=array of longint;
        function TryAcquire:longbool; {$if defined(Unix)}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$else}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$ifend}{$ifend}
        procedure Release; {$if defined(Unix)}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$else}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$ifend}{$ifend}
      end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPBarrier=class
 {$ifdef unix}
       private
@@ -523,35 +550,39 @@ type TPasMPAvailableCPUCores=array of longint;
        destructor Destroy; override;
        function Wait:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
      end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
-     PPasMPSingleProducerSingleConsumerRingBufferData=^TPasMPSingleProducerSingleConsumerRingBufferData;
-     TPasMPSingleProducerSingleConsumerRingBufferData=array[0..$7ffffffe] of byte;
-
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPSingleProducerSingleConsumerRingBuffer=class
-      private
-       fSize:longint;
-       fReadPos:longint;
-       fWritePos:longint;
-       fData:PPasMPSingleProducerSingleConsumerRingBufferData;
       protected
-       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*3)+SizeOf(PPasMPSingleProducerSingleConsumerRingBufferData)))-1] of byte;
+       fReadIndex:longint;
+       fCacheLineFillUp0:array[0..(PasMPCPUCacheLineSize-SizeOf(longint))-1] of byte; // for to force fReadIndex and fWriteIndex to different CPU cache lines
+       fWriteIndex:longint;
+       fCacheLineFillUp1:array[0..(PasMPCPUCacheLineSize-SizeOf(longint))-1] of byte; // for to force fWriteIndex and fData to different CPU cache lines
+       fData:array of byte;
+       fSize:longint;
+       fCacheLineFillUp2:array[0..(PasMPCPUCacheLineSize-(SizeOf(pointer)+SizeOf(longint)))-1] of byte; // as CPU cache line alignment
       public
        constructor Create(const Size:longint);
        destructor Destroy; override;
-       function Read(const Buffer:pointer;const Bytes:longint):longint;
-       function Write(const Buffer:pointer;const Bytes:longint):longint;
-       function Used:longint;
-       function Free:longint;
+       function Read(const Buffer:pointer;Bytes:longint):longint;
+       function Write(const Buffer:pointer;Bytes:longint):longint;
+       function AvailableForRead:longint;
+       function AvailableForWrite:longint;
      end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$ifdef HAS_GENERICS}
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>=class
-      private
-       fSize:longint;
-       fFilled:longint;
-       fReadPos:longint;
-       fWritePos:longint;
+      protected
+       fReadIndex:longint;
+       fCacheLineFillUp0:array[0..(PasMPCPUCacheLineSize-SizeOf(longint))-1] of byte; // for to force fReadIndex and fWriteIndex to different CPU cache lines
+       fWriteIndex:longint;
+       fCacheLineFillUp1:array[0..(PasMPCPUCacheLineSize-SizeOf(longint))-1] of byte; // for to force fWriteIndex and fData to different CPU cache lines
        fData:array of T;
+       fSize:longint;
+       fCacheLineFillUp2:array[0..(PasMPCPUCacheLineSize-(SizeOf(pointer)+SizeOf(longint)))-1] of byte; // as CPU cache line alignment
       public
        constructor Create(const Size:longint);
        destructor Destroy; override;
@@ -561,9 +592,10 @@ type TPasMPAvailableCPUCores=array of longint;
        function PeekForPop:pointer;
        function Pop:boolean; overload;
        function Pop(out Item:T):boolean; overload;
-       function Used:longint;
-       function Free:longint;
+       function AvailableForPush:longint;
+       function AvailableForPop:longint;
      end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 {$endif}
 
      PPasMPJob=^TPasMPJob;
@@ -628,6 +660,7 @@ type TPasMPAvailableCPUCores=array of longint;
 
      TPPasMPJobs=array of PPasMPJob;
 
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPJobTask=class
       private
        fFreeOnRelease:boolean;
@@ -644,6 +677,7 @@ type TPasMPAvailableCPUCores=array of longint;
        property Job:PPasMPJob read fJob;
        property ThreadIndex:longint read fThreadIndex;
      end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
      PPasMPJobAllocatorMemoryPoolBucket=^TPasMPJobAllocatorMemoryPoolBucket;
      TPasMPJobAllocatorMemoryPoolBucket=array[0..PasMPAllocatorPoolBucketSize-1] of TPasMPJob;
@@ -651,6 +685,7 @@ type TPasMPAvailableCPUCores=array of longint;
      PPPasMPJobAllocatorMemoryPoolBuckets=^TPPasMPJobAllocatorMemoryPoolBuckets;
      TPPasMPJobAllocatorMemoryPoolBuckets=array of PPasMPJobAllocatorMemoryPoolBucket;
 
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPJobAllocator=class
       private
        fJobWorkerThread:TPasMPJobWorkerThread;
@@ -671,7 +706,9 @@ type TPasMPAvailableCPUCores=array of longint;
        constructor Create(const AJobWorkerThread:TPasMPJobWorkerThread);
        destructor Destroy; override;
      end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPWorkerSystemThread=class(TThread)
       private
        fJobWorkerThread:TPasMPJobWorkerThread;
@@ -681,9 +718,11 @@ type TPasMPAvailableCPUCores=array of longint;
        constructor Create(const AJobWorkerThread:TPasMPJobWorkerThread);
        destructor Destroy; override;
      end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
      TPasMPJobQueueJobs=array of PPasMPJob;
 
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPJobQueue=class
       private
        fPasMPInstance:TPasMP;
@@ -702,7 +741,9 @@ type TPasMPAvailableCPUCores=array of longint;
        constructor Create(const APasMPInstance:TPasMP);
        destructor Destroy; override;
      end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPJobWorkerThread=class
       private
        fPasMPInstance:TPasMP;
@@ -735,9 +776,11 @@ type TPasMPAvailableCPUCores=array of longint;
        destructor Destroy; override;
        property ThreadIndex:longint read fThreadIndex;
      end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
      TPasMPJobWorkerThreadHashTable=array[0..PasMPJobWorkerThreadHashTableSize-1] of TPasMPJobWorkerThread;
 
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPScope=class
       private
        fPasMPInstance:TPasMP;
@@ -753,7 +796,9 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure Run(const JobTasks:array of TPasMPJobTask); overload;
        procedure Wait;
      end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMP=class
       private
        fAvailableCPUCores:TPasMPAvailableCPUCores;
@@ -844,6 +889,7 @@ type TPasMPAvailableCPUCores=array of longint;
        function ParallelIndirectMergeSort(const Items:pointer;const Left,Right:longint;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:longint=16;const Depth:longint=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil):PPasMPJob;
        property CountJobWorkerThreads:longint read fCountJobWorkerThreads;
      end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 var GlobalPasMP:TPasMP=nil; // "Optional" singleton-like global PasMP instance
 
@@ -2765,131 +2811,104 @@ end;
 constructor TPasMPSingleProducerSingleConsumerRingBuffer.Create(const Size:longint);
 begin
  inherited Create;
- if Size>1 then begin
-  fSize:=Size;
- end else begin
-  fSize:=1;
- end;
- GetMem(fData,fSize);
- FillChar(fData^,fSize,AnsiChar(#0));
- fReadPos:=0;
- fWritePos:=0;
+ fSize:=Size;
+ fReadIndex:=0;
+ fWriteIndex:=0;
+ fData:=nil;
+ SetLength(fData,fSize);
 end;
 
 destructor TPasMPSingleProducerSingleConsumerRingBuffer.Destroy;
 begin
- FreeMem(fData);
+ SetLength(fData,0);
  inherited Destroy;
 end;
 
-function TPasMPSingleProducerSingleConsumerRingBuffer.Read(const Buffer:pointer;const Bytes:longint):longint;
-var Total,LocalReadPos,LocalWritePos,ToRead,Len:longint;
+function TPasMPSingleProducerSingleConsumerRingBuffer.Read(const Buffer:pointer;Bytes:longint):longint;
+var LocalReadIndex,LocalWriteIndex,ToRead:longint;
     p:PAnsiChar;
 begin
  p:=pointer(Buffer);
- Len:=Bytes;
-{$ifdef CPU386}
- asm
-  mfence
- end;
-{$else}
+{$if not (defined(CPU386) or defined(CPUx86_64))}
  ReadWriteBarrier;
-{$endif}
- LocalReadPos:=fReadPos;
+{$ifend}
+ LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
  ReadDependencyBarrier;
 {$else}
  ReadBarrier;
 {$ifend}
- LocalWritePos:=fWritePos;
- if LocalWritePos>=LocalReadPos then begin
-  Total:=LocalWritePos-LocalReadPos;
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  result:=LocalWriteIndex-LocalReadIndex;
  end else begin
-  Total:=(fSize-LocalReadPos)+LocalWritePos;
+  result:=(fSize-LocalReadIndex)+LocalWriteIndex;
  end;
- while Total>=fSize do begin
-  dec(Total,fSize);
+ if Bytes>result then begin
+  Bytes:=result;
  end;
- if Len>Total then begin
-  Len:=Total;
- end else begin
-  Total:=Len;
- end;
- while Len>0 do begin
-  if (LocalReadPos+Len)>fSize then begin
-   ToRead:=fSize-LocalReadPos;
-   Move(fData^[LocalReadPos],p^,ToRead);
+ if Bytes>0 then begin
+  if (LocalReadIndex+Bytes)>fSize then begin
+   ToRead:=fSize-LocalReadIndex;
+   Move(fData[LocalReadIndex],p^,ToRead);
    inc(p,ToRead);
-   dec(Len,ToRead);
-   LocalReadPos:=0;
-  end else begin
-   Move(fData^[LocalReadPos],p^,Len);
-   inc(LocalReadPos,Len);
-   break;
+   dec(Bytes,ToRead);
+   LocalReadIndex:=0;
   end;
- end;
- while LocalReadPos>=fSize do begin
-  dec(LocalReadPos,fSize);
- end;
-{$ifdef CPU386}
- asm
-  mfence
- end;
-{$else}
- ReadWriteBarrier;
-{$endif}
- fReadPos:=LocalReadPos;
- result:=Total;
-end;
-
-function TPasMPSingleProducerSingleConsumerRingBuffer.Write(const Buffer:pointer;const Bytes:longint):longint;
-var Total,LocalReadPos,LocalWritePos,ToWrite,Len:longint;
-    p:PAnsiChar;
-begin
-{$ifdef CPU386}
- asm
-  mfence
- end;
-{$else}
- ReadWriteBarrier;
-{$endif}
- LocalReadPos:=fReadPos;
-{$if defined(CPU386) or defined(CPUx86_64)}
- ReadDependencyBarrier;
-{$else}
- ReadBarrier;
-{$ifend}
- LocalWritePos:=fWritePos;
- if LocalWritePos>=LocalReadPos then begin
-  Total:=LocalWritePos-LocalReadPos;
- end else begin
-  Total:=(fSize-LocalReadPos)+LocalWritePos;
- end;
- while Total>=fSize do begin
-  dec(Total,fSize);
- end;
- Total:=fSize-Total;
- Len:=Bytes;
- if Total>=Len then begin
-  p:=pointer(Buffer);
-  if Len>Total then begin
-   Len:=Total;
-  end;
-  while Len>0 do begin
-   if (LocalWritePos+Len)>fSize then begin
-    ToWrite:=fSize-LocalWritePos;
-    Move(p^,fData^[LocalWritePos],ToWrite);
-    inc(p,ToWrite);
-    dec(Len,ToWrite);
-    LocalWritePos:=0;
-   end else begin
-    Move(p^,fData^[LocalWritePos],Len);
-    inc(LocalWritePos,Len);
-    break;
+  if Bytes>0 then begin
+   Move(fData[LocalReadIndex],p^,Bytes);
+   inc(LocalReadIndex,Bytes);
+   if LocalReadIndex>=fSize then begin
+    dec(LocalReadIndex,fSize);
    end;
   end;
-  while LocalWritePos>=fSize do begin
-   dec(LocalWritePos,fSize);
+ end;
+{$ifdef CPU386}
+ asm
+  mfence
+ end;
+{$else}
+ ReadWriteBarrier;
+{$endif}
+ fReadIndex:=LocalReadIndex;
+end;
+
+function TPasMPSingleProducerSingleConsumerRingBuffer.Write(const Buffer:pointer;Bytes:longint):longint;
+var LocalReadIndex,LocalWriteIndex,ToWrite:longint;
+    p:PAnsiChar;
+begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+ ReadWriteBarrier;
+{$ifend}
+ LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ ReadDependencyBarrier;
+{$else}
+ ReadBarrier;
+{$ifend}
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  result:=((fSize+LocalReadIndex)-LocalWriteIndex)-1;
+ end else begin
+  result:=(LocalReadIndex-LocalWriteIndex)-1;
+ end;
+ if (Bytes>result) or (Bytes=0) then begin
+  result:=0;
+ end else begin
+  p:=pointer(Buffer);
+  if (LocalWriteIndex+Bytes)>fSize then begin
+   ToWrite:=fSize-LocalWriteIndex;
+   Move(p^,fData[LocalWriteIndex],ToWrite);
+   inc(p,ToWrite);
+   dec(Bytes,ToWrite);
+   LocalWriteIndex:=0;
+  end;
+  if Bytes>0 then begin
+   Move(p^,fData[LocalWriteIndex],Bytes);
+   inc(LocalWriteIndex,Bytes);
+   if LocalWriteIndex>=fSize then begin
+    dec(LocalWriteIndex,fSize);
+   end;
   end;
 {$ifdef CPU386}
   asm
@@ -2898,59 +2917,59 @@ begin
 {$else}
   ReadWriteBarrier;
 {$endif}
-  fWritePos:=LocalWritePos;
-  result:=Total;
- end else begin
-  result:=0;
+  fWriteIndex:=LocalWriteIndex;
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerRingBuffer.Used:longint;
-var LocalReadPos,LocalWritePos:longint;
+function TPasMPSingleProducerSingleConsumerRingBuffer.AvailableForRead:longint;
+var LocalReadIndex,LocalWriteIndex:longint;
 begin
-{$ifdef CPU386}
- asm
-  mfence
- end;
-{$else}
+{$if not (defined(CPU386) or defined(CPUx86_64))}
  ReadWriteBarrier;
-{$endif}
- LocalReadPos:=fReadPos;
+{$ifend}
+ LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
  ReadDependencyBarrier;
 {$else}
  ReadBarrier;
 {$ifend}
- LocalWritePos:=fWritePos;
- if LocalWritePos>=LocalReadPos then begin
-  result:=LocalWritePos-LocalReadPos;
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  result:=LocalWriteIndex-LocalReadIndex;
  end else begin
-  result:=(fSize-LocalReadPos)+LocalWritePos;
- end;
- while result>=fSize do begin
-  dec(result,fSize);
+  result:=(fSize-LocalReadIndex)+LocalWriteIndex;
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerRingBuffer.Free:longint;
+function TPasMPSingleProducerSingleConsumerRingBuffer.AvailableForWrite:longint;
+var LocalReadIndex,LocalWriteIndex:longint;
 begin
- result:=fSize-Used;
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+ ReadWriteBarrier;
+{$ifend}
+ LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ ReadDependencyBarrier;
+{$else}
+ ReadBarrier;
+{$ifend}
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  result:=((fSize+LocalReadIndex)-LocalWriteIndex)-1;
+ end else begin
+  result:=(LocalReadIndex-LocalWriteIndex)-1;
+ end;
 end;
 
 {$ifdef HAS_GENERICS}
 constructor TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Create(const Size:longint);
 begin
  inherited Create;
- if Size>1 then begin
-  fSize:=Size;
- end else begin
-  fSize:=1;
- end;
+ fSize:=Size;
+ fReadIndex:=0;
+ fWriteIndex:=0;
  fData:=nil;
  SetLength(fData,fSize);
- fFilled:=0;
- fReadPos:=0;
- fWritePos:=0;
 end;
 
 destructor TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Destroy;
@@ -2960,139 +2979,211 @@ begin
 end;
 
 function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.PeekForPush:pointer;
-var LocalWritePos:longint;
+var LocalReadIndex,LocalWriteIndex,Available:longint;
 begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
  ReadWriteBarrier;
- if fFilled<fSize then begin
-{$if defined(CPU386) or defined(CPUx86_64)}
-  ReadDependencyBarrier;
-{$else}
-  ReadBarrier;
 {$ifend}
-  LocalWritePos:=fWritePos;
-  result:=@fData[LocalWritePos];
+ LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ ReadDependencyBarrier;
+{$else}
+ ReadBarrier;
+{$ifend}
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  Available:=((fSize+LocalReadIndex)-LocalWriteIndex)-1;
+ end else begin
+  Available:=(LocalReadIndex-LocalWriteIndex)-1;
+ end;
+ if Available>0 then begin
+  result:=@fData[LocalWriteIndex];
  end else begin
   result:=nil;
  end;
 end;
 
 function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Push:boolean;
-var LocalWritePos:longint;
+var LocalReadIndex,LocalWriteIndex:longint;
 begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
  ReadWriteBarrier;
- result:=fFilled<fSize;
- if result then begin
-{$if defined(CPU386) or defined(CPUx86_64)}
-  ReadDependencyBarrier;
-{$else}
-  ReadBarrier;
 {$ifend}
-  LocalWritePos:=fWritePos;
-  inc(LocalWritePos);
-  while LocalWritePos>=fSize do begin
-   dec(LocalWritePos,fSize);
+ LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ ReadDependencyBarrier;
+{$else}
+ ReadBarrier;
+{$ifend}
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  result:=(((fSize+LocalReadIndex)-LocalWriteIndex)-1)>0;
+ end else begin
+  result:=((LocalReadIndex-LocalWriteIndex)-1)>0;
+ end;
+ if result then begin
+  inc(LocalWriteIndex);
+  if LocalWriteIndex>=fSize then begin
+   LocalWriteIndex:=0;
   end;
   ReadWriteBarrier;
-  fWritePos:=LocalWritePos;
-  InterlockedIncrement(fFilled);
+  fWriteIndex:=LocalWriteIndex;
  end;
 end;
 
 function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Push(const Item:T):boolean;
-var LocalWritePos:longint;
+var LocalReadIndex,LocalWriteIndex:longint;
 begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
  ReadWriteBarrier;
- result:=fFilled<fSize;
- if result then begin
-{$if defined(CPU386) or defined(CPUx86_64)}
-  ReadDependencyBarrier;
-{$else}
-  ReadBarrier;
 {$ifend}
-  LocalWritePos:=fWritePos;
-  fData[LocalWritePos]:=Item;
-  inc(LocalWritePos);
-  while LocalWritePos>=fSize do begin
-   dec(LocalWritePos,fSize);
+ LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ ReadDependencyBarrier;
+{$else}
+ ReadBarrier;
+{$ifend}
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  result:=(((fSize+LocalReadIndex)-LocalWriteIndex)-1)>0;
+ end else begin
+  result:=((LocalReadIndex-LocalWriteIndex)-1)>0;
+ end;
+ if result then begin
+  LocalWriteIndex:=fWriteIndex;
+  fData[LocalWriteIndex]:=Item;
+  inc(LocalWriteIndex);
+  if LocalWriteIndex>=fSize then begin
+   LocalWriteIndex:=0;
   end;
   ReadWriteBarrier;
-  fWritePos:=LocalWritePos;
-  InterlockedIncrement(fFilled);
+  fWriteIndex:=LocalWriteIndex;
  end;
 end;
 
 function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.PeekForPop:pointer;
-var LocalReadPos:longint;
+var LocalReadIndex,LocalWriteIndex,Available:longint;
 begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
  ReadWriteBarrier;
- if fFilled<fSize then begin
-{$if defined(CPU386) or defined(CPUx86_64)}
-  ReadDependencyBarrier;
-{$else}
-  ReadBarrier;
 {$ifend}
-  LocalReadPos:=fReadPos;
-  result:=@fData[LocalReadPos];
+ LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ ReadDependencyBarrier;
+{$else}
+ ReadBarrier;
+{$ifend}
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  Available:=LocalWriteIndex-LocalReadIndex;
+ end else begin
+  Available:=(fSize-LocalReadIndex)+LocalWriteIndex;
+ end;
+ if Available>0 then begin
+  LocalReadIndex:=fReadIndex;
+  result:=@fData[LocalReadIndex];
  end else begin
   result:=nil;
  end;
 end;
 
 function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Pop:boolean;
-var LocalReadPos:longint;
+var LocalReadIndex,LocalWriteIndex:longint;
 begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
  ReadWriteBarrier;
- result:=fFilled>0;
- if result then begin
-{$if defined(CPU386) or defined(CPUx86_64)}
-  ReadDependencyBarrier;
-{$else}
-  ReadBarrier;
 {$ifend}
-  LocalReadPos:=fReadPos;
-  inc(LocalReadPos);
-  while LocalReadPos>=fSize do begin
-   dec(LocalReadPos,fSize);
+ LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ ReadDependencyBarrier;
+{$else}
+ ReadBarrier;
+{$ifend}
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  result:=(LocalWriteIndex-LocalReadIndex)>0;
+ end else begin
+  result:=((fSize-LocalReadIndex)+LocalWriteIndex)>0;
+ end;
+ if result then begin
+  LocalReadIndex:=fReadIndex;
+  inc(LocalReadIndex);
+  if LocalReadIndex>=fSize then begin
+   LocalReadIndex:=0;
   end;
   ReadWriteBarrier;
-  fReadPos:=LocalReadPos;
-  InterlockedDecrement(fFilled);
+  fReadIndex:=LocalReadIndex;
  end;
 end;
 
 function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Pop(out Item:T):boolean;
-var LocalReadPos:longint;
+var LocalReadIndex,LocalWriteIndex:longint;
 begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
  ReadWriteBarrier;
- result:=fFilled>0;
- if result then begin
-{$if defined(CPU386) or defined(CPUx86_64)}
-  ReadDependencyBarrier;
-{$else}
-  ReadBarrier;
 {$ifend}
-  LocalReadPos:=fReadPos;
-  Item:=fData[LocalReadPos];
-  inc(LocalReadPos);
-  while LocalReadPos>=fSize do begin
-   dec(LocalReadPos,fSize);
+ LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ ReadDependencyBarrier;
+{$else}
+ ReadBarrier;
+{$ifend}
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  result:=(LocalWriteIndex-LocalReadIndex)>0;
+ end else begin
+  result:=((fSize-LocalReadIndex)+LocalWriteIndex)>0;
+ end;
+ if result then begin
+  LocalReadIndex:=fReadIndex;
+  Item:=fData[LocalReadIndex];
+  inc(LocalReadIndex);
+  if LocalReadIndex>=fSize then begin
+   LocalReadIndex:=0;
   end;
   ReadWriteBarrier;
-  fReadPos:=LocalReadPos;
-  InterlockedDecrement(fFilled);
+  fReadIndex:=LocalReadIndex;
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Used:longint;
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.AvailableForPush:longint;
+var LocalReadIndex,LocalWriteIndex:longint;
 begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
  ReadWriteBarrier;
- result:=fFilled;
+{$ifend}
+ LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ ReadDependencyBarrier;
+{$else}
+ ReadBarrier;
+{$ifend}
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  result:=((fSize+LocalReadIndex)-LocalWriteIndex)-1;
+ end else begin
+  result:=(LocalReadIndex-LocalWriteIndex)-1;
+ end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Free:longint;
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.AvailableForPop:longint;
+var LocalReadIndex,LocalWriteIndex:longint;
 begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
  ReadWriteBarrier;
- result:=fSize-fFilled;
+{$ifend}
+ LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ ReadDependencyBarrier;
+{$else}
+ ReadBarrier;
+{$ifend}
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  result:=LocalWriteIndex-LocalReadIndex;
+ end else begin
+  result:=(fSize-LocalReadIndex)+LocalWriteIndex;
+ end;
 end;
 {$endif}
 
