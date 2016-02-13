@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-13-15-59-0000                       *
+ *                        Version 2016-02-13-16-01-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2826,7 +2826,7 @@ end;
 
 function TPasMPSingleProducerSingleConsumerRingBuffer.Read(const Buffer:pointer;Bytes:longint):longint;
 var LocalReadIndex,LocalWriteIndex,ToRead:longint;
-    p:PAnsiChar;
+    p:PByte;
 begin
  p:=pointer(Buffer);
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -2875,7 +2875,7 @@ end;
 
 function TPasMPSingleProducerSingleConsumerRingBuffer.Write(const Buffer:pointer;Bytes:longint):longint;
 var LocalReadIndex,LocalWriteIndex,ToWrite:longint;
-    p:PAnsiChar;
+    p:PByte;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
  ReadWriteBarrier;
