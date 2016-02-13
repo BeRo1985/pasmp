@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-12-18-05-0000                       *
+ *                        Version 2016-02-13-12-19-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -524,17 +524,17 @@ type TPasMPAvailableCPUCores=array of longint;
        function Wait:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
      end;
 
-     PPasMPLockFreeSingleProducerSingleConsumerRingBufferData=^TPasMPLockFreeSingleProducerSingleConsumerRingBufferData;
-     TPasMPLockFreeSingleProducerSingleConsumerRingBufferData=array[0..$7ffffffe] of byte;
+     PPasMPSingleProducerSingleConsumerRingBufferData=^TPasMPSingleProducerSingleConsumerRingBufferData;
+     TPasMPSingleProducerSingleConsumerRingBufferData=array[0..$7ffffffe] of byte;
 
-     TPasMPLockFreeSingleProducerSingleConsumerRingBuffer=class
+     TPasMPSingleProducerSingleConsumerRingBuffer=class
       private
        fSize:longint;
        fReadPos:longint;
        fWritePos:longint;
-       fData:PPasMPLockFreeSingleProducerSingleConsumerRingBufferData;
+       fData:PPasMPSingleProducerSingleConsumerRingBufferData;
       protected
-       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*3)+SizeOf(PPasMPLockFreeSingleProducerSingleConsumerRingBufferData)))-1] of byte;
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*3)+SizeOf(PPasMPSingleProducerSingleConsumerRingBufferData)))-1] of byte;
       public
        constructor Create(const Size:longint);
        destructor Destroy; override;
@@ -545,7 +545,7 @@ type TPasMPAvailableCPUCores=array of longint;
      end;
 
 {$ifdef HAS_GENERICS}
-     TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>=class
+     TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>=class
       private
        fSize:longint;
        fFilled:longint;
@@ -2762,7 +2762,7 @@ begin
 end;
 {$endif}
 
-constructor TPasMPLockFreeSingleProducerSingleConsumerRingBuffer.Create(const Size:longint);
+constructor TPasMPSingleProducerSingleConsumerRingBuffer.Create(const Size:longint);
 begin
  inherited Create;
  if Size>1 then begin
@@ -2776,13 +2776,13 @@ begin
  fWritePos:=0;
 end;
 
-destructor TPasMPLockFreeSingleProducerSingleConsumerRingBuffer.Destroy;
+destructor TPasMPSingleProducerSingleConsumerRingBuffer.Destroy;
 begin
  FreeMem(fData);
  inherited Destroy;
 end;
 
-function TPasMPLockFreeSingleProducerSingleConsumerRingBuffer.Read(const Buffer:pointer;const Bytes:longint):longint;
+function TPasMPSingleProducerSingleConsumerRingBuffer.Read(const Buffer:pointer;const Bytes:longint):longint;
 var Total,LocalReadPos,LocalWritePos,ToRead,Len:longint;
     p:PAnsiChar;
 begin
@@ -2842,7 +2842,7 @@ begin
  result:=Total;
 end;
 
-function TPasMPLockFreeSingleProducerSingleConsumerRingBuffer.Write(const Buffer:pointer;const Bytes:longint):longint;
+function TPasMPSingleProducerSingleConsumerRingBuffer.Write(const Buffer:pointer;const Bytes:longint):longint;
 var Total,LocalReadPos,LocalWritePos,ToWrite,Len:longint;
     p:PAnsiChar;
 begin
@@ -2905,7 +2905,7 @@ begin
  end;
 end;
 
-function TPasMPLockFreeSingleProducerSingleConsumerRingBuffer.Used:longint;
+function TPasMPSingleProducerSingleConsumerRingBuffer.Used:longint;
 var LocalReadPos,LocalWritePos:longint;
 begin
 {$ifdef CPU386}
@@ -2932,13 +2932,13 @@ begin
  end;
 end;
 
-function TPasMPLockFreeSingleProducerSingleConsumerRingBuffer.Free:longint;
+function TPasMPSingleProducerSingleConsumerRingBuffer.Free:longint;
 begin
  result:=fSize-Used;
 end;
 
 {$ifdef HAS_GENERICS}
-constructor TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.Create(const Size:longint);
+constructor TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Create(const Size:longint);
 begin
  inherited Create;
  if Size>1 then begin
@@ -2953,13 +2953,13 @@ begin
  fWritePos:=0;
 end;
 
-destructor TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.Destroy;
+destructor TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Destroy;
 begin
  SetLength(fData,0);
  inherited Destroy;
 end;
 
-function TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.PeekForPush:pointer;
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.PeekForPush:pointer;
 var LocalWritePos:longint;
 begin
  ReadWriteBarrier;
@@ -2976,7 +2976,7 @@ begin
  end;
 end;
 
-function TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.Push:boolean;
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Push:boolean;
 var LocalWritePos:longint;
 begin
  ReadWriteBarrier;
@@ -2998,7 +2998,7 @@ begin
  end;
 end;
 
-function TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.Push(const Item:T):boolean;
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Push(const Item:T):boolean;
 var LocalWritePos:longint;
 begin
  ReadWriteBarrier;
@@ -3021,7 +3021,7 @@ begin
  end;
 end;
 
-function TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.PeekForPop:pointer;
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.PeekForPop:pointer;
 var LocalReadPos:longint;
 begin
  ReadWriteBarrier;
@@ -3038,7 +3038,7 @@ begin
  end;
 end;
 
-function TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.Pop:boolean;
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Pop:boolean;
 var LocalReadPos:longint;
 begin
  ReadWriteBarrier;
@@ -3060,7 +3060,7 @@ begin
  end;
 end;
 
-function TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.Pop(out Item:T):boolean;
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Pop(out Item:T):boolean;
 var LocalReadPos:longint;
 begin
  ReadWriteBarrier;
@@ -3083,13 +3083,13 @@ begin
  end;
 end;
 
-function TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.Used:longint;
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Used:longint;
 begin
  ReadWriteBarrier;
  result:=fFilled;
 end;
 
-function TPasMPLockFreeSingleProducerSingleConsumerRingBufferQueue<T>.Free:longint;
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Free:longint;
 begin
  ReadWriteBarrier;
  result:=fSize-fFilled;
