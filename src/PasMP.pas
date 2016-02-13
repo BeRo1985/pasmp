@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-13-16-01-0000                       *
+ *                        Version 2016-02-13-17-40-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -566,7 +566,11 @@ type TPasMPAvailableCPUCores=array of longint;
        constructor Create(const Size:longint);
        destructor Destroy; override;
        function Read(const Buffer:pointer;Bytes:longint):longint;
+       function TryRead(const Buffer:pointer;Bytes:longint):longint;
+       function ReadAsMuchAsPossible(const Buffer:pointer;Bytes:longint):longint;
        function Write(const Buffer:pointer;Bytes:longint):longint;
+       function TryWrite(const Buffer:pointer;Bytes:longint):longint;
+       function WriteAsMuchAsPossible(const Buffer:pointer;Bytes:longint):longint;
        function AvailableForRead:longint;
        function AvailableForWrite:longint;
      end;
@@ -586,12 +590,14 @@ type TPasMPAvailableCPUCores=array of longint;
       public
        constructor Create(const Size:longint);
        destructor Destroy; override;
-       function PeekForPush:pointer;
        function Push(const Item:T):boolean; overload;
-       function Push:boolean; overload;
-       function PeekForPop:pointer;
-       function Pop:boolean; overload;
+       function TryPeekForPush:pointer;
+       function TryPush(const Item:T):boolean; overload;
+       function TryPush:boolean; overload;
        function Pop(out Item:T):boolean; overload;
+       function TryPeekForPop:pointer;
+       function TryPop:boolean; overload;
+       function TryPop(out Item:T):boolean; overload;
        function AvailableForPush:longint;
        function AvailableForPop:longint;
      end;
@@ -2828,26 +2834,32 @@ function TPasMPSingleProducerSingleConsumerRingBuffer.Read(const Buffer:pointer;
 var LocalReadIndex,LocalWriteIndex,ToRead:longint;
     p:PByte;
 begin
- p:=pointer(Buffer);
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- ReadWriteBarrier;
-{$ifend}
- LocalReadIndex:=fReadIndex;
-{$if defined(CPU386) or defined(CPUx86_64)}
- ReadDependencyBarrier;
-{$else}
- ReadBarrier;
-{$ifend}
- LocalWriteIndex:=fWriteIndex;
- if LocalWriteIndex>=LocalReadIndex then begin
-  result:=LocalWriteIndex-LocalReadIndex;
+ if (Bytes=0) or (Bytes>fSize) then begin
+  result:=0;
  end else begin
-  result:=(fSize-LocalReadIndex)+LocalWriteIndex;
- end;
- if Bytes>result then begin
-  Bytes:=result;
- end;
- if Bytes>0 then begin
+  repeat
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+   ReadWriteBarrier;
+{$ifend}
+   LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+   ReadDependencyBarrier;
+{$else}
+   ReadBarrier;
+{$ifend}
+   LocalWriteIndex:=fWriteIndex;
+   if LocalWriteIndex>=LocalReadIndex then begin
+    result:=LocalWriteIndex-LocalReadIndex;
+   end else begin
+    result:=(fSize-LocalReadIndex)+LocalWriteIndex;
+   end;
+   if Bytes<=result then begin
+    break;
+   end else begin
+    Yield;
+   end;
+  until false;
+  p:=pointer(Buffer);
   if (LocalReadIndex+Bytes)>fSize then begin
    ToRead:=fSize-LocalReadIndex;
    Move(fData[LocalReadIndex],p^,ToRead);
@@ -2862,39 +2874,154 @@ begin
     dec(LocalReadIndex,fSize);
    end;
   end;
- end;
 {$ifdef CPU386}
- asm
-  mfence
- end;
+  asm
+   mfence
+  end;
 {$else}
- ReadWriteBarrier;
+  ReadWriteBarrier;
 {$endif}
- fReadIndex:=LocalReadIndex;
+  fReadIndex:=LocalReadIndex;
+  result:=Bytes;
+ end;
+end;
+
+function TPasMPSingleProducerSingleConsumerRingBuffer.TryRead(const Buffer:pointer;Bytes:longint):longint;
+var LocalReadIndex,LocalWriteIndex,ToRead:longint;
+    p:PByte;
+begin
+ if (Bytes=0) or (Bytes>fSize) then begin
+  result:=0;
+ end else begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+  ReadWriteBarrier;
+{$ifend}
+  LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+  ReadDependencyBarrier;
+{$else}
+  ReadBarrier;
+{$ifend}
+  LocalWriteIndex:=fWriteIndex;
+  if LocalWriteIndex>=LocalReadIndex then begin
+   result:=LocalWriteIndex-LocalReadIndex;
+  end else begin
+   result:=(fSize-LocalReadIndex)+LocalWriteIndex;
+  end;
+  if Bytes>result then begin
+   result:=0;
+  end else begin
+   p:=pointer(Buffer);
+   if (LocalReadIndex+Bytes)>fSize then begin
+    ToRead:=fSize-LocalReadIndex;
+    Move(fData[LocalReadIndex],p^,ToRead);
+    inc(p,ToRead);
+    dec(Bytes,ToRead);
+    LocalReadIndex:=0;
+   end;
+   if Bytes>0 then begin
+    Move(fData[LocalReadIndex],p^,Bytes);
+    inc(LocalReadIndex,Bytes);
+    if LocalReadIndex>=fSize then begin
+     dec(LocalReadIndex,fSize);
+    end;
+   end;
+{$ifdef CPU386}
+   asm
+    mfence
+   end;
+{$else}
+   ReadWriteBarrier;
+{$endif}
+   fReadIndex:=LocalReadIndex;
+   result:=Bytes;
+  end;
+ end;
+end;
+
+function TPasMPSingleProducerSingleConsumerRingBuffer.ReadAsMuchAsPossible(const Buffer:pointer;Bytes:longint):longint;
+var LocalReadIndex,LocalWriteIndex,ToRead:longint;
+    p:PByte;
+begin
+ if (Bytes=0) or (Bytes>fSize) then begin
+  result:=0;
+ end else begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+  ReadWriteBarrier;
+{$ifend}
+  LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+  ReadDependencyBarrier;
+{$else}
+  ReadBarrier;
+{$ifend}
+  LocalWriteIndex:=fWriteIndex;
+  if LocalWriteIndex>=LocalReadIndex then begin
+   result:=LocalWriteIndex-LocalReadIndex;
+  end else begin
+   result:=(fSize-LocalReadIndex)+LocalWriteIndex;
+  end;
+  if Bytes>result then begin
+   Bytes:=result;
+  end;
+  if Bytes>0 then begin
+   p:=pointer(Buffer);
+   if (LocalReadIndex+Bytes)>fSize then begin
+    ToRead:=fSize-LocalReadIndex;
+    Move(fData[LocalReadIndex],p^,ToRead);
+    inc(p,ToRead);
+    dec(Bytes,ToRead);
+    LocalReadIndex:=0;
+   end;
+   if Bytes>0 then begin
+    Move(fData[LocalReadIndex],p^,Bytes);
+    inc(LocalReadIndex,Bytes);
+    if LocalReadIndex>=fSize then begin
+     dec(LocalReadIndex,fSize);
+    end;
+   end;
+{$ifdef CPU386}
+   asm
+    mfence
+   end;
+{$else}
+   ReadWriteBarrier;
+{$endif}
+   fReadIndex:=LocalReadIndex;
+  end;
+  result:=Bytes;
+ end;
 end;
 
 function TPasMPSingleProducerSingleConsumerRingBuffer.Write(const Buffer:pointer;Bytes:longint):longint;
 var LocalReadIndex,LocalWriteIndex,ToWrite:longint;
     p:PByte;
 begin
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- ReadWriteBarrier;
-{$ifend}
- LocalReadIndex:=fReadIndex;
-{$if defined(CPU386) or defined(CPUx86_64)}
- ReadDependencyBarrier;
-{$else}
- ReadBarrier;
-{$ifend}
- LocalWriteIndex:=fWriteIndex;
- if LocalWriteIndex>=LocalReadIndex then begin
-  result:=((fSize+LocalReadIndex)-LocalWriteIndex)-1;
- end else begin
-  result:=(LocalReadIndex-LocalWriteIndex)-1;
- end;
- if (Bytes>result) or (Bytes=0) then begin
+ if (Bytes=0) or (Bytes>fSize) then begin
   result:=0;
  end else begin
+  repeat
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+   ReadWriteBarrier;
+{$ifend}
+   LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+   ReadDependencyBarrier;
+{$else}
+   ReadBarrier;
+{$ifend}
+   LocalWriteIndex:=fWriteIndex;
+   if LocalWriteIndex>=LocalReadIndex then begin
+    result:=((fSize+LocalReadIndex)-LocalWriteIndex)-1;
+   end else begin
+    result:=(LocalReadIndex-LocalWriteIndex)-1;
+   end;
+   if Bytes<=result then begin
+    break;
+   end else begin
+    Yield;
+   end;
+  until false;
   p:=pointer(Buffer);
   if (LocalWriteIndex+Bytes)>fSize then begin
    ToWrite:=fSize-LocalWriteIndex;
@@ -2918,6 +3045,114 @@ begin
   ReadWriteBarrier;
 {$endif}
   fWriteIndex:=LocalWriteIndex;
+  result:=Bytes;
+ end;
+end;
+
+function TPasMPSingleProducerSingleConsumerRingBuffer.TryWrite(const Buffer:pointer;Bytes:longint):longint;
+var LocalReadIndex,LocalWriteIndex,ToWrite:longint;
+    p:PByte;
+begin
+ if (Bytes=0) or (Bytes>fSize) then begin
+  result:=0;
+ end else begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+  ReadWriteBarrier;
+{$ifend}
+  LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+  ReadDependencyBarrier;
+{$else}
+  ReadBarrier;
+{$ifend}
+  LocalWriteIndex:=fWriteIndex;
+  if LocalWriteIndex>=LocalReadIndex then begin
+   result:=((fSize+LocalReadIndex)-LocalWriteIndex)-1;
+  end else begin
+   result:=(LocalReadIndex-LocalWriteIndex)-1;
+  end;
+  if Bytes>result then begin
+   result:=0;
+  end else begin
+   p:=pointer(Buffer);
+   if (LocalWriteIndex+Bytes)>fSize then begin
+    ToWrite:=fSize-LocalWriteIndex;
+    Move(p^,fData[LocalWriteIndex],ToWrite);
+    inc(p,ToWrite);
+    dec(Bytes,ToWrite);
+    LocalWriteIndex:=0;
+   end;
+   if Bytes>0 then begin
+    Move(p^,fData[LocalWriteIndex],Bytes);
+    inc(LocalWriteIndex,Bytes);
+    if LocalWriteIndex>=fSize then begin
+     dec(LocalWriteIndex,fSize);
+    end;
+   end;
+{$ifdef CPU386}
+   asm
+    mfence
+   end;
+{$else}
+   ReadWriteBarrier;
+{$endif}
+   fWriteIndex:=LocalWriteIndex;
+   result:=Bytes;
+  end;
+ end;
+end;
+
+function TPasMPSingleProducerSingleConsumerRingBuffer.WriteAsMuchAsPossible(const Buffer:pointer;Bytes:longint):longint;
+var LocalReadIndex,LocalWriteIndex,ToWrite:longint;
+    p:PByte;
+begin
+ if (Bytes=0) or (Bytes>fSize) then begin
+  result:=0;
+ end else begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+  ReadWriteBarrier;
+{$ifend}
+  LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+  ReadDependencyBarrier;
+{$else}
+  ReadBarrier;
+{$ifend}
+  LocalWriteIndex:=fWriteIndex;
+  if LocalWriteIndex>=LocalReadIndex then begin
+   result:=((fSize+LocalReadIndex)-LocalWriteIndex)-1;
+  end else begin
+   result:=(LocalReadIndex-LocalWriteIndex)-1;
+  end;
+  if Bytes>result then begin
+   Bytes:=result;
+  end;
+  if Bytes>0 then begin
+   p:=pointer(Buffer);
+   if (LocalWriteIndex+Bytes)>fSize then begin
+    ToWrite:=fSize-LocalWriteIndex;
+    Move(p^,fData[LocalWriteIndex],ToWrite);
+    inc(p,ToWrite);
+    dec(Bytes,ToWrite);
+    LocalWriteIndex:=0;
+   end;
+   if Bytes>0 then begin
+    Move(p^,fData[LocalWriteIndex],Bytes);
+    inc(LocalWriteIndex,Bytes);
+    if LocalWriteIndex>=fSize then begin
+     dec(LocalWriteIndex,fSize);
+    end;
+   end;
+{$ifdef CPU386}
+   asm
+    mfence
+   end;
+{$else}
+   ReadWriteBarrier;
+{$endif}
+   fWriteIndex:=LocalWriteIndex;
+  end;
+  result:=Bytes;
  end;
 end;
 
@@ -2978,7 +3213,42 @@ begin
  inherited Destroy;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.PeekForPush:pointer;
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Push(const Item:T):boolean;
+var LocalReadIndex,LocalWriteIndex:longint;
+begin
+ repeat
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+  ReadWriteBarrier;
+{$ifend}
+  LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+  ReadDependencyBarrier;
+{$else}
+  ReadBarrier;
+{$ifend}
+  LocalWriteIndex:=fWriteIndex;
+  if LocalWriteIndex>=LocalReadIndex then begin
+   result:=(((fSize+LocalReadIndex)-LocalWriteIndex)-1)>0;
+  end else begin
+   result:=((LocalReadIndex-LocalWriteIndex)-1)>0;
+  end;
+  if result then begin
+   break;
+  end else begin
+   Yield;
+  end;
+ until false;
+ LocalWriteIndex:=fWriteIndex;
+ fData[LocalWriteIndex]:=Item;
+ inc(LocalWriteIndex);
+ if LocalWriteIndex>=fSize then begin
+  LocalWriteIndex:=0;
+ end;
+ ReadWriteBarrier;
+ fWriteIndex:=LocalWriteIndex;
+end;
+
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.TryPeekForPush:pointer;
 var LocalReadIndex,LocalWriteIndex,Available:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -3003,7 +3273,7 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Push:boolean;
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.TryPush:boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -3031,7 +3301,7 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Push(const Item:T):boolean;
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.TryPush(const Item:T):boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -3061,7 +3331,42 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.PeekForPop:pointer;
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Pop(out Item:T):boolean;
+var LocalReadIndex,LocalWriteIndex:longint;
+begin
+ repeat
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+  ReadWriteBarrier;
+{$ifend}
+  LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+  ReadDependencyBarrier;
+{$else}
+  ReadBarrier;
+{$ifend}
+  LocalWriteIndex:=fWriteIndex;
+  if LocalWriteIndex>=LocalReadIndex then begin
+   result:=(LocalWriteIndex-LocalReadIndex)>0;
+  end else begin
+   result:=((fSize-LocalReadIndex)+LocalWriteIndex)>0;
+  end;
+  if result then begin
+   break;
+  end else begin
+   Yield;
+  end;
+ until false;
+ LocalReadIndex:=fReadIndex;
+ Item:=fData[LocalReadIndex];
+ inc(LocalReadIndex);
+ if LocalReadIndex>=fSize then begin
+  LocalReadIndex:=0;
+ end;
+ ReadWriteBarrier;
+ fReadIndex:=LocalReadIndex;
+end;
+
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.TryPeekForPop:pointer;
 var LocalReadIndex,LocalWriteIndex,Available:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -3087,7 +3392,7 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Pop:boolean;
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.TryPop:boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -3116,7 +3421,7 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Pop(out Item:T):boolean;
+function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.TryPop(out Item:T):boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
