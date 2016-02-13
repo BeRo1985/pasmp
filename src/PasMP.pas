@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-13-17-40-0000                       *
+ *                        Version 2016-02-13-19-59-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -155,6 +155,9 @@ unit PasMP;
  {$define HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 {$endif}
 {$ifdef CPUx86_64}
+ {$define HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$endif}
+{$ifdef CPUARM}
  {$define HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 {$endif}
 {$ifdef Win32}
@@ -912,6 +915,9 @@ function InterlockedCompareExchange64(var Target:int64;NewValue:int64;Comperand:
 {$ifdef CPUx86_64}
 function InterlockedCompareExchange128(var Target:TPasMPInt128;const NewValue,Comperand:TPasMPInt128):TPasMPInt128; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 {$endif}
+{$ifdef CPUARM}
+function InterlockedCompareExchange64(var Target:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+{$endif}
 {$endif}
 
 {$ifndef fpc}
@@ -1099,6 +1105,69 @@ function pthread_rwlock_unlock(__rwlock:Ppthread_rwlock_t):longint; cdecl; exter
 {$endif}
 
 {$endif}
+{$endif}
+
+{$ifdef CPUARM}
+function InterlockedCompareExchange64(var Target:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+asm
+ // LDREXD and STREXD were introduced in ARM 11, so the LDREXD and STREXD instructions in ARM all v7 variants or above. In v6, only some variants support it.
+ // Input:
+ // r0 = pointer to Target
+ // r1 = NewValue.Lo
+ // r2 = NewValue.Hi
+ // r3 = Comperand.Lo
+ // [sp] = Comperand.Hi
+{$define UseSTREXDEQ}
+{$ifdef UseSTREXDEQ}
+ stmfd sp!,{r2,r4,r5,r6,r7}
+ // the strex instruction demands that Rm be an even numbered register, so move r1 and r2 into r4 and r5
+ mov r4,r1 // r4 = NewValue.Lo
+ mov r5,r2 // r5 = NewValue.Hi
+ ldrd	r2,[sp,#20] // r2 = Comperand.Hi
+ dmb sy
+.Loop:
+ ldrexd	r6,[r0] // loads R6 and R7, so r6 = Target.Lo, r7 = Target.Hi
+ cmp r6,r3 // if Target.Lo = Comperand.Lo
+//it eq
+ cmpeq r7,r2 // if Target.Hi = Comperand.Hi
+ strexdeq r1,r4,[r0]  // [r0]=r4 and [r0+4]=r5
+ bne .Fail
+ cmp r1,#1 // 1 for failure and 0 for success
+ beq .Loop
+ bne .Done
+.Fail:
+ clrex
+.Done:
+ dmb sy
+ mov r0,r6
+ mov r1,r7
+ ldmfd sp!,{r2,r4,r5,r6,r7}
+{$else}
+ stmfd sp!,{r2,r4,r5,r6,r7}
+ // the strex instruction demands that Rm be an even numbered register, so move r1 and r2 into r4 and r5
+ mov r4,r1 // r4 = NewValue.Lo
+ mov r5,r2 // r5 = NewValue.Hi
+ ldrd	r2,[sp,#20] // r2 = Comperand.Hi
+ dmb sy
+.Loop:
+ ldrexd	r6,[r0] // loads R6 and R7, so r6 = Target.Lo, r7 = Target.Hi
+ cmp r6,r3 // if Target.Lo = Comperand.Lo
+ it	eq
+ cmpeq r7,r2 // if Target.Hi = Comperand.Hi
+ bne .Fail
+ strexd r1,r4,[r0]  // [r0]=r4 and [r0+4]=r5
+ cmp r1,#1 // 1 for failure and 0 for success
+ beq .Loop
+ bne .Done
+.Fail:
+ clrex
+.Done:
+ dmb sy
+ mov r0,r6
+ mov r1,r7
+ ldmfd sp!,{r2,r4,r5,r6,r7}
+{$endif}
+end;
 {$endif}
 
 {$ifdef CPU386}
