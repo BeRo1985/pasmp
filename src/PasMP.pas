@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-14-13-29-0000                       *
+ *                        Version 2016-02-14-19-58-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -104,6 +104,7 @@ unit PasMP;
   {$undef HAS_TYPE_UTF8STRING}
  {$ifend}
  {$define HAS_GENERICS}
+ {$define HAS_STATIC}
 {$else}
  {$realcompatibility off}
  {$localsymbols on}
@@ -139,11 +140,13 @@ unit PasMP;
  {$endif}
  {$if CompilerVersion>=24}
   {$legacyifend on}
+  {$define HAS_ATOMICS}
  {$ifend}
  {$if CompilerVersion>=20}
   {$define CAN_INLINE}
   {$define HAS_ANONYMOUS_METHODS}
   {$define HAS_GENERICS}
+  {$define HAS_STATIC}
  {$ifend}
  {$if CompilerVersion>=25}
   {$define HAS_WEAK}
@@ -330,6 +333,78 @@ type TPasMPAvailableCPUCores=array of longint;
        );
      end;
 
+     PPasMPTaggedPointer=^TPasMPTaggedPointer;
+     TPasMPTaggedPointer=record
+      case longint of
+       0:(
+        PointerValue:pointer;
+        TagValue:TPasMPPtrUInt;
+       );
+       1:(
+        Value:{$ifdef CPU64}TPasMPInt128{$else}TPasMPInt64{$endif};
+       );
+     end;
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPInterlocked=class
+      public
+       class function Increment(var Target:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$ifdef CPU64}
+       class function Increment(var Target:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$endif}
+       class function Decrement(var Target:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$ifdef CPU64}
+       class function Decrement(var Target:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$endif}
+       class function Add(var Target:longint;const Value:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$ifdef CPU64}
+       class function Add(var Target:int64;const Value:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$endif}
+       class function Sub(var Target:longint;const Value:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$ifdef CPU64}
+       class function Sub(var Target:int64;const Value:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$endif}
+       class function Exchange(var Target:longint;const Source:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Exchange(var Target:longword;const Source:longword):longword; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$ifdef CPU64}
+       class function Exchange(var Target:int64;const Source:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Exchange(var Target:TPasMPUInt64;const Source:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$endif}
+       class function Exchange(var Target:pointer;const Source:pointer):pointer; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Exchange(var Target:TObject;const Source:TObject):TObject; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function CompareExchange(var Target:longint;const NewValue,Comperand:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function CompareExchange(var Target:longword;const NewValue,Comperand:longword):longword; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
+       class function CompareExchange(var Target:int64;const NewValue,Comperand:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function CompareExchange(var Target:TPasMPUInt64;const NewValue,Comperand:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$ifend}
+{$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
+       class function CompareExchange(var Target:TPasMPInt128;const NewValue,Comperand:TPasMPInt128):TPasMPInt128; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(fpc)}inline;{$ifend}
+{$ifend}
+       class function CompareExchange(var Target:pointer;const NewValue,Comperand:pointer):pointer; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function CompareExchange(var Target:TObject;const NewValue,Comperand:TObject):TObject; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Read(var Source:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
+       class function Read(var Source:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$ifend}
+       class function Write(var Target:longint;const Source:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
+       class function Write(var Target:int64;const Source:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$ifend}
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPMemoryBarrier=class
+      public
+       class procedure Read; {$ifdef HAS_STATIC}static;{$endif}{$ifdef caninline}inline;{$endif}
+       class procedure ReadDependency; {$ifdef HAS_STATIC}static;{$endif}{$ifdef caninline}inline;{$endif}
+       class procedure ReadWrite; {$ifdef HAS_STATIC}static;{$endif}{$ifdef caninline}inline;{$endif}
+       class procedure Write; {$ifdef HAS_STATIC}static;{$endif}{$ifdef caninline}inline;{$endif}
+       class procedure Sync; {$ifdef HAS_STATIC}static;{$endif}{$ifdef caninline}inline;{$endif}
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
      TPasMP=class;
 
      PPasMPOnce=^TPasMPOnce;
@@ -458,7 +533,7 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure Signal; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure Broadcast; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        function Wait(const Lock:TPasMPConditionVariableLock;const dwMilliSeconds:longword=INFINITE):TWaitResult; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-     end;     
+     end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
@@ -668,7 +743,7 @@ type TPasMPAvailableCPUCores=array of longint;
 
 {$ifdef HAS_GENERICS}
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>=class
+     TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>=class
       protected
        fReadIndex:longint;
        fCacheLineFillUp0:array[0..(PasMPCPUCacheLineSize-SizeOf(longint))-1] of byte; // for to force fReadIndex and fWriteIndex to different CPU cache lines
@@ -690,6 +765,78 @@ type TPasMPAvailableCPUCores=array of longint;
        function TryPop(out Item:T):boolean; overload;
        function AvailableForPush:longint;
        function AvailableForPop:longint;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+{$endif}
+
+     PPasMPUnboundedStackItem=^TPasMPUnboundedStackItem;
+     TPasMPUnboundedStackItem=record
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+      Next:TPasMPTaggedPointer;
+{$else}
+      Next:pointer;
+{$endif}
+      Data:record
+       // Empty
+      end;
+     end;
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPUnboundedStack=class
+      private
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+       fStack:PPasMPTaggedPointer;
+{$else}
+       fCriticalSection:TPasMPCriticalSection;
+       fStack:pointer;
+{$endif}
+       fItemSize:longint;
+      public
+       constructor Create(const ItemSize:longint);
+       destructor Destroy; override;
+       function IsEmpty:boolean;
+       procedure Push(const Item);
+       function TryPush(const Item):boolean;
+       function Pop(out Item):boolean;
+       function TryPop(out Item):boolean;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+{$ifdef HAS_GENERICS}
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPUnboundedTypedStackItem<T>=class
+      private
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+       fNext:TPasMPTaggedPointer;
+{$else}
+       fNext:pointer;
+{$endif}
+       fData:T;
+      public
+       constructor Create;
+       destructor Destroy; override;
+       class function NewInstance:TObject; override;
+       procedure FreeInstance; override;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPUnboundedTypedStack<T>=class
+      private
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+       fStack:PPasMPTaggedPointer;
+{$else}
+       fCriticalSection:TPasMPCriticalSection;
+       fStack:pointer;
+{$endif}
+      public
+       constructor Create;
+       destructor Destroy; override;
+       function IsEmpty:boolean;
+       procedure Push(const Item:T);
+       function TryPush(const Item:T):boolean;
+       function Pop(out Item:T):boolean;
+       function TryPop(out Item:T):boolean;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 {$endif}
@@ -719,20 +866,6 @@ type TPasMPAvailableCPUCores=array of longint;
      TPasMPParallelSortCompareFunction=function(const a,b:pointer):longint;
 
      TPasMPJobWorkerThread=class;
-
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-     PPasMPTaggedPointer=^TPasMPTaggedPointer;
-     TPasMPTaggedPointer=record
-      case longint of
-       0:(
-        PointerValue:pointer;
-        TagValue:TPasMPPtrUInt;
-       );
-       1:(
-        Value:{$ifdef CPU64}TPasMPInt128{$else}TPasMPInt64{$endif};
-       );
-     end;
-{$endif}
 
      TPasMPJob=record
       case longint of
@@ -954,6 +1087,11 @@ type TPasMPAvailableCPUCores=array of longint;
        destructor Destroy; override;
        class function CreateGlobalInstance:TPasMP;
        class function GetGlobalInstance:TPasMP; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       class procedure GetMemAligned(var p;Size:longint;Align:longint=PasMPCPUCacheLineSize); {$ifdef HAS_STATIC}static;{$endif}
+       class procedure FreeMemAligned(const p); {$ifdef HAS_STATIC}static;{$endif}
+       class function GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):longint; {$ifdef HAS_STATIC}static;{$endif}
+       class procedure Yield; {$ifdef HAS_STATIC}static;{$endif}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       class function Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean; {$ifdef Linux}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
        class function IsJobCompleted(const Job:PPasMPJob):boolean; {$ifdef CAN_INLINE}inline;{$endif}
        class function IsJobValid(const Job:PPasMPJob):boolean; {$ifdef CAN_INLINE}inline;{$endif}
        procedure Reset;
@@ -999,87 +1137,42 @@ var GlobalPasMP:TPasMP=nil; // "Optional" singleton-like global PasMP instance
 
     GPasMP:TPasMP absolute GlobalPasMP; // A shorter name for lazy peoples
 
-{$ifndef fpc}
-{$ifdef CPU386}
-function InterlockedCompareExchange64(var Target:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-{$endif}
-{$ifdef CPUx86_64}
-function InterlockedCompareExchange128(var Target:TPasMPInt128;const NewValue,Comperand:TPasMPInt128):TPasMPInt128; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-{$endif}
-{$ifdef CPUARM}
-function InterlockedCompareExchange64(var Target:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-{$endif}
-{$endif}
-
-{$ifndef fpc}
-{$ifdef CPU386}
-function InterlockedDecrement(var Target:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-function InterlockedIncrement(var Target:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-function InterlockedExchange(var Target:longint;Source:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-function InterlockedExchangePointer(var Target:pointer;Source:pointer):pointer; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-function InterlockedExchangeAdd(var Target:longint;Source:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-function InterlockedCompareExchange(var Target:longint;NewValue,Comperand:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-{$else}
-{$ifdef CPUx86_64}
-function InterlockedDecrement(var Target:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-function InterlockedDecrement64(var Target:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-function InterlockedIncrement(var Target:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-function InterlockedIncrement64(var Target:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-function InterlockedExchange(var Target:longint;Source:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-function InterlockedExchange64(var Target:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-function InterlockedExchangePointer(var Target:pointer;Source:pointer):pointer; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-function InterlockedExchangeAdd(var Target:longint;Source:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-function InterlockedExchangeAdd64(var Target:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-function InterlockedCompareExchange(var Target:longint;NewValue,Comperand:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-function InterlockedCompareExchange64(var Target:int64;NewValue,Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-{$else}
-function InterlockedDecrement(var Target:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
-function InterlockedIncrement(var Target:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
-function InterlockedExchange(var Target:longint;Source:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
-function InterlockedExchangePointer(var Target:pointer;Source:pointer):pointer; {$ifdef CAN_INLINE}inline;{$endif}
-function InterlockedExchangeAdd(var Target:longint;Source:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
-function InterlockedCompareExchange(var Target:longint;NewValue,Comperand:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
-function InterlockedCompareExchange64(var Target:int64;NewValue,Comperand:int64):int64; {$ifdef CAN_INLINE}inline;{$endif}
-{$endif}
-{$endif}
-{$endif}
-
 {$ifdef fpc}
-procedure MemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 {$else}
 {$if CompilerVersion>=25}
-procedure ReadBarrier; {$ifdef CAN_INLINE}inline;{$endif}
-procedure ReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
-procedure ReadWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
-procedure WriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+{$else}
+{$ifdef fpc}
+procedure FallbackMemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+{$else}
+{$if CompilerVersion>=25}
+procedure FallbackReadBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackReadWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 {$else}
 {$ifdef CPU386}
-procedure ReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
-procedure ReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
-procedure ReadWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
-procedure WriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackReadWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$else}
 {$ifdef CPUx64}
-procedure ReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
-procedure ReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
-procedure ReadWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
-procedure WriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackReadWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$else}
-procedure ReadBarrier; {$ifdef CAN_INLINE}inline;{$endif}
-procedure ReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
-procedure ReadWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
-procedure WriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackReadBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackReadWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 {$endif}
 {$endif}
-procedure MemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackMemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 {$ifend}
 {$endif}
-
-procedure Yield; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-
-function Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean; {$ifdef Linux}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
-
-function GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):longint;
+{$ifend}
+{$endif}
 
 implementation
 
@@ -1518,124 +1611,434 @@ end;
 {$endif}
 
 {$ifdef fpc}
-procedure MemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackMemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  ReadWriteBarrier;
 end;
 {$else}
 {$if CompilerVersion>=25}
-procedure ReadBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackReadBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  MemoryBarrier;
 end;
-procedure ReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  // reads imply barrier on earlier reads depended on
 end;
-procedure ReadWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackReadWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  MemoryBarrier;
 end;
-procedure WriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  MemoryBarrier;
 end;
 {$else}
 {$ifdef CPU386}
-procedure ReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
 asm
  lfence
 end;
 
-procedure ReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  // reads imply barrier on earlier reads depended on
 end;
 
-procedure ReadWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackReadWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
 asm
  mfence
 end;
 
-procedure WriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
 asm
  sfence
 end;
 {$else}
 {$ifdef CPUx64}
-procedure ReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
 asm
  lfence
 end;
 
-procedure ReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  // reads imply barrier on earlier reads depended on
 end;
 
-procedure ReadWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackReadWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
 asm
  mfence
 end;
 
-procedure WriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
 asm
  sfence
 end;
 {$else}
-procedure ReadBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackReadBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
 end;
 
-procedure ReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  // reads imply barrier on earlier reads depended on
 end;
 
-procedure ReadWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackReadWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
 end;
 
-procedure WriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
 end;
 {$endif}
 {$endif}
 
-procedure MemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackMemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
+{$ifdef fpc}
  ReadWriteBarrier;
+{$else}
+ FallBackReadWriteBarrier;
+{$endif}
 end;
 {$ifend}
 {$endif}
 
-procedure Yield; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
+class function TPasMPInterlocked.Increment(var Target:longint):longint;
 begin
- SwitchToThread;
+{$ifdef HAS_ATOMICS}
+ result:=AtomicIncrement(Target);
+{$else}
+ result:=InterlockedIncrement(Target);
+{$endif}
+end;
+
+{$ifdef CPU64}
+class function TPasMPInterlocked.Increment(var Target:int64):int64;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicIncrement(Target);
+{$else}
+ result:=InterlockedIncrement64(Target);
+{$endif}
+end;
+{$endif}
+
+class function TPasMPInterlocked.Decrement(var Target:longint):longint;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicDecrement(Target);
+{$else}
+ result:=InterlockedDecrement(Target);
+{$endif}
+end;
+
+{$ifdef CPU64}
+class function TPasMPInterlocked.Decrement(var Target:int64):int64;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicDecrement(Target);
+{$else}
+ result:=InterlockedDecrement64(Target);
+{$endif}
+end;
+{$endif}
+
+class function TPasMPInterlocked.Add(var Target:longint;const Value:longint):longint;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicIncrement(Target,Value);
+{$else}
+ result:=InterlockedExchangeAdd(Target,Value);
+{$endif}
+end;
+
+{$ifdef CPU64}
+class function TPasMPInterlocked.Add(var Target:int64;const Value:int64):int64;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicIncrement(Target,Value);
+{$else}
+ result:=InterlockedExchangeAdd64(Target,Value);
+{$endif}
+end;
+{$endif}
+
+class function TPasMPInterlocked.Sub(var Target:longint;const Value:longint):longint;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicIncrement(Target,-Value);
+{$else}
+ result:=InterlockedExchangeAdd(Target,-Value);
+{$endif}
+end;
+
+{$ifdef CPU64}
+class function TPasMPInterlocked.Sub(var Target:int64;const Value:int64):int64;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicIncrement(Target,-Value);
+{$else}
+ result:=InterlockedExchangeAdd64(Target,-Value);
+{$endif}
+end;
+{$endif}
+
+class function TPasMPInterlocked.Exchange(var Target:longint;const Source:longint):longint;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicExchange(Target,Source);
+{$else}
+ result:=InterlockedExchange(Target,Source);
+{$endif}
+end;
+
+class function TPasMPInterlocked.Exchange(var Target:longword;const Source:longword):longword;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicExchange(Target,Source);
+{$else}
+ result:=longword(InterlockedExchange(longint(Target),longint(Source)));
+{$endif}
+end;
+
+{$ifdef CPU64}
+class function TPasMPInterlocked.Exchange(var Target:int64;const Source:int64):int64;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicExchange(Target,Source);
+{$else}
+ result:=InterlockedExchange64(Target,Source);
+{$endif}
+end;
+
+class function TPasMPInterlocked.Exchange(var Target:TPasMPUInt64;const Source:TPasMPUInt64):TPasMPUInt64;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicExchange(Target,Source);
+{$else}
+ result:=TPasMPUInt64(InterlockedExchange64(int64(Target),int64(Source)));
+{$endif}
+end;
+{$endif}
+
+class function TPasMPInterlocked.Exchange(var Target:pointer;const Source:pointer):pointer;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicExchange(Target,Source);
+{$else}
+{$ifdef CPU64}
+ result:=pointer(TPasMPPtrInt(InterlockedExchange64(int64(TPasMPPtrInt(Target)),int64(TPasMPPtrInt(Source)))));
+{$else}
+ result:=pointer(TPasMPPtrInt(InterlockedExchange(longint(TPasMPPtrInt(Target)),longint(TPasMPPtrInt(Source)))));
+{$endif}
+{$endif}
+end;
+
+class function TPasMPInterlocked.Exchange(var Target:TObject;const Source:TObject):TObject;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicExchange(pointer(Target),pointer(Source));
+{$else}
+{$ifdef CPU64}
+ result:=pointer(TPasMPPtrInt(InterlockedExchange64(int64(TPasMPPtrInt(Target)),int64(TPasMPPtrInt(Source)))));
+{$else}
+ result:=pointer(TPasMPPtrInt(InterlockedExchange(longint(TPasMPPtrInt(Target)),longint(TPasMPPtrInt(Source)))));
+{$endif}
+{$endif}
+end;
+
+class function TPasMPInterlocked.CompareExchange(var Target:longint;const NewValue,Comperand:longint):longint;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicCmpExchange(Target,NewValue,Comperand);
+{$else}
+ result:=InterlockedCompareExchange(Target,NewValue,Comperand);
+{$endif}
+end;
+
+class function TPasMPInterlocked.CompareExchange(var Target:longword;const NewValue,Comperand:longword):longword;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicCmpExchange(Target,NewValue,Comperand);
+{$else}
+ result:=longword(InterlockedCompareExchange(longint(Target),longint(NewValue),longint(Comperand)));
+{$endif}
+end;
+
+{$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
+class function TPasMPInterlocked.CompareExchange(var Target:int64;const NewValue,Comperand:int64):int64;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicCmpExchange(Target,NewValue,Comperand);
+{$else}
+ result:=InterlockedCompareExchange64(Target,NewValue,Comperand);
+{$endif}
+end;
+
+class function TPasMPInterlocked.CompareExchange(var Target:TPasMPUInt64;const NewValue,Comperand:TPasMPUInt64):TPasMPUInt64;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicCmpExchange(Target,NewValue,Comperand);
+{$else}
+ result:=TPasMPUInt64(InterlockedCompareExchange64(int64(Target),int64(NewValue),int64(Comperand)));
+{$endif}
+end;
+{$ifend}
+
+{$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
+class function TPasMPInterlocked.CompareExchange(var Target:TPasMPInt128;const NewValue,Comperand:TPasMPInt128):TPasMPInt128;
+begin
+ result:=InterlockedCompareExchange128(Target,NewValue,Comperand);
+end;
+{$ifend}
+
+class function TPasMPInterlocked.CompareExchange(var Target:pointer;const NewValue,Comperand:pointer):pointer;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicCmpExchange(Target,NewValue,Comperand);
+{$else}
+{$ifdef CPU64}
+ result:=pointer(TPasMPPtrInt(InterlockedCompareExchange64(int64(TPasMPPtrInt(Target)),int64(TPasMPPtrInt(NewValue)),int64(TPasMPPtrInt(Comperand)))));
+{$else}
+ result:=pointer(TPasMPPtrInt(InterlockedCompareExchange(longint(TPasMPPtrInt(Target)),longint(TPasMPPtrInt(NewValue)),longint(TPasMPPtrInt(Comperand)))));
+{$endif}
+{$endif}
+end;
+
+class function TPasMPInterlocked.CompareExchange(var Target:TObject;const NewValue,Comperand:TObject):TObject;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicCmpExchange(pointer(Target),pointer(NewValue),pointer(Comperand));
+{$else}
+{$ifdef CPU64}
+ result:=pointer(TPasMPPtrInt(InterlockedCompareExchange64(int64(TPasMPPtrInt(Target)),int64(TPasMPPtrInt(NewValue)),int64(TPasMPPtrInt(Comperand)))));
+{$else}
+ result:=pointer(TPasMPPtrInt(InterlockedCompareExchange(longint(TPasMPPtrInt(Target)),longint(TPasMPPtrInt(NewValue)),longint(TPasMPPtrInt(Comperand)))));
+{$endif}
+{$endif}
+end;
+
+class function TPasMPInterlocked.Read(var Source:longint):longint;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicCmpExchange(Source,0,0);
+{$else}
+ result:=InterlockedCompareExchange(Source,0,0);
+{$endif}
+end;
+
+{$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
+class function TPasMPInterlocked.Read(var Source:int64):int64;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicCmpExchange(Source,0,0);
+{$else}
+ result:=InterlockedCompareExchange64(Source,0,0);
+{$endif}
+end;
+{$ifend}
+
+class function TPasMPInterlocked.Write(var Target:longint;const Source:longint):longint;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicExchange(Target,Source);
+{$else}
+ result:=InterlockedExchange(Target,Source);
+{$endif}
+end;
+
+{$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
+class function TPasMPInterlocked.Write(var Target:int64;const Source:int64):int64;
+{$ifdef CPU64}
+{$ifdef HAS_ATOMICS}
+begin
+ result:=AtomicExchange(Target,Source);
 end;
 {$else}
-{$ifdef Unix}
-{$ifdef usecthreads}
 begin
- sched_yield;
-end;
-{$else}
-var timeout:timeval;
-begin
- timeout.tv_sec:=0;
- timeout.tv_usec:=0;
- fpselect(0,nil,nil,nil,@timeout);
+ result:=InterlockedExchange64(Target,Source);
 end;
 {$endif}
 {$else}
+{$ifdef HAS_ATOMICS}
+var Old:int64;
+begin
+ repeat
+  Old:=Target;
+  result:=AtomicCmpExchange(Target,Source,Old);
+ until Target=Old;
+end;
+{$else}
+var Old:int64;
+begin
+ repeat
+  Old:=Target;
+  result:=InterlockedCompareExchange64(Target,Source,Old);
+ until Target=Old;
+end;
+{$endif}
+{$endif}
+{$ifend}
+
+class procedure TPasMPMemoryBarrier.Read;
+begin
 {$ifdef fpc}
-begin
- ThreadSwitch;
+ ReadBarrier;
+{$else}
+{$if CompilerVersion>=25}
+ MemoryBarrier;
+{$else}
+ FallbackReadBarrier;
+{$ifend}
+{$endif}
 end;
+
+class procedure TPasMPMemoryBarrier.ReadDependency;
+begin
+ // reads imply barrier on earlier reads depended on
+end;
+
+class procedure TPasMPMemoryBarrier.ReadWrite;
+begin
+{$ifdef fpc}
+ ReadWriteBarrier;
+{$else}
+{$if CompilerVersion>=25}
+ MemoryBarrier;
+{$else}
+ FallbackReadWriteBarrier;
+{$ifend}
 {$endif}
+end;
+
+class procedure TPasMPMemoryBarrier.Write;
+begin
+{$ifdef fpc}
+ WriteBarrier;
+{$else}
+{$if CompilerVersion>=25}
+ MemoryBarrier;
+{$else}
+ FallbackWriteBarrier;
+{$ifend}
 {$endif}
+end;
+
+class procedure TPasMPMemoryBarrier.Sync;
+begin
+{$ifdef fpc}
+ ReadWriteBarrier;
+{$else}
+{$if CompilerVersion>=25}
+ MemoryBarrier;
+{$else}
+ FallbackReadWriteBarrier;
+{$ifend}
 {$endif}
+end;
 
 function IntLog2(x:longword):longword; {$ifdef CPU386}assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
@@ -1693,239 +2096,6 @@ begin
   dec(Size,SizeOf(byte));
  end;
 end;
- 
-function Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean; {$ifdef Linux}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
-{$ifdef Linux}
-begin
- result:=pthread_once(@OnceControl,InitRoutine)=0;
-end;
-{$else}
-var SavedOnceControl:TPasMPOnce;
-begin
- result:=false;
- SavedOnceControl:=OnceControl;
-{$ifdef CPU386}
- asm
-  mfence
- end;
-{$else}
- ReadWriteBarrier;
-{$endif}
- while SavedOnceControl<>1 do begin
-  if SavedOnceControl=0 then begin
-   if InterlockedCompareExchange(OnceControl,2,0)=0 then begin
-    try
-     InitRoutine;
-    finally
-     OnceControl:=1;
-    end;
-    result:=true;
-    exit;
-   end;
-  end;
-{$ifdef cpu386}
-  asm
-   db $f3,$90 // pause (rep nop)
-  end;
-{$else}
-  Yield;
-{$endif}
-{$ifdef CPU386}
-  asm
-   mfence
-  end;
-{$else}
-  ReadWriteBarrier;
-{$endif}
-  SavedOnceControl:=OnceControl;
- end;
-end;
-{$endif}
-
-function GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):longint;
-{$ifdef Windows}
-var PhysicalCores,LogicalCores,i,j:longint;
-    sinfo:SYSTEM_INFO;
-    dwProcessAffinityMask,dwSystemAffinityMask:TPasMPPtrUInt;
- procedure GetCPUInfo(var PhysicalCores,LogicalCores:longint);
- const RelationProcessorCore=0;
-       RelationNumaNode=1;
-       RelationCache=2;
-       RelationProcessorPackage=3;
-       RelationGroup=4;
-       RelationAll=$ffff;
-       CacheUnified=0;
-       CacheInstruction=1;
-       CacheData=2;
-       CacheTrace=3;
- type TLogicalProcessorRelationship=dword;
-      TProcessorCacheType=dword;
-      TCacheDescriptor=packed record
-       Level:byte;
-       Associativity:byte;
-       LineSize:word;
-       Size:dword;
-       pcType:TProcessorCacheType;
-      end;
-      PSystemLogicalProcessorInformation=^TSystemLogicalProcessorInformation;
-      TSystemLogicalProcessorInformation=packed record
-       ProcessorMask:TPasMPPtrUInt;
-       case Relationship:TLogicalProcessorRelationship of
-        0:(
-         Flags:byte;
-        );
-        1:(
-         NodeNumber:dword;
-        );
-        2:(
-         Cache:TCacheDescriptor;
-        );
-        3:(
-         Reserved:array[0..1] of int64;
-        );
-      end;
-      TGetLogicalProcessorInformation=function(Buffer:PSystemLogicalProcessorInformation;out ReturnLength:DWORD):BOOL; stdcall;
-  function CountSetBits(Value:TPasMPPtrUInt):longint;
-  begin
-   result:=0;
-   while Value<>0 do begin
-    inc(result);
-    Value:=Value and (Value-1);
-   end;
-  end;
- var GetLogicalProcessorInformation:TGetLogicalProcessorInformation;
-     Buffer:array of TSystemLogicalProcessorInformation;
-     ReturnLength:dword;
-     Index,Count:longint;
- begin
-  Buffer:=nil;
-  PhysicalCores:=0;
-  LogicalCores:=0;
-  try
-   GetLogicalProcessorInformation:=GetProcAddress(GetModuleHandle('kernel32'),'GetLogicalProcessorInformation');
-   if assigned(GetLogicalProcessorInformation) then begin
-    SetLength(Buffer,16);
-    Count:=0;
-    repeat
-     ReturnLength:=length(Buffer)*SizeOf(TSystemLogicalProcessorInformation);
-     if GetLogicalProcessorInformation(@Buffer[0],ReturnLength) then begin
-      Count:=ReturnLength div SizeOf(TSystemLogicalProcessorInformation);
-     end else begin
-      if GetLastError=ERROR_INSUFFICIENT_BUFFER then begin
-       SetLength(Buffer,(ReturnLength div SizeOf(TSystemLogicalProcessorInformation))+1);
-       continue;
-      end;
-     end;
-     break;
-    until false;
-    if Count>0 then begin
-     PhysicalCores:=0;
-     for Index:=0 to Count-1 do begin
-      if Buffer[Index].Relationship=RelationProcessorCore then begin
-       inc(PhysicalCores);
-       inc(LogicalCores,CountSetBits(Buffer[Index].ProcessorMask));
-      end;
-     end;
-    end;
-   end;
-  finally
-   SetLength(Buffer,0);
-  end;
- end;
-begin
- GetCPUInfo(PhysicalCores,LogicalCores);
- result:=LogicalCores;
- if result=0 then begin
-  result:=PhysicalCores;
- end;
- GetSystemInfo(sinfo);
- GetProcessAffinityMask(GetCurrentProcess,dwProcessAffinityMask,dwSystemAffinityMask);
- SetLength(AvailableCPUCores,result);
- j:=0;
- for i:=0 to sinfo.dwNumberOfProcessors-1 do begin
-  if (dwProcessAffinityMask and (1 shl i))<>0 then begin
-   AvailableCPUCores[j]:=i;
-   inc(j);
-   if j>=result then begin
-    break;
-   end;
-  end;
- end;
- if result>j then begin
-  result:=j;
-  SetLength(AvailableCPUCores,result);
- end;
-end;
-{$else}
-{$ifdef Linux}
-var i,j:longint;
-    CPUSet:int64;
-begin
- result:=sysconf(_SC_NPROCESSORS_CONF);
- SetLength(AvailableCPUCores,result);
- sched_getaffinity(GetProcessID,SizeOf(CPUSet),@CPUSet);
- j:=0;
- for i:=0 to 127 do begin
-  if (CPUSet and (int64(1) and i))<>0 then begin
-   AvailableCPUCores[j]:=i;
-   inc(j);
-   if j>=result then begin
-    break;
-   end;
-  end;
- end;
- if result>j then begin
-  result:=j;
-  SetLength(AvailableCPUCores,result);
- end;
-end;
-{$else}
-{$ifdef Solaris}
-var i:longint;
-begin
- result:=sysconf(_SC_NPROC_ONLN);
- SetLength(AvailableCPUCores,result);
- for i:=0 to result-1 do begin
-  AvailableCPUCores[i]:=i;
- end;
-end;
-{$else}
-{$ifdef Unix}
-var mib:array[0..1] of cint;
-    len:cint;
-    t:cint;
-    i:longint;
-begin
- mib[0]:=CTL_HW;
- mib[1]:=HW_AVAILCPU;
- len:=SizeOf(t);
- fpsysctl(PAnsiChar(@mib),2,@t,@len,nil,0);
- if t<1 then begin
-  mib[1]:=HW_NCPU;
-  fpsysctl(PAnsiChar(@mib),2,@t,@len,nil,0);
-  if t<1 then begin
-   t:=1;
-  end;
- end;
- result:=t;
- SetLength(AvailableCPUCores,result);
- for i:=0 to result-1 do begin
-  AvailableCPUCores[i]:=i;
- end;
-end;
-{$else}
-var i:longint;
-begin
- result:=1;
- SetLength(AvailableCPUCores,result);
- for i:=0 to result-1 do begin
-  AvailableCPUCores[i]:=i;
- end;
-end;
-{$endif}
-{$endif}
-{$endif}
-{$endif}
 
 function RoundUpToPowerOfTwo(x:ptruint):ptruint; {$ifdef CAN_INLINE}inline;{$endif}
 begin
@@ -1947,35 +2117,6 @@ begin
   result:=(x+m) and not (m-1);
  end else begin
   result:=x;
- end;
-end;
-
-procedure GetMemAligned(var p;Size:longint;Align:longint=16);
-var Original,Aligned:pointer;
-    Mask:ptruint;
-begin
- if (Align and (Align-1))<>0 then begin
-  Align:=RoundUpToPowerOfTwo(Align);
- end;
- Mask:=Align-1;
- inc(Size,((Align shl 1)+SizeOf(pointer)));
- GetMem(Original,Size);
- FillChar(Original^,Size,#0);
- Aligned:=pointer(ptruint(ptruint(Original)+SizeOf(pointer)));
- if (Align>1) and ((ptruint(Aligned) and Mask)<>0) then begin
-  inc(ptruint(Aligned),ptruint(ptruint(Align)-(ptruint(Aligned) and Mask)));
- end;
- pointer(pointer(ptruint(ptruint(Aligned)-SizeOf(pointer)))^):=Original;
- pointer(pointer(@p)^):=Aligned;
-end;
-
-procedure FreeMemAligned(const p);
-var pp:pointer;
-begin
- pp:=pointer(pointer(@p)^);
- if assigned(pp) then begin
-  pp:=pointer(pointer(ptruint(ptruint(pp)-SizeOf(pointer)))^);
-  FreeMem(pp);
  end;
 end;
 
@@ -2633,8 +2774,6 @@ begin
 end;
 
 function TPasMPInvertedSemaphore.Acquire(const AcquireCount:longint;out Count:longint):longint;
-var Counter:longint;
-    Done:boolean;
 begin
  fConditionVariableLock.Acquire;
  try                          
@@ -3112,8 +3251,8 @@ end;
 {$endif}
 {$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 begin
- while InterlockedCompareExchange(fState,-1,0)<>0 do begin
-  Yield;
+ while TPasMPInterlocked.CompareExchange(fState,-1,0)<>0 do begin
+  TPasMP.Yield;
  end;
 end;
 {$endif}
@@ -3156,7 +3295,7 @@ end;
 {$endif}
 {$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 begin
- result:=InterlockedCompareExchange(fState,-1,0)=0;
+ result:=TPasMPInterlocked.CompareExchange(fState,-1,0)=0;
 end;
 {$endif}
 {$endif}
@@ -3186,7 +3325,7 @@ end;
 {$endif}
 {$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 begin
- InterlockedExchange(fState,0);
+ TPasMPInterlocked.Exchange(fState,0);
 end;
 {$endif}
 {$endif}
@@ -3290,13 +3429,13 @@ begin
  end else begin
   repeat
 {$if not (defined(CPU386) or defined(CPUx86_64))}
-   ReadWriteBarrier;
+   TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
    LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
-   ReadDependencyBarrier;
+   TPasMPMemoryBarrier.ReadDependency;
 {$else}
-   ReadBarrier;
+   TPasMPMemoryBarrier.Read;
 {$ifend}
    LocalWriteIndex:=fWriteIndex;
    if LocalWriteIndex>=LocalReadIndex then begin
@@ -3307,7 +3446,7 @@ begin
    if Bytes<=result then begin
     break;
    end else begin
-    Yield;
+    TPasMP.Yield;
    end;
   until false;
   p:=pointer(Buffer);
@@ -3330,7 +3469,7 @@ begin
    mfence
   end;
 {$else}
-  ReadWriteBarrier;
+  TPasMPMemoryBarrier.ReadWrite;
 {$endif}
   fReadIndex:=LocalReadIndex;
   result:=Bytes;
@@ -3345,13 +3484,13 @@ begin
   result:=0;
  end else begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
-  ReadWriteBarrier;
+  TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
   LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
-  ReadDependencyBarrier;
+  TPasMPMemoryBarrier.ReadDependency;
 {$else}
-  ReadBarrier;
+  TPasMPMemoryBarrier.Read;
 {$ifend}
   LocalWriteIndex:=fWriteIndex;
   if LocalWriteIndex>=LocalReadIndex then begin
@@ -3382,7 +3521,7 @@ begin
     mfence
    end;
 {$else}
-   ReadWriteBarrier;
+   TPasMPMemoryBarrier.ReadWrite;
 {$endif}
    fReadIndex:=LocalReadIndex;
    result:=Bytes;
@@ -3398,13 +3537,13 @@ begin
   result:=0;
  end else begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
-  ReadWriteBarrier;
+  TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
   LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
-  ReadDependencyBarrier;
+  TPasMPMemoryBarrier.ReadDependency;
 {$else}
-  ReadBarrier;
+  TPasMPMemoryBarrier.Read;
 {$ifend}
   LocalWriteIndex:=fWriteIndex;
   if LocalWriteIndex>=LocalReadIndex then begin
@@ -3436,7 +3575,7 @@ begin
     mfence
    end;
 {$else}
-   ReadWriteBarrier;
+   TPasMPMemoryBarrier.ReadWrite;
 {$endif}
    fReadIndex:=LocalReadIndex;
   end;
@@ -3453,13 +3592,13 @@ begin
  end else begin
   repeat
 {$if not (defined(CPU386) or defined(CPUx86_64))}
-   ReadWriteBarrier;
+   TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
    LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
-   ReadDependencyBarrier;
+   TPasMPMemoryBarrier.ReadDependency;
 {$else}
-   ReadBarrier;
+   TPasMPMemoryBarrier.Read;
 {$ifend}
    LocalWriteIndex:=fWriteIndex;
    if LocalWriteIndex>=LocalReadIndex then begin
@@ -3470,7 +3609,7 @@ begin
    if Bytes<=result then begin
     break;
    end else begin
-    Yield;
+    TPasMP.Yield;
    end;
   until false;
   p:=pointer(Buffer);
@@ -3493,7 +3632,7 @@ begin
    mfence
   end;
 {$else}
-  ReadWriteBarrier;
+  TPasMPMemoryBarrier.ReadWrite;
 {$endif}
   fWriteIndex:=LocalWriteIndex;
   result:=Bytes;
@@ -3508,13 +3647,13 @@ begin
   result:=0;
  end else begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
-  ReadWriteBarrier;
+  TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
   LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
-  ReadDependencyBarrier;
+  TPasMPMemoryBarrier.ReadDependency;
 {$else}
-  ReadBarrier;
+  TPasMPMemoryBarrier.Read;
 {$ifend}
   LocalWriteIndex:=fWriteIndex;
   if LocalWriteIndex>=LocalReadIndex then begin
@@ -3545,7 +3684,7 @@ begin
     mfence
    end;
 {$else}
-   ReadWriteBarrier;
+   TPasMPMemoryBarrier.ReadWrite;
 {$endif}
    fWriteIndex:=LocalWriteIndex;
    result:=Bytes;
@@ -3561,13 +3700,13 @@ begin
   result:=0;
  end else begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
-  ReadWriteBarrier;
+  TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
   LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
-  ReadDependencyBarrier;
+  TPasMPMemoryBarrier.ReadDependency;
 {$else}
-  ReadBarrier;
+  TPasMPMemoryBarrier.Read;
 {$ifend}
   LocalWriteIndex:=fWriteIndex;
   if LocalWriteIndex>=LocalReadIndex then begin
@@ -3599,7 +3738,7 @@ begin
     mfence
    end;
 {$else}
-   ReadWriteBarrier;
+   TPasMPMemoryBarrier.ReadWrite;
 {$endif}
    fWriteIndex:=LocalWriteIndex;
   end;
@@ -3611,13 +3750,13 @@ function TPasMPSingleProducerSingleConsumerRingBuffer.AvailableForRead:longint;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
- ReadWriteBarrier;
+ TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
  LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
- ReadDependencyBarrier;
+ TPasMPMemoryBarrier.ReadDependency;
 {$else}
- ReadBarrier;
+ TPasMPMemoryBarrier.Read;
 {$ifend}
  LocalWriteIndex:=fWriteIndex;
  if LocalWriteIndex>=LocalReadIndex then begin
@@ -3631,13 +3770,13 @@ function TPasMPSingleProducerSingleConsumerRingBuffer.AvailableForWrite:longint;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
- ReadWriteBarrier;
+ TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
  LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
- ReadDependencyBarrier;
+ TPasMPMemoryBarrier.ReadDependency;
 {$else}
- ReadBarrier;
+ TPasMPMemoryBarrier.Read;
 {$ifend}
  LocalWriteIndex:=fWriteIndex;
  if LocalWriteIndex>=LocalReadIndex then begin
@@ -3648,7 +3787,7 @@ begin
 end;
 
 {$ifdef HAS_GENERICS}
-constructor TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.Create(const Size:longint);
+constructor TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Create(const Size:longint);
 begin
  inherited Create;
  fSize:=Size;
@@ -3658,24 +3797,24 @@ begin
  SetLength(fData,fSize);
 end;
 
-destructor TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.Destroy;
+destructor TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Destroy;
 begin
  SetLength(fData,0);
  inherited Destroy;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.Push(const Item:T):boolean;
+function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Push(const Item:T):boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
  repeat
 {$if not (defined(CPU386) or defined(CPUx86_64))}
-  ReadWriteBarrier;
+  TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
   LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
-  ReadDependencyBarrier;
+  TPasMPMemoryBarrier.ReadDependency;
 {$else}
-  ReadBarrier;
+  TPasMPMemoryBarrier.Read;
 {$ifend}
   LocalWriteIndex:=fWriteIndex;
   if LocalWriteIndex>=LocalReadIndex then begin
@@ -3686,7 +3825,7 @@ begin
   if result then begin
    break;
   end else begin
-   Yield;
+   TPasMP.Yield;
   end;
  until false;
  LocalWriteIndex:=fWriteIndex;
@@ -3695,21 +3834,21 @@ begin
  if LocalWriteIndex>=fSize then begin
   LocalWriteIndex:=0;
  end;
- ReadWriteBarrier;
+ TPasMPMemoryBarrier.ReadWrite;
  fWriteIndex:=LocalWriteIndex;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.TryPeekForPush:pointer;
+function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.TryPeekForPush:pointer;
 var LocalReadIndex,LocalWriteIndex,Available:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
- ReadWriteBarrier;
+ TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
  LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
- ReadDependencyBarrier;
+ TPasMPMemoryBarrier.ReadDependency;
 {$else}
- ReadBarrier;
+ TPasMPMemoryBarrier.Read;
 {$ifend}
  LocalWriteIndex:=fWriteIndex;
  if LocalWriteIndex>=LocalReadIndex then begin
@@ -3724,17 +3863,17 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.TryPush:boolean;
+function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.TryPush:boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
- ReadWriteBarrier;
+ TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
  LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
- ReadDependencyBarrier;
+ TPasMPMemoryBarrier.ReadDependency;
 {$else}
- ReadBarrier;
+ TPasMPMemoryBarrier.Read;
 {$ifend}
  LocalWriteIndex:=fWriteIndex;
  if LocalWriteIndex>=LocalReadIndex then begin
@@ -3747,22 +3886,22 @@ begin
   if LocalWriteIndex>=fSize then begin
    LocalWriteIndex:=0;
   end;
-  ReadWriteBarrier;
+  TPasMPMemoryBarrier.ReadWrite;
   fWriteIndex:=LocalWriteIndex;
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.TryPush(const Item:T):boolean;
+function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.TryPush(const Item:T):boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
- ReadWriteBarrier;
+ TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
  LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
- ReadDependencyBarrier;
+ TPasMPMemoryBarrier.ReadDependency;
 {$else}
- ReadBarrier;
+ TPasMPMemoryBarrier.Read;
 {$ifend}
  LocalWriteIndex:=fWriteIndex;
  if LocalWriteIndex>=LocalReadIndex then begin
@@ -3777,23 +3916,23 @@ begin
   if LocalWriteIndex>=fSize then begin
    LocalWriteIndex:=0;
   end;
-  ReadWriteBarrier;
+  TPasMPMemoryBarrier.ReadWrite;
   fWriteIndex:=LocalWriteIndex;
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.Pop(out Item:T):boolean;
+function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Pop(out Item:T):boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
  repeat
 {$if not (defined(CPU386) or defined(CPUx86_64))}
-  ReadWriteBarrier;
+  TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
   LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
-  ReadDependencyBarrier;
+  TPasMPMemoryBarrier.ReadDependency;
 {$else}
-  ReadBarrier;
+  TPasMPMemoryBarrier.Read;
 {$ifend}
   LocalWriteIndex:=fWriteIndex;
   if LocalWriteIndex>=LocalReadIndex then begin
@@ -3804,7 +3943,7 @@ begin
   if result then begin
    break;
   end else begin
-   Yield;
+   TPasMP.Yield;
   end;
  until false;
  LocalReadIndex:=fReadIndex;
@@ -3813,21 +3952,21 @@ begin
  if LocalReadIndex>=fSize then begin
   LocalReadIndex:=0;
  end;
- ReadWriteBarrier;
+ TPasMPMemoryBarrier.ReadWrite;
  fReadIndex:=LocalReadIndex;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.TryPeekForPop:pointer;
+function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.TryPeekForPop:pointer;
 var LocalReadIndex,LocalWriteIndex,Available:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
- ReadWriteBarrier;
+ TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
  LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
- ReadDependencyBarrier;
+ TPasMPMemoryBarrier.ReadDependency;
 {$else}
- ReadBarrier;
+ TPasMPMemoryBarrier.Read;
 {$ifend}
  LocalWriteIndex:=fWriteIndex;
  if LocalWriteIndex>=LocalReadIndex then begin
@@ -3843,17 +3982,17 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.TryPop:boolean;
+function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.TryPop:boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
- ReadWriteBarrier;
+ TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
  LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
- ReadDependencyBarrier;
+ TPasMPMemoryBarrier.ReadDependency;
 {$else}
- ReadBarrier;
+ TPasMPMemoryBarrier.Read;
 {$ifend}
  LocalWriteIndex:=fWriteIndex;
  if LocalWriteIndex>=LocalReadIndex then begin
@@ -3867,22 +4006,22 @@ begin
   if LocalReadIndex>=fSize then begin
    LocalReadIndex:=0;
   end;
-  ReadWriteBarrier;
+  TPasMPMemoryBarrier.ReadWrite;
   fReadIndex:=LocalReadIndex;
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.TryPop(out Item:T):boolean;
+function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.TryPop(out Item:T):boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
- ReadWriteBarrier;
+ TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
  LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
- ReadDependencyBarrier;
+ TPasMPMemoryBarrier.ReadDependency;
 {$else}
- ReadBarrier;
+ TPasMPMemoryBarrier.Read;
 {$ifend}
  LocalWriteIndex:=fWriteIndex;
  if LocalWriteIndex>=LocalReadIndex then begin
@@ -3897,22 +4036,22 @@ begin
   if LocalReadIndex>=fSize then begin
    LocalReadIndex:=0;
   end;
-  ReadWriteBarrier;
+  TPasMPMemoryBarrier.ReadWrite;
   fReadIndex:=LocalReadIndex;
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.AvailableForPush:longint;
+function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.AvailableForPush:longint;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
- ReadWriteBarrier;
+ TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
  LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
- ReadDependencyBarrier;
+ TPasMPMemoryBarrier.ReadDependency;
 {$else}
- ReadBarrier;
+ TPasMPMemoryBarrier.Read;
 {$ifend}
  LocalWriteIndex:=fWriteIndex;
  if LocalWriteIndex>=LocalReadIndex then begin
@@ -3922,17 +4061,17 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.AvailableForPop:longint;
+function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.AvailableForPop:longint;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
- ReadWriteBarrier;
+ TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
  LocalReadIndex:=fReadIndex;
 {$if defined(CPU386) or defined(CPUx86_64)}
- ReadDependencyBarrier;
+ TPasMPMemoryBarrier.ReadDependency;
 {$else}
- ReadBarrier;
+ TPasMPMemoryBarrier.Read;
 {$ifend}
  LocalWriteIndex:=fWriteIndex;
  if LocalWriteIndex>=LocalReadIndex then begin
@@ -3941,6 +4080,540 @@ begin
   result:=(fSize-LocalReadIndex)+LocalWriteIndex;
  end;
 end;
+{$endif}
+
+constructor TPasMPUnboundedStack.Create(const ItemSize:longint);
+begin
+ inherited Create;
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+ TPasMP.GetMemAligned(fStack,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
+ fStack^.PointerValue:=nil;
+ fStack^.TagValue:=0;
+{$else}
+ fCriticalSection:=TPasMPCriticalSection.Create;
+ fStack:=nil;
+{$endif}
+ fItemSize:=ItemSize;
+end;
+
+destructor TPasMPUnboundedStack.Destroy;
+var StackItem:PPasMPUnboundedStackItem;
+begin
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+ while assigned(fStack^.PointerValue) do begin
+  StackItem:=fStack^.PointerValue;
+  fStack^.PointerValue:=StackItem^.Next.PointerValue;
+  TPasMP.FreeMemAligned(StackItem);
+ end;
+ TPasMP.FreeMemAligned(fStack);
+{$else}
+ while assigned(fStack) do begin
+  StackItem:=fStack;
+  fStack:=StackItem^.Next;
+  TPasMP.FreeMemAligned(StackItem);
+ end;
+ fCriticalSection.Free;
+{$endif}
+ inherited Destroy;
+end;
+
+function TPasMPUnboundedStack.IsEmpty:boolean;
+begin
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+ result:=not assigned(fStack.PointerValue);
+{$else}
+ result:=not assigned(fStack);
+{$endif}
+end;
+
+procedure TPasMPUnboundedStack.Push(const Item);
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+var OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:TPasMPTaggedPointer;
+    StackItem:PPasMPUnboundedStackItem;
+begin
+ TPasMP.GetMemAligned(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
+ Move(Item,StackItem^.Data,fItemSize);
+ repeat
+{$ifdef CPU64}
+  NextHead.PointerValue:=nil;
+  NextHead.TagValue:=0;
+  OriginalHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,NextHead.Value);
+{$else}
+  OriginalHead.Value.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value.Value,-1,-1);
+{$endif}
+  StackItem^.Next.PointerValue:=OriginalHead.PointerValue;
+  NextHead.PointerValue:=StackItem;
+  NextHead.TagValue:=OriginalHead.TagValue+1;
+{$ifdef CPU64}
+  ResultHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,OriginalHead.Value);
+  if (ResultHead.PointerValue=OriginalHead.PointerValue) and (ResultHead.TagValue=OriginalHead.TagValue) then begin
+   break;
+  end;
+ until false;
+{$else}
+ until TPasMPInterlocked.CompareExchange(fStack^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)=OriginalHead.Value.Value;
+{$endif}
+end;
+{$else}
+var StackItem:PPasMPUnboundedStackItem;
+begin
+ fCriticalSection.Acquire;
+ try
+  TPasMP.GetMemAligned(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
+  Move(Item,StackItem^.Data,fItemSize);
+  StackItem^.fNext:=fStack;
+  fStack:=StackItem;
+ finally
+  fCriticalSection.Release;
+ end;
+end;
+{$endif}
+
+function TPasMPUnboundedStack.TryPush(const Item):boolean;
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+var OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:TPasMPTaggedPointer;
+    StackItem:PPasMPUnboundedStackItem;
+begin
+ result:=false;
+ TPasMP.GetMemAligned(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
+ Move(Item,StackItem^.Data,fItemSize);
+ try
+{$ifdef CPU64}
+  NextHead.PointerValue:=nil;
+  NextHead.TagValue:=0;
+  OriginalHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,NextHead.Value);
+{$else}
+  OriginalHead.Value.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value.Value,-1,-1);
+{$endif}
+  StackItem^.Next.PointerValue:=OriginalHead.PointerValue;
+  NextHead.PointerValue:=StackItem;
+  NextHead.TagValue:=OriginalHead.TagValue+1;
+{$ifdef CPU64}
+  ResultHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,OriginalHead.Value);
+  if (ResultHead.PointerValue=OriginalHead.PointerValue) and (ResultHead.TagValue=OriginalHead.TagValue) then begin
+   result:=true;
+  end;
+{$else}
+  if TPasMPInterlocked.CompareExchange(fStack^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)=OriginalHead.Value.Value then begin
+   result:=true;
+  end;
+{$endif}
+ finally
+  if not result then begin
+   TPasMP.FreeMemAligned(StackItem);
+  end;
+ end;
+end;
+{$else}
+var StackItem:PPasMPUnboundedStackItem;
+begin
+ fCriticalSection.Acquire;
+ try
+  TPasMP.GetMemAligned(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
+  Move(Item,StackItem^.Data,fItemSize);
+  StackItem^.fNext:=fStack;
+  fStack:=StackItem;
+  result:=true;
+ finally
+  fCriticalSection.Release;
+ end;
+end;
+{$endif}
+
+function TPasMPUnboundedStack.Pop(out Item):boolean;
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+var OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:TPasMPTaggedPointer;
+    StackItem:PPasMPUnboundedStackItem;
+begin
+ result:=false;
+ if assigned(fStack^.PointerValue) then begin
+  repeat
+{$ifdef CPU64}
+   NextHead.PointerValue:=nil;
+   NextHead.TagValue:=0;
+   OriginalHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,NextHead.Value);
+{$else}
+   OriginalHead.Value.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value.Value,-1,-1);
+{$endif}
+   if assigned(OriginalHead.PointerValue) then begin
+    NextHead.TagValue:=OriginalHead.TagValue+1;
+    NextHead.PointerValue:=PPasMPUnboundedStackItem(OriginalHead.PointerValue)^.Next.PointerValue;
+{$ifdef CPU64}
+    ResultHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,OriginalHead.Value);
+    if (ResultHead.PointerValue=OriginalHead.PointerValue) and (ResultHead.TagValue=OriginalHead.TagValue) then begin
+     break;
+    end;
+{$else}
+    if TPasMPInterlocked.CompareExchange(fStack^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)=OriginalHead.Value.Value then begin
+     break;
+    end;
+{$endif}
+   end else begin
+    break;
+   end;
+  until false;
+  StackItem:=PPasMPUnboundedStackItem(OriginalHead.PointerValue);
+  if assigned(StackItem) then begin
+   Move(StackItem^.Data,Item,fItemSize);
+   TPasMP.FreeMemAligned(StackItem);
+   result:=true;
+  end;
+ end;
+end;
+{$else}
+var StackItem:PPasMPStackItem;
+begin
+ result:=false;
+ fCriticalSection.Acquire;
+ try
+  if assigned(fStack) then begin
+   StackItem:=fStack;
+   fStack:=StackItem^.Next;
+   Move(StackItem^.Data,Item,fItemSize);
+   TPasMP.FreeMemAligned(StackItem);
+   result:=true;
+  end;
+ finally
+  fCriticalSection.Release;
+ end;
+end;
+{$endif}
+
+function TPasMPUnboundedStack.TryPop(out Item):boolean;
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+var OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:TPasMPTaggedPointer;
+    StackItem:PPasMPUnboundedStackItem;
+begin
+ result:=false;
+ if assigned(fStack^.PointerValue) then begin
+{$ifdef CPU64}
+  NextHead.PointerValue:=nil;
+  NextHead.TagValue:=0;
+  OriginalHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,NextHead.Value);
+{$else}
+  OriginalHead.Value.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value.Value,-1,-1);
+{$endif}
+  if assigned(OriginalHead.PointerValue) then begin
+   NextHead.TagValue:=OriginalHead.TagValue+1;
+   NextHead.PointerValue:=PPasMPUnboundedStackItem(OriginalHead.PointerValue)^.Next.PointerValue;
+{$ifdef CPU64}
+   ResultHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,OriginalHead.Value);
+   if not ((ResultHead.PointerValue=OriginalHead.PointerValue) and (ResultHead.TagValue=OriginalHead.TagValue)) then begin
+    OriginalHead.PointerValue:=nil;
+   end;
+{$else}
+   if TPasMPInterlocked.CompareExchange(fStack^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)<>OriginalHead.Value.Value then begin
+    OriginalHead.PointerValue:=nil;
+   end;
+{$endif}
+  end;
+  StackItem:=PPasMPUnboundedStackItem(OriginalHead.PointerValue);
+  if assigned(StackItem) then begin
+   Move(StackItem^.Data,Item,fItemSize);
+   TPasMP.FreeMemAligned(StackItem);
+   result:=true;
+  end;
+ end;
+end;
+{$else}
+var StackItem:PPasMPStackItem;
+begin
+ result:=false;
+ fCriticalSection.Acquire;
+ try
+  if assigned(fStack) then begin
+   StackItem:=fStack;
+   fStack:=StackItem^.Next;
+   Move(StackItem^.Data,Item,fItemSize);
+   TPasMP.FreeMemAligned(StackItem);
+   result:=true;
+  end;
+ finally
+  fCriticalSection.Release;
+ end;
+end;
+{$endif}
+
+{$ifdef HAS_GENERICS}
+constructor TPasMPUnboundedTypedStackItem<T>.Create;
+begin
+ inherited Create;
+ if assigned(@fNext) and assigned(@fData) then begin
+  // For to suppress "Private field TPasMPUnboundedTypedStackItem$1.* is never used" warnings on FreePascal
+ end;
+end;
+
+destructor TPasMPUnboundedTypedStackItem<T>.Destroy;
+begin
+ inherited Destroy;
+end;
+
+class function TPasMPUnboundedTypedStackItem<T>.NewInstance:TObject;
+begin
+ TPasMP.GetMemAligned(result,InstanceSize,PasMPCPUCacheLineSize);
+ result:=InitInstance(result);
+end;
+
+procedure TPasMPUnboundedTypedStackItem<T>.FreeInstance;
+begin
+ CleanupInstance;
+ TPasMP.FreeMemAligned(self);
+end;
+
+constructor TPasMPUnboundedTypedStack<T>.Create;
+begin
+ inherited Create;
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+ TPasMP.GetMemAligned(fStack,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
+ fStack^.PointerValue:=nil;
+ fStack^.TagValue:=0;
+{$else}
+ fCriticalSection:=TPasMPCriticalSection.Create;
+ fStack:=nil;
+{$endif}
+end;
+
+destructor TPasMPUnboundedTypedStack<T>.Destroy;
+var Item:T;
+begin
+ while not IsEmpty do begin
+  Pop(Item);
+ end;
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+ TPasMP.FreeMemAligned(fStack);
+{$else}
+ fCriticalSection.Free;
+{$endif}
+ inherited Destroy;
+end;
+
+function TPasMPUnboundedTypedStack<T>.IsEmpty:boolean;
+begin
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+ result:=not assigned(fStack.PointerValue);
+{$else}
+ result:=not assigned(fStack);
+{$endif}
+end;
+
+procedure TPasMPUnboundedTypedStack<T>.Push(const Item:T);
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+var OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:TPasMPTaggedPointer;
+    StackItem:TPasMPUnboundedTypedStackItem<T>;
+begin
+ StackItem:=TPasMPUnboundedTypedStackItem<T>.Create;
+ StackItem.fData:=Item;
+ repeat
+{$ifdef CPU64}
+  NextHead.PointerValue:=nil;
+  NextHead.TagValue:=0;
+  OriginalHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,NextHead.Value);
+{$else}
+  OriginalHead.Value.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value.Value,-1,-1);
+{$endif}
+  StackItem.fNext.PointerValue:=OriginalHead.PointerValue;
+  NextHead.PointerValue:=StackItem;
+  NextHead.TagValue:=OriginalHead.TagValue+1;
+{$ifdef CPU64}
+  ResultHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,OriginalHead.Value);
+  if (ResultHead.PointerValue=OriginalHead.PointerValue) and (ResultHead.TagValue=OriginalHead.TagValue) then begin
+   break;
+  end;
+ until false;
+{$else}
+ until TPasMPInterlocked.CompareExchange(fStack^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)=OriginalHead.Value.Value;
+{$endif}
+end;
+{$else}
+var StackItem:TPasMPUnboundedTypedStackItem<T>;
+begin
+ fCriticalSection.Acquire;
+ try
+  StackItem:=TPasMPUnboundedTypedStackItem<T>.Create;
+  StackItem.fNext:=fStack;
+  StackItem.fData:=Item;
+  fStack:=StackItem;
+ finally
+  fCriticalSection.Release;
+ end;
+end;
+{$endif}
+
+function TPasMPUnboundedTypedStack<T>.TryPush(const Item:T):boolean;
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+var OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:TPasMPTaggedPointer;
+    StackItem:TPasMPUnboundedTypedStackItem<T>;
+begin
+ result:=false;
+ StackItem:=TPasMPUnboundedTypedStackItem<T>.Create;
+ StackItem.fData:=Item;
+ try
+{$ifdef CPU64}
+  NextHead.PointerValue:=nil;
+  NextHead.TagValue:=0;
+  OriginalHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,NextHead.Value);
+{$else}
+  OriginalHead.Value.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value.Value,-1,-1);
+{$endif}
+  StackItem.fNext.PointerValue:=OriginalHead.PointerValue;
+  NextHead.PointerValue:=StackItem;
+  NextHead.TagValue:=OriginalHead.TagValue+1;
+{$ifdef CPU64}
+  ResultHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,OriginalHead.Value);
+  if (ResultHead.PointerValue=OriginalHead.PointerValue) and (ResultHead.TagValue=OriginalHead.TagValue) then begin
+   result:=true;
+  end;
+{$else}
+  if TPasMPInterlocked.CompareExchange(fStack^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)=OriginalHead.Value.Value then begin
+   result:=true;
+  end;
+{$endif}
+ finally
+  if not result then begin
+   StackItem.Free;
+  end;
+ end;
+end;
+{$else}
+var StackItem:TPasMPUnboundedTypedStackItem<T>;
+begin
+ fCriticalSection.Acquire;
+ try
+  StackItem:=TPasMPUnboundedTypedStackItem<T>.Create;
+  StackItem.fNext:=fStack;
+  StackItem.fData:=Item;
+  fStack:=StackItem;
+  result:=true;
+ finally
+  fCriticalSection.Release;
+ end;
+end;
+{$endif}
+
+function TPasMPUnboundedTypedStack<T>.Pop(out Item:T):boolean;
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+var OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:TPasMPTaggedPointer;
+    StackItem:TPasMPUnboundedTypedStackItem<T>;
+begin
+ result:=false;
+ if assigned(fStack^.PointerValue) then begin
+  repeat
+{$ifdef CPU64}
+   NextHead.PointerValue:=nil;
+   NextHead.TagValue:=0;
+   OriginalHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,NextHead.Value);
+{$else}
+   OriginalHead.Value.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value.Value,-1,-1);
+{$endif}
+   if assigned(OriginalHead.PointerValue) then begin
+    NextHead.TagValue:=OriginalHead.TagValue+1;
+    StackItem:=OriginalHead.PointerValue;
+    NextHead.PointerValue:=StackItem.fNext.PointerValue;
+{$ifdef CPU64}
+    ResultHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,OriginalHead.Value);
+    if (ResultHead.PointerValue=OriginalHead.PointerValue) and (ResultHead.TagValue=OriginalHead.TagValue) then begin
+     break;
+    end;
+{$else}
+    if TPasMPInterlocked.CompareExchange(fStack^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)=OriginalHead.Value.Value then begin
+     break;
+    end;
+{$endif}
+   end else begin
+    break;
+   end;
+  until false;
+  StackItem:=OriginalHead.PointerValue;
+  if assigned(StackItem) then begin
+   try
+    Item:=StackItem.fData;
+   finally
+    StackItem.Free;
+   end;
+   result:=true;
+  end;
+ end;
+end;
+{$else}
+var StackItem:TPasMPUnboundedTypedStackItem<T>;
+begin
+ fCriticalSection.Acquire;
+ try
+  if assigned(fStack) then begin
+   StackItem:=fStack;
+   try
+    fStack:=StackItem.fNext;
+    Item:=StackItem.fData;
+   finally
+    StackItem.Free;
+   end;
+  end;
+ finally
+  fCriticalSection.Release;
+ end;
+end;
+{$endif}
+
+function TPasMPUnboundedTypedStack<T>.TryPop(out Item:T):boolean;
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+var OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:TPasMPTaggedPointer;
+    StackItem:TPasMPUnboundedTypedStackItem<T>;
+begin
+ result:=false;
+ if assigned(fStack^.PointerValue) then begin
+{$ifdef CPU64}
+  NextHead.PointerValue:=nil;
+  NextHead.TagValue:=0;
+  OriginalHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,NextHead.Value);
+{$else}
+  OriginalHead.Value.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value.Value,-1,-1);
+{$endif}
+  if assigned(OriginalHead.PointerValue) then begin
+   NextHead.TagValue:=OriginalHead.TagValue+1;
+   StackItem:=OriginalHead.PointerValue;
+   NextHead.PointerValue:=StackItem.fNext.PointerValue;
+{$ifdef CPU64}
+   ResultHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,OriginalHead.Value);
+   if not ((ResultHead.PointerValue=OriginalHead.PointerValue) and (ResultHead.TagValue=OriginalHead.TagValue)) then begin
+    OriginalHead.PointerValue:=nil;
+   end;
+{$else}
+   if TPasMPInterlocked.CompareExchange(fStack^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)<>OriginalHead.Value.Value then begin
+    OriginalHead.PointerValue:=nil;
+   end;
+{$endif}
+  end;
+  StackItem:=OriginalHead.PointerValue;
+  if assigned(StackItem) then begin
+   try
+    Item:=StackItem.fData;
+   finally
+    StackItem.Free;
+   end;
+   result:=true;
+  end;
+ end;
+end;
+{$else}
+var StackItem:TPasMPUnboundedTypedStackItem<T>;
+begin
+ fCriticalSection.Acquire;
+ try
+  result:=assigned(fStack);
+  if result then begin
+   StackItem:=fStack;
+   try
+    fStack:=StackItem.fNext;
+    Item:=StackItem.fData;
+   finally
+    StackItem.Free;
+   end;
+  end;
+ finally
+  fCriticalSection.Release;
+ end;
+end;
+{$endif}
 {$endif}
 
 constructor TPasMPJobTask.Create;
@@ -3985,10 +4658,10 @@ begin
  fMemoryPoolBuckets:=nil;
  fCountMemoryPoolBuckets:=1;
  SetLength(fMemoryPoolBuckets,fCountMemoryPoolBuckets);
- GetMemAligned(fMemoryPoolBuckets[0],SizeOf(TPasMPJobAllocatorMemoryPoolBucket),SizeOf(TPasMPJob));
+ TPasMP.GetMemAligned(fMemoryPoolBuckets[0],SizeOf(TPasMPJobAllocatorMemoryPoolBucket),SizeOf(TPasMPJob));
  fCountAllocatedJobs:=0;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- GetMemAligned(fFreeJobs,SizeOf(TPasMPTaggedPointer),SizeOf(TPasMPTaggedPointer));
+ TPasMP.GetMemAligned(fFreeJobs,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
  fFreeJobs^.PointerValue:=nil;
  fFreeJobs^.TagValue:=0;
 {$else}
@@ -4000,11 +4673,11 @@ destructor TPasMPJobAllocator.Destroy;
 var MemoryPoolBucketIndex:longint;
 begin
  for MemoryPoolBucketIndex:=0 to fCountMemoryPoolBuckets-1 do begin
-  FreeMemAligned(fMemoryPoolBuckets[MemoryPoolBucketIndex]);
+  TPasMP.FreeMemAligned(fMemoryPoolBuckets[MemoryPoolBucketIndex]);
  end;
  SetLength(fMemoryPoolBuckets,0);
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- FreeMemAligned(fFreeJobs);
+ TPasMP.FreeMemAligned(fFreeJobs);
 {$else}
  fCriticalSection.Free;
 {$endif}
@@ -4019,7 +4692,7 @@ begin
  if OldCountMemoryPoolBuckets<fCountMemoryPoolBuckets then begin
   SetLength(fMemoryPoolBuckets,fCountMemoryPoolBuckets);
   for MemoryPoolBucketIndex:=OldCountMemoryPoolBuckets to fCountMemoryPoolBuckets-1 do begin
-   GetMemAligned(fMemoryPoolBuckets[MemoryPoolBucketIndex],SizeOf(TPasMPJobAllocatorMemoryPoolBucket),SizeOf(TPasMPJob));
+   TPasMP.GetMemAligned(fMemoryPoolBuckets[MemoryPoolBucketIndex],SizeOf(TPasMPJobAllocatorMemoryPoolBucket),SizeOf(TPasMPJob));
   end;
  end else begin
   fCountMemoryPoolBuckets:=OldCountMemoryPoolBuckets;
@@ -4038,20 +4711,20 @@ begin
 {$ifdef CPU64}
    NextHead.PointerValue:=nil;
    NextHead.TagValue:=0;
-   OriginalHead.Value:=InterlockedCompareExchange128(fFreeJobs^.Value,NextHead.Value,NextHead.Value);
+   OriginalHead.Value:=TPasMPInterlocked.CompareExchange(fFreeJobs^.Value,NextHead.Value,NextHead.Value);
 {$else}
-   OriginalHead.Value.Value:=InterlockedCompareExchange64(fFreeJobs^.Value.Value,-1,-1);
+   OriginalHead.Value.Value:=TPasMPInterlocked.CompareExchange(fFreeJobs^.Value.Value,-1,-1);
 {$endif}
    if assigned(OriginalHead.PointerValue) then begin
     NextHead.TagValue:=OriginalHead.TagValue+1;
     NextHead.PointerValue:=PPasMPJob(OriginalHead.PointerValue)^.SingleLinkedList.PointerValue;
 {$ifdef CPU64}
-    ResultHead.Value:=InterlockedCompareExchange128(fFreeJobs^.Value,NextHead.Value,OriginalHead.Value);
+    ResultHead.Value:=TPasMPInterlocked.CompareExchange(fFreeJobs^.Value,NextHead.Value,OriginalHead.Value);
     if (ResultHead.PointerValue=OriginalHead.PointerValue) and (ResultHead.TagValue=OriginalHead.TagValue) then begin
      break;
     end;
 {$else}
-    if InterlockedCompareExchange64(fFreeJobs^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)=OriginalHead.Value.Value then begin
+    if TPasMPInterlocked.CompareExchange(fFreeJobs^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)=OriginalHead.Value.Value then begin
      break;
     end;
 {$endif}
@@ -4112,21 +4785,21 @@ begin
 {$ifdef CPU64}
   NextHead.PointerValue:=nil;
   NextHead.TagValue:=0;
-  OriginalHead.Value:=InterlockedCompareExchange128(fFreeJobs^.Value,NextHead.Value,NextHead.Value);
+  OriginalHead.Value:=TPasMPInterlocked.CompareExchange(fFreeJobs^.Value,NextHead.Value,NextHead.Value);
 {$else}
-  OriginalHead.Value.Value:=InterlockedCompareExchange64(fFreeJobs^.Value.Value,-1,-1);
+  OriginalHead.Value.Value:=TPasMPInterlocked.CompareExchange(fFreeJobs^.Value.Value,-1,-1);
 {$endif}
   Job^.SingleLinkedList.PointerValue:=OriginalHead.PointerValue;
   NextHead.PointerValue:=Job;
   NextHead.TagValue:=OriginalHead.TagValue+1;
 {$ifdef CPU64}
-  ResultHead.Value:=InterlockedCompareExchange128(fFreeJobs^.Value,NextHead.Value,OriginalHead.Value);
+  ResultHead.Value:=TPasMPInterlocked.CompareExchange(fFreeJobs^.Value,NextHead.Value,OriginalHead.Value);
   if (ResultHead.PointerValue=OriginalHead.PointerValue) and (ResultHead.TagValue=OriginalHead.TagValue) then begin
    break;
   end;
  until false;
 {$else}
- until InterlockedCompareExchange64(fFreeJobs^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)=OriginalHead.Value.Value;
+ until TPasMPInterlocked.CompareExchange(fFreeJobs^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)=OriginalHead.Value.Value;
 {$endif}
 {$else}
  fCriticalSection.Acquire;
@@ -4190,28 +4863,28 @@ begin
   // Acquire single-writer-side of lock
   repeat
 {$if defined(CPU386) or defined(CPUx86_64)}
-   ReadDependencyBarrier;
+   TPasMPMemoryBarrier.ReadDependency;
 {$else}
-   ReadBarrier;
+   TPasMPMemoryBarrier.Read;
 {$ifend}
    QueueLockState:=fQueueLockState and longint(longword($fffffffe));
-   if InterlockedCompareExchange(fQueueLockState,QueueLockState or 1,QueueLockState)=QueueLockState then begin
+   if TPasMPInterlocked.CompareExchange(fQueueLockState,QueueLockState or 1,QueueLockState)=QueueLockState then begin
     break;
    end else begin
-    Yield;
+    TPasMP.Yield;
    end;
   until false;
 {$if defined(CPU386) or defined(CPUx86_64)}
-  ReadDependencyBarrier;
+  TPasMPMemoryBarrier.ReadDependency;
 {$else}
-  ReadBarrier;
+  TPasMPMemoryBarrier.Read;
 {$ifend}
   while fQueueLockState<>1 do begin
-   Yield;
+   TPasMP.Yield;
 {$if defined(CPU386) or defined(CPUx86_64)}
-   ReadDependencyBarrier;
+   TPasMPMemoryBarrier.ReadDependency;
 {$else}
-   ReadBarrier;
+   TPasMPMemoryBarrier.Read;
 {$ifend}
   end;
  end;
@@ -4231,14 +4904,14 @@ begin
    mfence
   end;
 {$else}
-  ReadWriteBarrier;
+  TPasMPMemoryBarrier.ReadWrite;
 {$endif}
  finally
   // Release single-writer-side of lock
-  InterlockedExchangeAdd(fQueueLockState,0);
+  TPasMPInterlocked.Exchange(fQueueLockState,0);
  end;
 {$if not (defined(CPU386) or defined(CPUx86_64))}
- WriteBarrier;
+ TPasMPMemoryBarrier.Write;
 {$ifend}
 end;
 
@@ -4246,19 +4919,19 @@ procedure TPasMPJobQueue.PushJob(const AJob:PPasMPJob);
 var QueueBottom,QueueTop:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
- ReadBarrier;
+ TPasMPMemoryBarrier.Read;
 {$ifend}
  QueueBottom:=fQueueBottom;
 {$if defined(CPU386) or defined(CPUx86_64)}
- ReadDependencyBarrier;
+ TPasMPMemoryBarrier.ReadDependency;
 {$else}
- ReadBarrier;
+ TPasMPMemoryBarrier.Read;
 {$ifend}
  QueueTop:=fQueueTop;
 {$if defined(CPU386) or defined(CPUx86_64)}
- ReadDependencyBarrier;
+ TPasMPMemoryBarrier.ReadDependency;
 {$else}
- ReadBarrier;
+ TPasMPMemoryBarrier.Read;
 {$ifend}
  if (QueueBottom-QueueTop)>(fQueueSize-1) then begin
   // Full queue => non-lock-free resize
@@ -4271,13 +4944,13 @@ begin
  end;
 {$else}
 {$ifdef CPUx86_64}
- ReadWriteBarrier;
+ TPasMPMemoryBarrier.ReadWrite;
 {$endif}
 {$endif}
 {$if defined(CPU386) or defined(CPUx86_64)}
  fQueueBottom:=QueueBottom+1;
 {$else}
- InterlockedExchange(fQueueBottom,QueueBottom+1);
+ TPasMPInterlocked.Exchange(fQueueBottom,QueueBottom+1);
 {$ifend}
 end;
 
@@ -4285,39 +4958,39 @@ function TPasMPJobQueue.PopJob:PPasMPJob;
 var QueueBottom,QueueTop:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
- ReadBarrier;
+ TPasMPMemoryBarrier.Read;
 {$ifend}
  QueueBottom:=fQueueBottom-1;
 {$if defined(CPU386) or defined(CPUx86_64)}
- ReadDependencyBarrier;
+ TPasMPMemoryBarrier.ReadDependency;
 {$else}
- ReadBarrier;
+ TPasMPMemoryBarrier.Read;
 {$ifend}
- InterlockedExchange(fQueueBottom,QueueBottom);
+ TPasMPInterlocked.Exchange(fQueueBottom,QueueBottom);
 {$ifdef CPU386}
  asm
   mfence
  end;
 {$else}
- ReadWriteBarrier;
+ TPasMPMemoryBarrier.ReadWrite;
 {$endif}
  QueueTop:=fQueueTop;
  if QueueTop<=QueueBottom then begin
 {$if defined(CPU386) or defined(CPUx86_64)}
-  ReadDependencyBarrier;
+  TPasMPMemoryBarrier.ReadDependency;
 {$else}
-  ReadBarrier;
+  TPasMPMemoryBarrier.Read;
 {$ifend}
   result:=pointer(fQueueJobs[QueueBottom and fQueueMask]);
   if QueueTop=QueueBottom then begin
-   if InterlockedCompareExchange(fQueueTop,QueueTop+1,QueueTop)<>QueueTop then begin
+   if TPasMPInterlocked.CompareExchange(fQueueTop,QueueTop+1,QueueTop)<>QueueTop then begin
     // Failed race against steal operation
     result:=nil;
    end;
 {$if defined(CPU386) or defined(CPUx86_64)}
    fQueueBottom:=QueueTop+1;
 {$else}
-   InterlockedExchange(fQueueBottom,QueueTop+1);
+   TPasMPInterlocked.Exchange(fQueueBottom,QueueTop+1);
 {$ifend}
   end else begin
    // There's still more than one item left in the queue
@@ -4327,7 +5000,7 @@ begin
 {$if defined(CPU386) or defined(CPUx86_64)}
   fQueueBottom:=QueueTop;
 {$else}
-  InterlockedExchange(fQueueBottom,QueueTop);
+  TPasMPInterlocked.Exchange(fQueueBottom,QueueTop);
 {$ifend}
   result:=nil;
  end;
@@ -4340,32 +5013,32 @@ begin
 
  // Try to acquire multiple-reader-side of lock
 {$if not (defined(CPU386) or defined(CPUx86_64))}
- ReadBarrier;
+ TPasMPMemoryBarrier.Read;
 {$ifend}
 
  QueueLockState:=fQueueLockState and longint(longword($fffffffe));
- if InterlockedCompareExchange(fQueueLockState,QueueLockState+2,QueueLockState)=QueueLockState then begin
+ if TPasMPInterlocked.CompareExchange(fQueueLockState,QueueLockState+2,QueueLockState)=QueueLockState then begin
 
   begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
-   ReadBarrier;
+   TPasMPMemoryBarrier.Read;
 {$ifend}
    QueueTop:=fQueueTop;
 {$if defined(CPU386) or defined(CPUx86_64)}
-   ReadDependencyBarrier;
+   TPasMPMemoryBarrier.ReadDependency;
 {$else}
-   ReadBarrier;
+   TPasMPMemoryBarrier.Read;
 {$ifend}
    QueueBottom:=fQueueBottom;
    if QueueTop<QueueBottom then begin
     // Non-empty queue.
 {$if defined(CPU386) or defined(CPUx86_64)}
-    ReadDependencyBarrier;
+    TPasMPMemoryBarrier.ReadDependency;
 {$else}
-    ReadBarrier;
+    TPasMPMemoryBarrier.Read;
 {$ifend}
     result:=fQueueJobs[QueueTop and fQueueMask];
-    if InterlockedCompareExchange(fQueueTop,QueueTop+1,QueueTop)<>QueueTop then begin
+    if TPasMPInterlocked.CompareExchange(fQueueTop,QueueTop+1,QueueTop)<>QueueTop then begin
      // Failed race against steal operation
      result:=nil;
     end;
@@ -4374,7 +5047,7 @@ begin
 
   begin
    // Release multiple-reader-side of lock
-   InterlockedExchangeAdd(fQueueLockState,-2);
+   TPasMPInterlocked.Add(fQueueLockState,-2);
   end;
 
  end;
@@ -4555,7 +5228,7 @@ begin
 
    if not assigned(result) then begin
     // If we couldn't steal a job from any queue either, so we just yield our time slice for now
-    Yield;
+    TPasMP.Yield;
    end;
 
   end;
@@ -4576,9 +5249,9 @@ begin
  while not fSystemThread.Terminated do begin
   Job:=GetJob;
   if assigned(Job) then begin
-   InterlockedIncrement(fPasMPInstance.fWorkingJobWorkerThreads);
+   TPasMPInterlocked.Increment(fPasMPInstance.fWorkingJobWorkerThreads);
    fPasMPInstance.ExecuteJob(Job,self);
-   InterlockedDecrement(fPasMPInstance.fWorkingJobWorkerThreads);
+   TPasMPInterlocked.Decrement(fPasMPInstance.fWorkingJobWorkerThreads);
    SpinCount:=0;
   end else begin
    if SpinCount<CountMaxSpinCount then begin
@@ -4670,7 +5343,7 @@ begin
 
  fDoCPUCorePinning:=DoCPUCorePinning;
 
- fCountJobWorkerThreads:=GetCountOfHardwareThreads(fAvailableCPUCores)-ThreadHeadRoomForForeignTasks;
+ fCountJobWorkerThreads:=TPasMP.GetCountOfHardwareThreads(fAvailableCPUCores)-ThreadHeadRoomForForeignTasks;
  if fCountJobWorkerThreads<1 then begin
   fCountJobWorkerThreads:=1;
  end;
@@ -4733,7 +5406,7 @@ begin
   if assigned(JobWorkerThread.fSystemThread) then begin
    while JobWorkerThread.fSystemThread.ReturnValue=0 do begin
     WakeUpAll;
-    Yield;
+    TPasMP.Yield;
    end;
    JobWorkerThread.fSystemThread.WaitFor;
   end;
@@ -4762,7 +5435,7 @@ end;
 
 class function TPasMP.CreateGlobalInstance:TPasMP;
 begin
- MemoryBarrier;
+ TPasMPMemoryBarrier.Sync;
  if not assigned(GlobalPasMP) then begin
   GlobalPasMPCriticalSection.Acquire;
   try
@@ -4770,7 +5443,7 @@ begin
     GlobalPasMP:=TPasMP.Create(GlobalPasMPMaximalThreads,
                                GlobalPasMPThreadHeadRoomForForeignTasks,
                                GlobalPasMPDoCPUCorePinning);
-    MemoryBarrier;
+    TPasMPMemoryBarrier.Sync;
    end;
   finally
    GlobalPasMPCriticalSection.Release;
@@ -4796,6 +5469,296 @@ begin
  end;
  result:=GlobalPasMP;
 end;
+
+class procedure TPasMP.GetMemAligned(var p;Size:longint;Align:longint=PasMPCPUCacheLineSize);
+var Original,Aligned:pointer;
+    Mask:ptruint;
+begin
+ if (Align and (Align-1))<>0 then begin
+  Align:=RoundUpToPowerOfTwo(Align);
+ end;
+ Mask:=Align-1;
+ inc(Size,((Align shl 1)+SizeOf(pointer)));
+ GetMem(Original,Size);
+ FillChar(Original^,Size,#0);
+ Aligned:=pointer(ptruint(ptruint(Original)+SizeOf(pointer)));
+ if (Align>1) and ((ptruint(Aligned) and Mask)<>0) then begin
+  inc(ptruint(Aligned),ptruint(ptruint(Align)-(ptruint(Aligned) and Mask)));
+ end;
+ pointer(pointer(ptruint(ptruint(Aligned)-SizeOf(pointer)))^):=Original;
+ pointer(pointer(@p)^):=Aligned;
+end;
+
+class procedure TPasMP.FreeMemAligned(const p);
+var pp:pointer;
+begin
+ pp:=pointer(pointer(@p)^);
+ if assigned(pp) then begin
+  pp:=pointer(pointer(ptruint(ptruint(pp)-SizeOf(pointer)))^);
+  FreeMem(pp);
+ end;
+end;
+
+class function TPasMP.GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):longint;
+{$ifdef Windows}
+var PhysicalCores,LogicalCores,i,j:longint;
+    sinfo:SYSTEM_INFO;
+    dwProcessAffinityMask,dwSystemAffinityMask:TPasMPPtrUInt;
+ procedure GetCPUInfo(var PhysicalCores,LogicalCores:longint);
+ const RelationProcessorCore=0;
+       RelationNumaNode=1;
+       RelationCache=2;
+       RelationProcessorPackage=3;
+       RelationGroup=4;
+       RelationAll=$ffff;
+       CacheUnified=0;
+       CacheInstruction=1;
+       CacheData=2;
+       CacheTrace=3;
+ type TLogicalProcessorRelationship=dword;
+      TProcessorCacheType=dword;
+      TCacheDescriptor=packed record
+       Level:byte;
+       Associativity:byte;
+       LineSize:word;
+       Size:dword;
+       pcType:TProcessorCacheType;
+      end;
+      PSystemLogicalProcessorInformation=^TSystemLogicalProcessorInformation;
+      TSystemLogicalProcessorInformation=packed record
+       ProcessorMask:TPasMPPtrUInt;
+       case Relationship:TLogicalProcessorRelationship of
+        0:(
+         Flags:byte;
+        );
+        1:(
+         NodeNumber:dword;
+        );
+        2:(
+         Cache:TCacheDescriptor;
+        );
+        3:(
+         Reserved:array[0..1] of int64;
+        );
+      end;
+      TGetLogicalProcessorInformation=function(Buffer:PSystemLogicalProcessorInformation;out ReturnLength:DWORD):BOOL; stdcall;
+  function CountSetBits(Value:TPasMPPtrUInt):longint;
+  begin
+   result:=0;
+   while Value<>0 do begin
+    inc(result);
+    Value:=Value and (Value-1);
+   end;
+  end;
+ var GetLogicalProcessorInformation:TGetLogicalProcessorInformation;
+     Buffer:array of TSystemLogicalProcessorInformation;
+     ReturnLength:dword;
+     Index,Count:longint;
+ begin
+  Buffer:=nil;
+  PhysicalCores:=0;
+  LogicalCores:=0;
+  try
+   GetLogicalProcessorInformation:=GetProcAddress(GetModuleHandle('kernel32'),'GetLogicalProcessorInformation');
+   if assigned(GetLogicalProcessorInformation) then begin
+    SetLength(Buffer,16);
+    Count:=0;
+    repeat
+     ReturnLength:=length(Buffer)*SizeOf(TSystemLogicalProcessorInformation);
+     if GetLogicalProcessorInformation(@Buffer[0],ReturnLength) then begin
+      Count:=ReturnLength div SizeOf(TSystemLogicalProcessorInformation);
+     end else begin
+      if GetLastError=ERROR_INSUFFICIENT_BUFFER then begin
+       SetLength(Buffer,(ReturnLength div SizeOf(TSystemLogicalProcessorInformation))+1);
+       continue;
+      end;
+     end;
+     break;
+    until false;
+    if Count>0 then begin
+     PhysicalCores:=0;
+     for Index:=0 to Count-1 do begin
+      if Buffer[Index].Relationship=RelationProcessorCore then begin
+       inc(PhysicalCores);
+       inc(LogicalCores,CountSetBits(Buffer[Index].ProcessorMask));
+      end;
+     end;
+    end;
+   end;
+  finally
+   SetLength(Buffer,0);
+  end;
+ end;
+begin
+ GetCPUInfo(PhysicalCores,LogicalCores);
+ result:=LogicalCores;
+ if result=0 then begin
+  result:=PhysicalCores;
+ end;
+ GetSystemInfo(sinfo);
+ GetProcessAffinityMask(GetCurrentProcess,dwProcessAffinityMask,dwSystemAffinityMask);
+ SetLength(AvailableCPUCores,result);
+ j:=0;
+ for i:=0 to sinfo.dwNumberOfProcessors-1 do begin
+  if (dwProcessAffinityMask and (1 shl i))<>0 then begin
+   AvailableCPUCores[j]:=i;
+   inc(j);
+   if j>=result then begin
+    break;
+   end;
+  end;
+ end;
+ if result>j then begin
+  result:=j;
+  SetLength(AvailableCPUCores,result);
+ end;
+end;
+{$else}
+{$ifdef Linux}
+var i,j:longint;
+    CPUSet:int64;
+begin
+ result:=sysconf(_SC_NPROCESSORS_CONF);
+ SetLength(AvailableCPUCores,result);
+ sched_getaffinity(GetProcessID,SizeOf(CPUSet),@CPUSet);
+ j:=0;
+ for i:=0 to 127 do begin
+  if (CPUSet and (int64(1) and i))<>0 then begin
+   AvailableCPUCores[j]:=i;
+   inc(j);
+   if j>=result then begin
+    break;
+   end;
+  end;
+ end;
+ if result>j then begin
+  result:=j;
+  SetLength(AvailableCPUCores,result);
+ end;
+end;
+{$else}
+{$ifdef Solaris}
+var i:longint;
+begin
+ result:=sysconf(_SC_NPROC_ONLN);
+ SetLength(AvailableCPUCores,result);
+ for i:=0 to result-1 do begin
+  AvailableCPUCores[i]:=i;
+ end;
+end;
+{$else}
+{$ifdef Unix}
+var mib:array[0..1] of cint;
+    len:cint;
+    t:cint;
+    i:longint;
+begin
+ mib[0]:=CTL_HW;
+ mib[1]:=HW_AVAILCPU;
+ len:=SizeOf(t);
+ fpsysctl(PAnsiChar(@mib),2,@t,@len,nil,0);
+ if t<1 then begin
+  mib[1]:=HW_NCPU;
+  fpsysctl(PAnsiChar(@mib),2,@t,@len,nil,0);
+  if t<1 then begin
+   t:=1;
+  end;
+ end;
+ result:=t;
+ SetLength(AvailableCPUCores,result);
+ for i:=0 to result-1 do begin
+  AvailableCPUCores[i]:=i;
+ end;
+end;
+{$else}
+var i:longint;
+begin
+ result:=1;
+ SetLength(AvailableCPUCores,result);
+ for i:=0 to result-1 do begin
+  AvailableCPUCores[i]:=i;
+ end;
+end;
+{$endif}
+{$endif}
+{$endif}
+{$endif}
+
+class procedure TPasMP.Yield; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ SwitchToThread;
+end;
+{$else}
+{$ifdef Unix}
+{$ifdef usecthreads}
+begin
+ sched_yield;
+end;
+{$else}
+var timeout:timeval;
+begin
+ timeout.tv_sec:=0;
+ timeout.tv_usec:=0;
+ fpselect(0,nil,nil,nil,@timeout);
+end;
+{$endif}
+{$else}
+{$ifdef fpc}
+begin
+ ThreadSwitch;
+end;
+{$endif}
+{$endif}
+{$endif}
+
+class function TPasMP.Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean; {$ifdef Linux}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
+{$ifdef Linux}
+begin
+ result:=pthread_once(@OnceControl,InitRoutine)=0;
+end;
+{$else}
+var SavedOnceControl:TPasMPOnce;
+begin
+ result:=false;
+ SavedOnceControl:=OnceControl;
+{$ifdef CPU386}
+ asm
+  mfence
+ end;
+{$else}
+ TPasMPMemoryBarrier.ReadWrite;
+{$endif}
+ while SavedOnceControl<>1 do begin
+  if SavedOnceControl=0 then begin
+   if TPasMPInterlocked.CompareExchange(OnceControl,2,0)=0 then begin
+    try
+     InitRoutine;
+    finally
+     OnceControl:=1;
+    end;
+    result:=true;
+    exit;
+   end;
+  end;
+{$ifdef cpu386}
+  asm
+   db $f3,$90 // pause (rep nop)
+  end;
+{$else}
+  TPasMP.Yield;
+{$endif}
+{$ifdef CPU386}
+  asm
+   mfence
+  end;
+{$else}
+  TPasMPMemoryBarrier.ReadWrite;
+{$endif}
+  SavedOnceControl:=OnceControl;
+ end;
+end;
+{$endif}
 
 procedure TPasMP.Reset;
 var Index:longint;
@@ -4860,12 +5823,12 @@ var SavedWakeUpCounter:longint;
 begin
  fWakeUpConditionVariableLock.Acquire;
  try
-  InterlockedIncrement(fSleepingJobWorkerThreads);
+  TPasMPInterlocked.Increment(fSleepingJobWorkerThreads);
   SavedWakeUpCounter:=fWakeUpCounter;
   repeat
    fWakeUpConditionVariable.Wait(fWakeUpConditionVariableLock);
   until SavedWakeUpCounter<>fWakeUpCounter;
-  InterlockedDecrement(fSleepingJobWorkerThreads);
+  TPasMPInterlocked.Decrement(fSleepingJobWorkerThreads);
  finally
   fWakeUpConditionVariableLock.Release;
  end;
@@ -4930,7 +5893,7 @@ function TPasMP.AllocateJob(const MethodCode,MethodData,Data:pointer;const Paren
 var JobWorkerThread:TPasMPJobWorkerThread;
 begin
  if assigned(ParentJob) and (ParentJob^.State>=0) then begin
-  InterlockedIncrement(ParentJob^.State);
+  TPasMPInterlocked.Increment(ParentJob^.State);
  end;
  JobWorkerThread:=GetJobWorkerThread;
  if assigned(JobWorkerThread) then begin
@@ -5121,9 +6084,9 @@ var LastJob:PPasMPJob;
 begin
  while assigned(Job) and
        (Job^.State>=0) and
-       (InterlockedDecrement(Job^.State)<0) do begin
+       (TPasMPInterlocked.Decrement(Job^.State)<0) do begin
   LastJob:=Job;
-  Job:=InterlockedExchangePointer(pointer(Job^.ParentJob),nil);
+  Job:=TPasMPInterlocked.Exchange(pointer(Job^.ParentJob),nil);
   if (LastJob^.InternalData and PasMPJobFlagReleaseOnFinish)<>0 then begin
    FinishJobRelease(LastJob);
   end;
@@ -5242,11 +6205,11 @@ begin
      if SpinCount<CountMaxSpinCount then begin
       inc(SpinCount);
      end else begin
-      Yield;
+      TPasMP.Yield;
      end;
     end;
    end else begin
-    Yield;
+    TPasMP.Yield;
    end;
   end;
  end;
@@ -5284,11 +6247,11 @@ begin
       if SpinCount<CountMaxSpinCount then begin
        inc(SpinCount);
       end else begin
-       Yield;
+       TPasMP.Yield;
       end;
      end;
     end else begin
-     Yield;
+     TPasMP.Yield;
     end;
    end;
   until false;
