@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-14-09-51-0000                       *
+ *                        Version 2016-02-14-11-00-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -339,13 +339,59 @@ type TPasMPAvailableCPUCores=array of longint;
 
      TPasMPEvent=class(TEvent);
 
-     TPasMPCriticalSection=class(TCriticalSection);
-
-     TPasMPMutex=class(TCriticalSection);
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPCriticalSection=class(TCriticalSection)
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TRTLCriticalSection))-1] of byte;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPLock=class{$if not (defined(Windows) or defined(Unix))}(TCriticalSection){$ifend}
-{$if defined(Windows) or defined(Unix)}
+     TPasMPMutex=class
+{$ifdef Windows}
+      private
+       fMutex:THandle;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TRTLCriticalSection))-1] of byte;
+{$else}
+{$ifdef Unix}
+      private
+       fMutex:pthread_mutex_t;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_mutex_t))-1] of byte;
+{$else}
+      private
+       fCriticalSection:TPasMPCriticalSection;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPCriticalSection))-1] of byte;
+{$endif}
+{$endif}
+      public
+       constructor Create; overload;
+{$ifdef Unix}
+       constructor Create(const lpMutexAttributes:pointer); overload;
+{$endif}
+{$ifdef Windows}
+       constructor Create(const lpMutexAttributes:pointer;const bInitialOwner:boolean;const lpName:string); overload;
+       constructor Create(const DesiredAccess:longword;const bInitialOwner:boolean;const lpName:string); overload;
+{$endif}
+       destructor Destroy; override;
+       procedure Acquire; {$ifdef CAN_INLINE}inline;{$endif}
+       procedure Release; {$ifdef CAN_INLINE}inline;{$endif}
+{$ifdef Windows}
+       property Mutex:THandle read fMutex;
+{$else}
+{$ifdef Unix}
+       property Mutex:pthread_mutex_t read fMutex;
+{$else}
+       property CriticalSection:TPasMPCriticalSection read fCriticalSection;
+{$endif}
+{$endif}
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPLock=class
 {$ifdef Windows}
       private
        fCriticalSection:TRTLCriticalSection;
@@ -357,6 +403,11 @@ type TPasMPAvailableCPUCores=array of longint;
        fMutex:pthread_mutex_t;
       protected
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_mutex_t))-1] of byte;
+{$else}
+      private
+       fCriticalSection:TPasMPCriticalSection;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPCriticalSection))-1] of byte;
 {$endif}
 {$endif}
       public
@@ -364,10 +415,6 @@ type TPasMPAvailableCPUCores=array of longint;
        destructor Destroy; override;
        procedure Acquire; {$ifdef CAN_INLINE}inline;{$endif}
        procedure Release; {$ifdef CAN_INLINE}inline;{$endif}
-{$else}
-      protected
-       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TRTLCriticalSection))-1] of byte;
-{$ifend}
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -1895,7 +1942,130 @@ begin
  result:=(ThreadID*83492791) xor ((ThreadID shr 24)*19349669) xor ((ThreadID shr 16)*73856093) xor ((ThreadID shr 8)*50331653);
 end;
 
-{$if defined(Windows) or defined(Unix)}
+constructor TPasMPMutex.Create;
+begin
+ inherited Create;
+{$ifdef Windows}
+ fMutex:=CreateMutex(nil,false,nil);
+ if fMutex=0 then begin
+  RaiseLastOSError;
+ end;
+{$else}
+{$ifdef Unix}
+ pthread_mutex_init(@fMutex,nil);
+{$else}
+ fCriticalSection:=TCriticalSection.Create;
+{$endif}
+{$endif}
+end;
+
+{$ifdef Unix}
+constructor TPasMPMutex.Create(const lpMutexAttributes:pointer);
+begin
+ inherited Create;
+{$ifdef Windows}
+ fMutex:=CreateMutex(lpMutexAttributes,false,'');
+ if fMutex=0 then begin
+  RaiseLastOSError;
+ end;
+{$else}
+{$ifdef Unix}
+ pthread_mutex_init(@fMutex,lpMutexAttributes);
+{$else}
+ fCriticalSection:=TCriticalSection.Create;
+{$endif}
+{$endif}
+end;
+{$endif}
+
+{$ifdef Windows}
+constructor TPasMPMutex.Create(const lpMutexAttributes:pointer;const bInitialOwner:boolean;const lpName:string);
+begin
+ inherited Create;
+{$ifdef Windows}
+ fMutex:=CreateMutex(lpMutexAttributes,bInitialOwner,PChar(lpName));
+ if fMutex=0 then begin
+  RaiseLastOSError;
+ end;
+{$else}
+{$ifdef Unix}
+ pthread_mutex_init(@fMutex,lpMutexAttributes);
+{$else}
+ fCriticalSection:=TCriticalSection.Create;
+{$endif}
+{$endif}
+end;
+
+constructor TPasMPMutex.Create(const DesiredAccess:longword;const bInitialOwner:boolean;const lpName:string);
+begin
+ inherited Create;
+{$ifdef Windows}
+ fMutex:=OpenMutex(DesiredAccess,bInitialOwner,PChar(lpName));
+ if fMutex=0 then begin
+  RaiseLastOSError;
+ end;
+{$else}
+{$ifdef Unix}
+ pthread_mutex_init(@fMutex,nil);
+{$else}
+ fCriticalSection:=TCriticalSection.Create;
+{$endif}
+{$endif}
+end;
+{$endif}
+
+destructor TPasMPMutex.Destroy;
+begin
+{$ifdef Windows}
+ CloseHandle(fMutex);
+{$else}
+{$ifdef Unix}
+ pthread_mutex_destroy(@fMutex);
+{$else}
+ fCriticalSection.Free;
+{$endif}
+{$endif}
+ inherited Destroy;
+end;
+
+procedure TPasMPMutex.Acquire; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+{$ifdef Windows}
+ case WaitForSingleObject(fMutex,INFINITE) of
+  WAIT_OBJECT_0:begin
+  end;
+  WAIT_TIMEOUT:begin
+  end;
+  WAIT_ABANDONED:begin
+  end;
+  else begin
+   RaiseLastOSError;
+  end;
+ end;
+{$else}
+{$ifdef Unix}
+ pthread_mutex_lock(@fMutex);
+{$else}
+ fCriticalSection.Acquire;
+{$endif}
+{$endif}
+end;
+
+procedure TPasMPMutex.Release; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+{$ifdef Windows}
+ if not ReleaseMutex(fMutex) then begin
+  RaiseLastOSError;
+ end;
+{$else}
+{$ifdef Unix}
+ pthread_mutex_unlock(@fMutex);
+{$else}
+ fCriticalSection.Release;
+{$endif}
+{$endif}
+end;
+
 constructor TPasMPLock.Create;
 begin
  inherited Create;
@@ -1905,7 +2075,7 @@ begin
 {$ifdef Unix}
  pthread_mutex_init(@fMutex,nil);
 {$else}
- {$error Unsupported target platform}
+ fCriticalSection:=TPasMPCriticalSection.Create;
 {$endif}
 {$endif}
 end;
@@ -1918,7 +2088,7 @@ begin
 {$ifdef Unix}
  pthread_mutex_destroy(@fMutex);
 {$else}
- {$error Unsupported target platform}
+ fCriticalSection.Free;
 {$endif}
 {$endif}
  inherited Destroy;
@@ -1932,7 +2102,7 @@ begin
 {$ifdef Unix}
  pthread_mutex_lock(@fMutex);
 {$else}
- {$error Unsupported target platform}
+ fCriticalSection.Acquire;
 {$endif}
 {$endif}
 end;
@@ -1945,11 +2115,10 @@ begin
 {$ifdef Unix}
  pthread_mutex_unlock(@fMutex);
 {$else}
- {$error Unsupported target platform}
+ fCriticalSection.Release;
 {$endif}
 {$endif}
 end;
-{$ifend}
 
 constructor TPasMPConditionVariable.Create;
 begin
