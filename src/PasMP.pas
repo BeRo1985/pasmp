@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-14-13-08-0000                       *
+ *                        Version 2016-02-14-13-16-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -510,7 +510,7 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure Release; overload; override; // Release a number of resource elements. It never blocks, but it may wake up waiting threads.
        function Acquire(const AcquireCount:longint;out Count:longint):longint; reintroduce; overload;
        function Release(const ReleaseCount:longint;out Count:longint):longint; reintroduce; overload;
-       function Wait:TWaitResult; // Block until the inverted semaphore reaches zero
+       function Wait(const dwMilliSeconds:longword=INFINITE):TWaitResult; // Block until the inverted semaphore reaches zero
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -2602,15 +2602,22 @@ begin
  end;
 end;
 
-function TPasMPInvertedSemaphore.Wait:TWaitResult;
+function TPasMPInvertedSemaphore.Wait(const dwMilliSeconds:longword=INFINITE):TWaitResult;
 begin
  result:=wrSignaled;
  fConditionVariableLock.Acquire;
  try
   while fCurrentCount<>0 do begin
-   result:=fConditionVariable.Wait(fConditionVariableLock,INFINITE);
-   if result<>wrSignaled then begin
-    break;
+   result:=fConditionVariable.Wait(fConditionVariableLock,dwMilliSeconds);
+   if dwMilliSeconds=INFINITE then begin
+    // special case due to spurious wakeups of condition variables
+    if not (result in [wrSignaled,wrTimeOut]) then begin
+     break;
+    end;
+   end else begin
+    if result<>wrSignaled then begin
+     break;
+    end;
    end;
   end;
  finally
