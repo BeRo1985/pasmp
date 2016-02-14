@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-14-09-03-0000                       *
+ *                        Version 2016-02-14-09-51-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -341,8 +341,10 @@ type TPasMPAvailableCPUCores=array of longint;
 
      TPasMPCriticalSection=class(TCriticalSection);
 
+     TPasMPMutex=class(TCriticalSection);
+
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPMutex=class{$if not (defined(Windows) or defined(Unix))}(TCriticalSection){$ifend}
+     TPasMPLock=class{$if not (defined(Windows) or defined(Unix))}(TCriticalSection){$ifend}
 {$if defined(Windows) or defined(Unix)}
 {$ifdef Windows}
       private
@@ -392,10 +394,10 @@ type TPasMPAvailableCPUCores=array of longint;
        fWaitCounter:longint;
        fReleaseCounter:longint;
        fGenerationCounter:longint;
-       fMutex:TPasMPMutex;
+       fLock:TPasMPLock;
        fEvent:TPasMPEvent;
       protected
-       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*3)+SizeOf(TPasMPMutex)+SizeOf(TPasMPEvent)))-1] of byte;
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*3)+SizeOf(TPasMPLock)+SizeOf(TPasMPEvent)))-1] of byte;
 {$endif}
 {$endif}
       public
@@ -403,7 +405,7 @@ type TPasMPAvailableCPUCores=array of longint;
        destructor Destroy; override;
        procedure Signal; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure Broadcast; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       function Wait(const Mutex:TPasMPMutex;const dwMilliSeconds:longword=INFINITE):TWaitResult; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       function Wait(const Lock:TPasMPLock;const dwMilliSeconds:longword=INFINITE):TWaitResult; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
      end;     
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -423,10 +425,10 @@ type TPasMPAvailableCPUCores=array of longint;
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-(SizeOf(longint)*3))-1] of byte;
 {$else}
        fCurrentCount:longint;
-       fMutex:TPasMPMutex;
+       fLock:TPasMPLock;
        fEvent:TPasMPEvent;
       protected
-       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*3)+SizeOf(TPasMPMutex)+SizeOf(TPasMPEvent)))-1] of byte;
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*3)+SizeOf(TPasMPLock)+SizeOf(TPasMPEvent)))-1] of byte;
 {$endif}
 {$endif}
       public
@@ -459,10 +461,10 @@ type TPasMPAvailableCPUCores=array of longint;
       private
        fReaders:longint;
        fWriters:longint;
-       fMutex:TPasMPMutex;
+       fLock:TPasMPLock;
        fConditionVariable:TPasMPConditionVariable;
       protected
-       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*2)+SizeOf(TPasMPMutex)+SizeOf(TPasMPConditionVariable)))-1] of byte;
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*2)+SizeOf(TPasMPLock)+SizeOf(TPasMPConditionVariable)))-1] of byte;
 {$endif}
 {$endif}
       public
@@ -495,10 +497,10 @@ type TPasMPAvailableCPUCores=array of longint;
 {$else}
       private
        fCount:longint;
-       fMutex:TPasMPMutex;
+       fLock:TPasMPLock;
        fConditionVariable:TPasMPConditionVariable;
       protected
-       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-(SizeOf(longint)+SizeOf(TPasMPMutex)+SizeOf(TPasMPConditionVariable)))-1] of byte;
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-(SizeOf(longint)+SizeOf(TPasMPLock)+SizeOf(TPasMPConditionVariable)))-1] of byte;
 {$endif}
 {$endif}
       public
@@ -543,10 +545,10 @@ type TPasMPAvailableCPUCores=array of longint;
       private
        fCount:longint;
        fTotal:longint;
-       fMutex:TPasMPMutex;
+       fLock:TPasMPLock;
        fConditionVariable:TPasMPConditionVariable;
       protected
-       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*2)+SizeOf(TPasMPMutex)+SizeOf(TPasMPConditionVariable)))-1] of byte;
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*2)+SizeOf(TPasMPLock)+SizeOf(TPasMPConditionVariable)))-1] of byte;
 {$endif}
       public
        constructor Create(const Count:longint);
@@ -702,7 +704,7 @@ type TPasMPAvailableCPUCores=array of longint;
        fFreeJobs:PPasMPTaggedPointer;
 {$else}
        fFreeJobs:PPasMPJob;
-       fMutex:TPasMPMutex;
+       fLock:TPasMPLock;
 {$endif}
        fMemoryPoolBuckets:TPPasMPJobAllocatorMemoryPoolBuckets;
        fCountMemoryPoolBuckets:longint;
@@ -821,14 +823,14 @@ type TPasMPAvailableCPUCores=array of longint;
        fWorkingJobWorkerThreads:longint;
        fSystemIsReadyEvent:TPasMPEvent;
        fWakeUpCounter:longint;
-       fWakeUpMutex:TPasMPMutex;
+       fWakeUpLock:TPasMPLock;
        fWakeUpConditionVariable:TPasMPConditionVariable;
-       fMutex:TPasMPMutex;
-       fJobAllocatorMutex:TPasMPMutex;
+       fLock:TPasMPLock;
+       fJobAllocatorLock:TPasMPLock;
        fJobAllocator:TPasMPJobAllocator;
        fJobQueue:TPasMPJobQueue;
 {$ifndef UseThreadLocalStorage}
-       fJobWorkerThreadHashTableMutex:TPasMPMutex;
+       fJobWorkerThreadHashTableLock:TPasMPLock;
        fJobWorkerThreadHashTable:TPasMPJobWorkerThreadHashTable;
 {$endif}
        class procedure DestroyGlobalInstance;
@@ -1002,7 +1004,7 @@ threadvar CurrentJobWorkerThread:TPasMPJobWorkerThread;
 {$ifend}
 {$endif}
 
-var GlobalPasMPMutex:TPasMPMutex=nil;
+var GlobalPasMPLock:TPasMPLock=nil;
 
 {$ifdef fpc}
  {$undef OldDelphi}
@@ -1894,7 +1896,7 @@ begin
 end;
 
 {$if defined(Windows) or defined(Unix)}
-constructor TPasMPMutex.Create;
+constructor TPasMPLock.Create;
 begin
  inherited Create;
 {$ifdef Windows}
@@ -1908,7 +1910,7 @@ begin
 {$endif}
 end;
 
-destructor TPasMPMutex.Destroy;
+destructor TPasMPLock.Destroy;
 begin
 {$ifdef Windows}
  DeleteCriticalSection(fCriticalSection);
@@ -1922,7 +1924,7 @@ begin
  inherited Destroy;
 end;
 
-procedure TPasMPMutex.Acquire; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPLock.Acquire; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 begin
 {$ifdef Windows}
  EnterCriticalSection(fCriticalSection);
@@ -1935,7 +1937,7 @@ begin
 {$endif}
 end;
 
-procedure TPasMPMutex.Release; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPLock.Release; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 begin
 {$ifdef Windows}
  LeaveCriticalSection(fCriticalSection);
@@ -1959,7 +1961,7 @@ begin
  pthread_cond_init(@fConditionVariable,nil);
 {$else}
  fWaitCounter:=0;
- fMutex:=TPasMPMutex.Create;
+ fLock:=TPasMPLock.Create;
  fReleaseCounter:=0;
  fGenerationCounter:=0;
  fEvent:=TPasMPEvent.Create(nil,true,false,'');
@@ -1974,17 +1976,17 @@ begin
 {$ifdef Unix}
  pthread_cond_destroy(@fConditionVariable);
 {$else}
- fMutex.Free;
+ fLock.Free;
  fEvent.Free;
 {$endif}
 {$endif}
  inherited Destroy;
 end;
 
-function TPasMPConditionVariable.Wait(const Mutex:TPasMPMutex;const dwMilliSeconds:longword=INFINITE):TWaitResult; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+function TPasMPConditionVariable.Wait(const Lock:TPasMPLock;const dwMilliSeconds:longword=INFINITE):TWaitResult; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef Windows}
 begin
- if SleepConditionVariableCS(@fConditionVariable,@Mutex.fCriticalSection,dwMilliSeconds) then begin
+ if SleepConditionVariableCS(@fConditionVariable,@Lock.fCriticalSection,dwMilliSeconds) then begin
   result:=wrSignaled;
  end else begin
   case GetLastError of
@@ -2002,7 +2004,7 @@ end;
 var TimeSpec_:TTimeSpec;
 begin
  if dwMilliSeconds=INFINITE then begin
-  case pthread_cond_wait(@fConditionVariable,@Mutex.fMutex) of
+  case pthread_cond_wait(@fConditionVariable,@Lock.fMutex) of
    0:begin
     result:=wrSignaled;
    end;
@@ -2019,7 +2021,7 @@ begin
  end else begin
   TimeSpec_.tv_sec:=dwMilliSeconds div 1000;
   TimeSpec_.tv_nsec:=(dwMilliSeconds mod 1000)*1000000000;
-  case pthread_cond_timedwait(@fConditionVariable,@Mutex.fMutex,@TimeSpec_) of
+  case pthread_cond_timedwait(@fConditionVariable,@Lock.fMutex,@TimeSpec_) of
    0:begin
     result:=wrSignaled;
    end;
@@ -2042,15 +2044,15 @@ begin
 
  result:=wrError;
 
- fMutex.Acquire;
+ fLock.Acquire;
  try
   inc(fWaitCounter);
   SavedGenerationCounter:=fGenerationCounter;
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
 
- Mutex.Release;
+ Lock.Release;
  try
   repeat
    case fEvent.WaitFor(dwMilliSeconds) of
@@ -2058,7 +2060,7 @@ begin
      try
       WaitDone:=(fReleaseCounter>0) and (SavedGenerationCounter<>fGenerationCounter);
      finally
-      fMutex.Release;
+      fLock.Release;
      end;
      if WaitDone then begin
       result:=wrSignaled;
@@ -2079,16 +2081,16 @@ begin
    end;
   until WaitDone;
  finally
-  Mutex.Acquire;
+  Lock.Acquire;
  end;
 
- fMutex.Acquire;
+ fLock.Acquire;
  try
   dec(fWaitCounter);
   dec(fReleaseCounter);
   WasLastWaiter:=fReleaseCounter=0;
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
 
  if WasLastWaiter then begin
@@ -2111,7 +2113,7 @@ begin
 end;
 {$else}
 begin
- fMutex.Acquire;
+ fLock.Acquire;
  try
   if fWaitCounter>fReleaseCounter then begin
    inc(fReleaseCounter);
@@ -2119,7 +2121,7 @@ begin
    fEvent.SetEvent;
   end;
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
 end;
 {$endif}
@@ -2137,7 +2139,7 @@ begin
 end;
 {$else}
 begin
- fMutex.Acquire;
+ fLock.Acquire;
  try
   if fWaitCounter>0 then begin
    fReleaseCounter:=fWaitCounter;
@@ -2145,7 +2147,7 @@ begin
    fEvent.SetEvent;
   end;
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
 end;
 {$endif}
@@ -2163,7 +2165,7 @@ begin
  sem_init(@fHandle,0,InitialCount);
 {$else}
  fCurrentCount:=fInitialCount;
- fMutex:=TPasMPMutex.Create;
+ fLock:=TPasMPLock.Create;
  fEvent:=TPasMPEvent.Create(nil,false,false,'');
 {$endif}
 {$endif}
@@ -2178,7 +2180,7 @@ begin
  sem_destroy(@fHandle);
 {$else}
  fEvent.Free;
- fMutex.Free;
+ fLock.Free;
 {$endif}
 {$endif}
  inherited Destroy;
@@ -2242,14 +2244,14 @@ begin
  for Counter:=1 to AcquireCount do begin
   result:=wrSignaled;
   repeat
-   fMutex.Acquire;
+   fLock.Acquire;
    try
     Done:=fCurrentCount<>0;
     if Done then begin
      dec(fCurrentCount);
     end;
    finally
-    fMutex.Release;
+    fLock.Release;
    end;
    if Done then begin
     break;
@@ -2288,7 +2290,7 @@ end;
 var WakeUp:boolean;
 begin
  WakeUp:=false;
- fMutex.Acquire;
+ fLock.Acquire;
  try
   if ((fCurrentCount+ReleaseCount)<fCurrentCount) or
      ((fCurrentCount+ReleaseCount)>fMaximumCount) then begin
@@ -2305,7 +2307,7 @@ begin
    result:=fCurrentCount;
   end;
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
  if WakeUp then begin
   fEvent.SetEvent;
@@ -2325,7 +2327,7 @@ begin
 {$else}
  fReaders:=0;
  fWriters:=0;
- fMutex:=TPasMPMutex.Create;
+ fLock:=TPasMPLock.Create;
  fConditionVariable:=TPasMPConditionVariable.Create;
 {$endif}
 {$endif}
@@ -2339,7 +2341,7 @@ begin
  pthread_rwlock_destroy(@fReadWriteLock);
 {$else}
  fConditionVariable.Free;
- fMutex.Free;
+ fLock.Free;
 {$endif}
 {$endif}
  inherited Destroy;
@@ -2358,14 +2360,14 @@ end;
 {$else}
 var State:longint;
 begin
- fMutex.Acquire;
+ fLock.Acquire;
  try
   while fWriters<>0 do begin
-   fConditionVariable.Wait(fMutex,INFINITE);
+   fConditionVariable.Wait(fLock,INFINITE);
   end;
   inc(fReaders);
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
 end;
 {$endif}
@@ -2384,14 +2386,14 @@ end;
 {$else}
 var State:longint;
 begin
- fMutex.Acquire;
+ fLock.Acquire;
  try
   result:=fWriters=0;
   if result then begin
    inc(fReaders);
   end;
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
 end;
 {$endif}
@@ -2409,14 +2411,14 @@ begin
 end;
 {$else}
 begin
- fMutex.Acquire;
+ fLock.Acquire;
  try
   dec(fReaders);
   if fReaders=0 then begin
    fConditionVariable.Broadcast;
   end;
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
 end;
 {$endif}
@@ -2434,14 +2436,14 @@ begin
 end;
 {$else}
 begin
- fMutex.Acquire;
+ fLock.Acquire;
  try
   while (fReaders<>0) or (fWriters<>0) do begin
-   fConditionVariable.Wait(fMutex,INFINITE);
+   fConditionVariable.Wait(fLock,INFINITE);
   end;
   inc(fWriters);
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
 end;
 {$endif}
@@ -2459,14 +2461,14 @@ begin
 end;
 {$else}
 begin
- fMutex.Acquire;
+ fLock.Acquire;
  try
   result:=(fReaders=0) and (fWriters=0);
   if result then begin
    inc(fWriters);
   end;
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
 end;
 {$endif}
@@ -2484,14 +2486,14 @@ begin
 end;
 {$else}
 begin
- fMutex.Acquire;
+ fLock.Acquire;
  try
   dec(fWriters);
   if fWriters=0 then begin
    fConditionVariable.Broadcast;
   end;
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
 end;
 {$endif}
@@ -2511,15 +2513,15 @@ begin
 end;
 {$else}
 begin
- fMutex.Acquire;
+ fLock.Acquire;
  try
   dec(fReaders);
   while (fWriters<>0) and (fReaders<>0) do begin
-   fConditionVariable.Wait(fMutex,INFINITE);
+   fConditionVariable.Wait(fLock,INFINITE);
   end;
   inc(fWriters);
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
 end;
 {$endif}
@@ -2539,15 +2541,15 @@ begin
 end;
 {$else}
 begin
- fMutex.Acquire;
+ fLock.Acquire;
  try
   dec(fWriters);
   while fWriters<>0 do begin
-   fConditionVariable.Wait(fMutex,INFINITE);
+   fConditionVariable.Wait(fLock,INFINITE);
   end;
   inc(fReaders);
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
 end;
 {$endif}
@@ -2563,7 +2565,7 @@ begin
  pthread_rwlock_init(@fReadWriteLock,nil);
 {$else}
  fCount:=0;
- fMutex:=TPasMPMutex.Create;
+ fLock:=TPasMPLock.Create;
  fConditionVariable:=TPasMPConditionVariable.Create;
 {$endif}
 {$endif}
@@ -2577,7 +2579,7 @@ begin
  pthread_rwlock_destroy(@fReadWriteLock);
 {$else}
  fConditionVariable.Free;
- fMutex.Free;
+ fLock.Free;
 {$endif}
 {$endif}
  inherited Destroy;
@@ -2595,14 +2597,14 @@ begin
 end;
 {$else}
 begin
- fMutex.Acquire;
+ fLock.Acquire;
  try
   while fCount<>0 do begin
-   fConditionVariable.Wait(fMutex,INFINITE);
+   fConditionVariable.Wait(fLock,INFINITE);
   end;
   inc(fCount);
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
 end;
 {$endif}
@@ -2620,14 +2622,14 @@ begin
 end;
 {$else}
 begin
- fMutex.Acquire;
+ fLock.Acquire;
  try
   result:=fCount=0;
   if result then begin
    inc(fCount);
   end;
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
 end;
 {$endif}
@@ -2645,14 +2647,14 @@ begin
 end;
 {$else}
 begin
- fMutex.Acquire;
+ fLock.Acquire;
  try
   dec(fCount);
   if fCount=0 then begin
    fConditionVariable.Broadcast;
   end;
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
 end;
 {$endif}
@@ -2818,7 +2820,7 @@ begin
 {$else}
  fCount:=Count;
  fTotal:=0;
- fMutex:=TPasMPMutex.Create;
+ fLock:=TPasMPLock.Create;
  fConditionVariable:=TPasMPConditionVariable.Create;
 {$endif}
 end;
@@ -2828,17 +2830,17 @@ begin
 {$ifdef unix}
  pthread_barrier_destroy(@fBarrier);
 {$else}
- fMutex.Acquire;
+ fLock.Acquire;
  try
   while fTotal>PasMPBarrierFlag do begin
    // Wait until everyone exits the barrier
-   fConditionVariable.Wait(fMutex,INFINITE);
+   fConditionVariable.Wait(fLock,INFINITE);
   end;
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
  fConditionVariable.Free;
- fMutex.Free;
+ fLock.Free;
 {$endif}
  inherited Destroy;
 end;
@@ -2850,11 +2852,11 @@ begin
 end;
 {$else}
 begin
- fMutex.Acquire;
+ fLock.Acquire;
  try
   while fTotal>PasMPBarrierFlag do begin
    // Wait until everyone exits the barrier
-   fConditionVariable.Wait(fMutex,INFINITE);
+   fConditionVariable.Wait(fLock,INFINITE);
   end;
   if fTotal=PasMPBarrierFlag then begin
    // Are we the first to enter?
@@ -2868,7 +2870,7 @@ begin
   end else begin
    while fTotal<PasMPBarrierFlag do begin
     // Wait until enough threads enter the barrier
-    fConditionVariable.Wait(fMutex,INFINITE);
+    fConditionVariable.Wait(fLock,INFINITE);
    end;
    dec(fTotal);
    if ftotal=PasMPBarrierFlag then begin
@@ -2878,7 +2880,7 @@ begin
    result:=false;
   end;
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
 end;
 {$endif}
@@ -3598,7 +3600,7 @@ begin
  inherited Create;
  fJobWorkerThread:=AJobWorkerThread;
 {$ifndef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- fMutex:=TPasMPMutex.Create;
+ fLock:=TPasMPLock.Create;
 {$endif}
  fMemoryPoolBuckets:=nil;
  fCountMemoryPoolBuckets:=1;
@@ -3624,7 +3626,7 @@ begin
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
  FreeMemAligned(fFreeJobs);
 {$else}
- fMutex.Free;
+ fLock.Free;
 {$endif}
  inherited Destroy;
 end;
@@ -3684,7 +3686,7 @@ begin
  end;
 {$else}
  if assigned(fFreeJobs) then begin
-  fMutex.Acquire;
+  fLock.Acquire;
   try
    if assigned(fFreeJobs) then begin
     result:=fFreeJobs;
@@ -3693,7 +3695,7 @@ begin
     result:=nil;
    end;
   finally
-   fMutex.Release;
+   fLock.Release;
   end;
   if assigned(result) then begin
    exit;
@@ -3747,12 +3749,12 @@ begin
  until InterlockedCompareExchange64(fFreeJobs^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)=OriginalHead.Value.Value;
 {$endif}
 {$else}
- fMutex.Acquire;
+ fLock.Acquire;
  try
   Job^.Next:=fFreeJobs;
   fFreeJobs:=Job;
  finally
-  fMutex.Release;
+  fLock.Release;
  end;
 {$endif}
  Job^.InternalData:=0;
@@ -4093,7 +4095,7 @@ begin
  fThreadID:=GetCurrentThreadID;
  ThreadIDHash:=GetThreadIDHash(fThreadID);
 
- fPasMPInstance.fJobWorkerThreadHashTableMutex.Acquire;
+ fPasMPInstance.fJobWorkerThreadHashTableLock.Acquire;
  try
   HashJobWorkerThread:=fPasMPInstance.fJobWorkerThreadHashTable[ThreadIDHash and PasMPJobWorkerThreadHashTableMask];
   if assigned(HashJobWorkerThread) then begin
@@ -4102,7 +4104,7 @@ begin
   fNext:=nil;
   fPasMPInstance.fJobWorkerThreadHashTable[ThreadIDHash and PasMPJobWorkerThreadHashTableMask]:=self;
  finally
-  fPasMPInstance.fJobWorkerThreadHashTableMutex.Release;
+  fPasMPInstance.fJobWorkerThreadHashTableLock.Release;
  end;
 {$endif}
 
@@ -4304,22 +4306,22 @@ begin
  fSystemIsReadyEvent:=TPasMPEvent.Create(nil,true,false,'');
 
  fWakeUpCounter:=0;
- fWakeUpMutex:=TPasMPMutex.Create;
+ fWakeUpLock:=TPasMPLock.Create;
  fWakeUpConditionVariable:=TPasMPConditionVariable.Create;
 
  fJobWorkerThreads:=nil;
  SetLength(fJobWorkerThreads,fCountJobWorkerThreads);
 
- fMutex:=TPasMPMutex.Create;
+ fLock:=TPasMPLock.Create;
 
- fJobAllocatorMutex:=TPasMPMutex.Create;
+ fJobAllocatorLock:=TPasMPLock.Create;
 
  fJobAllocator:=TPasMPJobAllocator.Create(nil);
 
  fJobQueue:=TPasMPJobQueue.Create(self);
 
 {$ifndef UseThreadLocalStorage}
- fJobWorkerThreadHashTableMutex:=TPasMPMutex.Create;
+ fJobWorkerThreadHashTableLock:=TPasMPLock.Create;
 
  FillChar(fJobWorkerThreadHashTable,SizeOf(TPasMPJobWorkerThreadHashTable),AnsiChar(#0));
 {$endif}
@@ -4367,14 +4369,14 @@ begin
  SetLength(fAvailableCPUCores,0);
  fJobQueue.Free;
  fJobAllocator.Free;
- fJobAllocatorMutex.Free;
+ fJobAllocatorLock.Free;
  fSystemIsReadyEvent.Free;
  fWakeUpConditionVariable.Free;
- fWakeUpMutex.Free;
+ fWakeUpLock.Free;
 {$ifndef UseThreadLocalStorage}
- fJobWorkerThreadHashTableMutex.Free;
+ fJobWorkerThreadHashTableLock.Free;
 {$endif}
- fMutex.Free;
+ fLock.Free;
  inherited Destroy;
 end;
 
@@ -4382,7 +4384,7 @@ class function TPasMP.CreateGlobalInstance:TPasMP;
 begin
  MemoryBarrier;
  if not assigned(GlobalPasMP) then begin
-  GlobalPasMPMutex.Acquire;
+  GlobalPasMPLock.Acquire;
   try
    if not assigned(GlobalPasMP) then begin
     GlobalPasMP:=TPasMP.Create(GlobalPasMPMaximalThreads,
@@ -4391,7 +4393,7 @@ begin
     MemoryBarrier;
    end;
   finally
-   GlobalPasMPMutex.Release;
+   GlobalPasMPLock.Release;
   end;
  end;
  result:=GlobalPasMP;
@@ -4399,11 +4401,11 @@ end;
 
 class procedure TPasMP.DestroyGlobalInstance;
 begin
- GlobalPasMPMutex.Acquire;
+ GlobalPasMPLock.Acquire;
  try
   FreeAndNil(GlobalPasMP);
  finally
-  GlobalPasMPMutex.Release;
+  GlobalPasMPLock.Release;
  end;
 end;
 
@@ -4476,28 +4478,28 @@ end;
 procedure TPasMP.WaitForWakeUp;
 var SavedWakeUpCounter:longint;
 begin
- fWakeUpMutex.Acquire;
+ fWakeUpLock.Acquire;
  try
   InterlockedIncrement(fSleepingJobWorkerThreads);
   SavedWakeUpCounter:=fWakeUpCounter;
   repeat
-   fWakeUpConditionVariable.Wait(fWakeUpMutex);
+   fWakeUpConditionVariable.Wait(fWakeUpLock);
   until SavedWakeUpCounter<>fWakeUpCounter;
   InterlockedDecrement(fSleepingJobWorkerThreads);
  finally
-  fWakeUpMutex.Release;
+  fWakeUpLock.Release;
  end;
 end;
 
 procedure TPasMP.WakeUpAll;
 begin
  if fSleepingJobWorkerThreads>0 then begin
-  fWakeUpMutex.Acquire;
+  fWakeUpLock.Acquire;
   try
    inc(fWakeUpCounter);
    fWakeUpConditionVariable.Broadcast;
   finally
-   fWakeUpMutex.Release;
+   fWakeUpLock.Release;
   end;
  end;
 end;
@@ -4526,21 +4528,21 @@ end;
 
 function TPasMP.GlobalAllocateJob:PPasMPJob;
 begin
- fJobAllocatorMutex.Acquire;
+ fJobAllocatorLock.Acquire;
  try
   result:=fJobAllocator.AllocateJob;
  finally
-  fJobAllocatorMutex.Release;
+  fJobAllocatorLock.Release;
  end;
 end;
 
 procedure TPasMP.GlobalFreeJob(const Job:PPasMPJob);
 begin
- fJobAllocatorMutex.Acquire;
+ fJobAllocatorLock.Acquire;
  try
   fJobAllocator.FreeJob(Job);
  finally
-  fJobAllocatorMutex.Release;
+  fJobAllocatorLock.Release;
  end;
 end;
 
@@ -6097,10 +6099,10 @@ initialization
 {$ifend}
 {$endif}
  GlobalPasMP:=nil;
- GlobalPasMPMutex:=TPasMPMutex.Create;
+ GlobalPasMPLock:=TPasMPLock.Create;
 finalization
  if assigned(GlobalPasMP) then begin
   TPasMP.DestroyGlobalInstance;
  end;
- GlobalPasMPMutex.Free;
+ GlobalPasMPLock.Free;
 end.
