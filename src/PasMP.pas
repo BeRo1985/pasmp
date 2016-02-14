@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-13-20-19-0000                       *
+ *                        Version 2016-02-14-09-03-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -581,7 +581,7 @@ type TPasMPAvailableCPUCores=array of longint;
 
 {$ifdef HAS_GENERICS}
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>=class
+     TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>=class
       protected
        fReadIndex:longint;
        fCacheLineFillUp0:array[0..(PasMPCPUCacheLineSize-SizeOf(longint))-1] of byte; // for to force fReadIndex and fWriteIndex to different CPU cache lines
@@ -3266,7 +3266,7 @@ begin
 end;
 
 {$ifdef HAS_GENERICS}
-constructor TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Create(const Size:longint);
+constructor TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.Create(const Size:longint);
 begin
  inherited Create;
  fSize:=Size;
@@ -3276,13 +3276,13 @@ begin
  SetLength(fData,fSize);
 end;
 
-destructor TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Destroy;
+destructor TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.Destroy;
 begin
  SetLength(fData,0);
  inherited Destroy;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Push(const Item:T):boolean;
+function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.Push(const Item:T):boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
  repeat
@@ -3317,7 +3317,7 @@ begin
  fWriteIndex:=LocalWriteIndex;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.TryPeekForPush:pointer;
+function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.TryPeekForPush:pointer;
 var LocalReadIndex,LocalWriteIndex,Available:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -3342,7 +3342,7 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.TryPush:boolean;
+function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.TryPush:boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -3370,7 +3370,7 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.TryPush(const Item:T):boolean;
+function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.TryPush(const Item:T):boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -3400,7 +3400,7 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.Pop(out Item:T):boolean;
+function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.Pop(out Item:T):boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
  repeat
@@ -3435,7 +3435,7 @@ begin
  fReadIndex:=LocalReadIndex;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.TryPeekForPop:pointer;
+function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.TryPeekForPop:pointer;
 var LocalReadIndex,LocalWriteIndex,Available:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -3461,7 +3461,7 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.TryPop:boolean;
+function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.TryPop:boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -3490,7 +3490,7 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.TryPop(out Item:T):boolean;
+function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.TryPop(out Item:T):boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -3520,7 +3520,7 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.AvailableForPush:longint;
+function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.AvailableForPush:longint;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -3540,7 +3540,7 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerFixedSizedQueue<T>.AvailableForPop:longint;
+function TPasMPSingleProducerSingleConsumerFixedSizedTypedQueue<T>.AvailableForPop:longint;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
