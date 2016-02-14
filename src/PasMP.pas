@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-14-19-58-0000                       *
+ *                        Version 2016-02-14-20-14-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -395,6 +395,10 @@ type TPasMPAvailableCPUCores=array of longint;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPAtomic=class(TPasMPInterlocked);
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPMemoryBarrier=class
       public
        class procedure Read; {$ifdef HAS_STATIC}static;{$endif}{$ifdef caninline}inline;{$endif}
@@ -402,6 +406,15 @@ type TPasMPAvailableCPUCores=array of longint;
        class procedure ReadWrite; {$ifdef HAS_STATIC}static;{$endif}{$ifdef caninline}inline;{$endif}
        class procedure Write; {$ifdef HAS_STATIC}static;{$endif}{$ifdef caninline}inline;{$endif}
        class procedure Sync; {$ifdef HAS_STATIC}static;{$endif}{$ifdef caninline}inline;{$endif}
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPMemory=class
+      public
+       class procedure AllocateAlignedMemory(var p;Size:longint;Align:longint=PasMPCPUCacheLineSize); {$ifdef HAS_STATIC}static;{$endif}
+       class procedure FreeAlignedMemory(const p); {$ifdef HAS_STATIC}static;{$endif}
+       class procedure Barrier; {$ifdef HAS_STATIC}static;{$endif}{$ifdef caninline}inline;{$endif}
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -1087,8 +1100,6 @@ type TPasMPAvailableCPUCores=array of longint;
        destructor Destroy; override;
        class function CreateGlobalInstance:TPasMP;
        class function GetGlobalInstance:TPasMP; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       class procedure GetMemAligned(var p;Size:longint;Align:longint=PasMPCPUCacheLineSize); {$ifdef HAS_STATIC}static;{$endif}
-       class procedure FreeMemAligned(const p); {$ifdef HAS_STATIC}static;{$endif}
        class function GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):longint; {$ifdef HAS_STATIC}static;{$endif}
        class procedure Yield; {$ifdef HAS_STATIC}static;{$endif}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        class function Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean; {$ifdef Linux}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
@@ -1706,6 +1717,92 @@ end;
 {$ifend}
 {$endif}
 
+
+function IntLog2(x:longword):longword; {$ifdef CPU386}assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+asm
+ test eax,eax
+ jz @Done
+ bsr eax,eax
+ @Done:
+end;{$else}{$ifdef CPUx86_64}assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+asm
+{$ifdef Windows}
+ mov eax,ecx
+{$else}
+ mov eax,edi
+{$endif}
+ test eax,eax
+ jz @Done
+ bsr eax,eax
+ @Done:
+end;
+{$else}
+begin
+ x:=x or (x shr 1);
+ x:=x or (x shr 2);
+ x:=x or (x shr 4);
+ x:=x or (x shr 8);
+ x:=x or (x shr 16);
+ x:=x shr 1;
+ x:=x-((x shr 1) and $55555555);
+ x:=((x shr 2) and $33333333)+(x and $33333333);
+ x:=((x shr 4)+x) and $0f0f0f0f;
+ x:=x+(x shr 8);
+ x:=x+(x shr 16);
+ result:=x and $3f;
+end;
+{$endif}
+{$endif}
+
+procedure MemorySwap(a,b:pointer;Size:longint);
+var Temp:longword;
+begin
+ while Size>=SizeOf(longword) do begin
+  Temp:=longword(a^);
+  longword(a^):=longword(b^);
+  longword(b^):=Temp;
+  inc(TPasMPPtrUInt(a),SizeOf(longword));
+  inc(TPasMPPtrUInt(b),SizeOf(longword));
+  dec(Size,SizeOf(longword));
+ end;
+ while Size>=SizeOf(byte) do begin
+  Temp:=byte(a^);
+  byte(a^):=byte(b^);
+  byte(b^):=Temp;
+  inc(TPasMPPtrUInt(a),SizeOf(byte));
+  inc(TPasMPPtrUInt(b),SizeOf(byte));
+  dec(Size,SizeOf(byte));
+ end;
+end;
+
+function RoundUpToPowerOfTwo(x:ptruint):ptruint; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ dec(x);
+ x:=x or (x shr 1);
+ x:=x or (x shr 2);
+ x:=x or (x shr 4);
+ x:=x or (x shr 8);
+ x:=x or (x shr 16);
+{$ifdef CPU64}
+ x:=x or (x shr 32);
+{$endif}
+ result:=x+1;
+end;
+
+function RoundUpToMask(x,m:ptruint):ptruint; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ if (x and (m-1))<>0 then begin
+  result:=(x+m) and not (m-1);
+ end else begin
+  result:=x;
+ end;
+end;
+
+function GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}longword{$endif}):longword;
+begin
+ result:=(ThreadID*83492791) xor ((ThreadID shr 24)*19349669) xor ((ThreadID shr 16)*73856093) xor ((ThreadID shr 8)*50331653);
+end;
+
 class function TPasMPInterlocked.Increment(var Target:longint):longint;
 begin
 {$ifdef HAS_ATOMICS}
@@ -2040,89 +2137,46 @@ begin
 {$endif}
 end;
 
-function IntLog2(x:longword):longword; {$ifdef CPU386}assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-asm
- test eax,eax
- jz @Done
- bsr eax,eax
- @Done:
-end;{$else}{$ifdef CPUx86_64}assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-asm
-{$ifdef Windows}
- mov eax,ecx
+class procedure TPasMPMemory.AllocateAlignedMemory(var p;Size:longint;Align:longint=PasMPCPUCacheLineSize);
+var Original,Aligned:pointer;
+    Mask:ptruint;
+begin
+ if (Align and (Align-1))<>0 then begin
+  Align:=RoundUpToPowerOfTwo(Align);
+ end;
+ Mask:=Align-1;
+ inc(Size,((Align shl 1)+SizeOf(pointer)));
+ GetMem(Original,Size);
+ FillChar(Original^,Size,#0);
+ Aligned:=pointer(ptruint(ptruint(Original)+SizeOf(pointer)));
+ if (Align>1) and ((ptruint(Aligned) and Mask)<>0) then begin
+  inc(ptruint(Aligned),ptruint(ptruint(Align)-(ptruint(Aligned) and Mask)));
+ end;
+ pointer(pointer(ptruint(ptruint(Aligned)-SizeOf(pointer)))^):=Original;
+ pointer(pointer(@p)^):=Aligned;
+end;
+
+class procedure TPasMPMemory.FreeAlignedMemory(const p);
+var pp:pointer;
+begin
+ pp:=pointer(pointer(@p)^);
+ if assigned(pp) then begin
+  pp:=pointer(pointer(ptruint(ptruint(pp)-SizeOf(pointer)))^);
+  FreeMem(pp);
+ end;
+end;
+
+class procedure TPasMPMemory.Barrier;
+begin
+{$ifdef fpc}
+ ReadWriteBarrier;
 {$else}
- mov eax,edi
-{$endif}
- test eax,eax
- jz @Done
- bsr eax,eax
- @Done:
-end;
+{$if CompilerVersion>=25}
+ MemoryBarrier;
 {$else}
-begin
- x:=x or (x shr 1);
- x:=x or (x shr 2);
- x:=x or (x shr 4);
- x:=x or (x shr 8);
- x:=x or (x shr 16);
- x:=x shr 1;
- x:=x-((x shr 1) and $55555555);
- x:=((x shr 2) and $33333333)+(x and $33333333);
- x:=((x shr 4)+x) and $0f0f0f0f;
- x:=x+(x shr 8);
- x:=x+(x shr 16);
- result:=x and $3f;
-end;
+ FallbackReadWriteBarrier;
+{$ifend}
 {$endif}
-{$endif}
-
-procedure MemorySwap(a,b:pointer;Size:longint);
-var Temp:longword;
-begin
- while Size>=SizeOf(longword) do begin
-  Temp:=longword(a^);
-  longword(a^):=longword(b^);
-  longword(b^):=Temp;
-  inc(TPasMPPtrUInt(a),SizeOf(longword));
-  inc(TPasMPPtrUInt(b),SizeOf(longword));
-  dec(Size,SizeOf(longword));
- end;
- while Size>=SizeOf(byte) do begin
-  Temp:=byte(a^);
-  byte(a^):=byte(b^);
-  byte(b^):=Temp;
-  inc(TPasMPPtrUInt(a),SizeOf(byte));
-  inc(TPasMPPtrUInt(b),SizeOf(byte));
-  dec(Size,SizeOf(byte));
- end;
-end;
-
-function RoundUpToPowerOfTwo(x:ptruint):ptruint; {$ifdef CAN_INLINE}inline;{$endif}
-begin
- dec(x);
- x:=x or (x shr 1);
- x:=x or (x shr 2);
- x:=x or (x shr 4);
- x:=x or (x shr 8);
- x:=x or (x shr 16);
-{$ifdef CPU64}
- x:=x or (x shr 32);
-{$endif}
- result:=x+1;
-end;
-
-function RoundUpToMask(x,m:ptruint):ptruint; {$ifdef CAN_INLINE}inline;{$endif}
-begin
- if (x and (m-1))<>0 then begin
-  result:=(x+m) and not (m-1);
- end else begin
-  result:=x;
- end;
-end;
-
-function GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}longword{$endif}):longword;
-begin
- result:=(ThreadID*83492791) xor ((ThreadID shr 24)*19349669) xor ((ThreadID shr 16)*73856093) xor ((ThreadID shr 8)*50331653);
 end;
 
 constructor TPasMPSimpleEvent.Create;
@@ -4086,7 +4140,7 @@ constructor TPasMPUnboundedStack.Create(const ItemSize:longint);
 begin
  inherited Create;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- TPasMP.GetMemAligned(fStack,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
+ TPasMPMemory.AllocateAlignedMemory(fStack,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
  fStack^.PointerValue:=nil;
  fStack^.TagValue:=0;
 {$else}
@@ -4103,14 +4157,14 @@ begin
  while assigned(fStack^.PointerValue) do begin
   StackItem:=fStack^.PointerValue;
   fStack^.PointerValue:=StackItem^.Next.PointerValue;
-  TPasMP.FreeMemAligned(StackItem);
+  TPasMPMemory.FreeAlignedMemory(StackItem);
  end;
- TPasMP.FreeMemAligned(fStack);
+ TPasMPMemory.FreeAlignedMemory(fStack);
 {$else}
  while assigned(fStack) do begin
   StackItem:=fStack;
   fStack:=StackItem^.Next;
-  TPasMP.FreeMemAligned(StackItem);
+  TPasMPMemory.FreeAlignedMemory(StackItem);
  end;
  fCriticalSection.Free;
 {$endif}
@@ -4131,7 +4185,7 @@ procedure TPasMPUnboundedStack.Push(const Item);
 var OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:TPasMPTaggedPointer;
     StackItem:PPasMPUnboundedStackItem;
 begin
- TPasMP.GetMemAligned(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
+ TPasMPMemory.AllocateAlignedMemory(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
  Move(Item,StackItem^.Data,fItemSize);
  repeat
 {$ifdef CPU64}
@@ -4159,7 +4213,7 @@ var StackItem:PPasMPUnboundedStackItem;
 begin
  fCriticalSection.Acquire;
  try
-  TPasMP.GetMemAligned(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
+  TPasMPMemory.AllocateAlignedMemory(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
   Move(Item,StackItem^.Data,fItemSize);
   StackItem^.fNext:=fStack;
   fStack:=StackItem;
@@ -4175,7 +4229,7 @@ var OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:TPasMPTaggedPointer;
     StackItem:PPasMPUnboundedStackItem;
 begin
  result:=false;
- TPasMP.GetMemAligned(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
+ TPasMPMemory.AllocateAlignedMemory(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
  Move(Item,StackItem^.Data,fItemSize);
  try
 {$ifdef CPU64}
@@ -4200,7 +4254,7 @@ begin
 {$endif}
  finally
   if not result then begin
-   TPasMP.FreeMemAligned(StackItem);
+   TPasMPMemory.FreeAlignedMemory(StackItem);
   end;
  end;
 end;
@@ -4209,7 +4263,7 @@ var StackItem:PPasMPUnboundedStackItem;
 begin
  fCriticalSection.Acquire;
  try
-  TPasMP.GetMemAligned(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
+  TPasMPMemory.AllocateAlignedMemory(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
   Move(Item,StackItem^.Data,fItemSize);
   StackItem^.fNext:=fStack;
   fStack:=StackItem;
@@ -4255,7 +4309,7 @@ begin
   StackItem:=PPasMPUnboundedStackItem(OriginalHead.PointerValue);
   if assigned(StackItem) then begin
    Move(StackItem^.Data,Item,fItemSize);
-   TPasMP.FreeMemAligned(StackItem);
+   TPasMPMemory.FreeAlignedMemory(StackItem);
    result:=true;
   end;
  end;
@@ -4270,7 +4324,7 @@ begin
    StackItem:=fStack;
    fStack:=StackItem^.Next;
    Move(StackItem^.Data,Item,fItemSize);
-   TPasMP.FreeMemAligned(StackItem);
+   TPasMPMemory.FreeAlignedMemory(StackItem);
    result:=true;
   end;
  finally
@@ -4310,7 +4364,7 @@ begin
   StackItem:=PPasMPUnboundedStackItem(OriginalHead.PointerValue);
   if assigned(StackItem) then begin
    Move(StackItem^.Data,Item,fItemSize);
-   TPasMP.FreeMemAligned(StackItem);
+   TPasMPMemory.FreeAlignedMemory(StackItem);
    result:=true;
   end;
  end;
@@ -4325,7 +4379,7 @@ begin
    StackItem:=fStack;
    fStack:=StackItem^.Next;
    Move(StackItem^.Data,Item,fItemSize);
-   TPasMP.FreeMemAligned(StackItem);
+   TPasMPMemory.FreeAlignedMemory(StackItem);
    result:=true;
   end;
  finally
@@ -4350,21 +4404,21 @@ end;
 
 class function TPasMPUnboundedTypedStackItem<T>.NewInstance:TObject;
 begin
- TPasMP.GetMemAligned(result,InstanceSize,PasMPCPUCacheLineSize);
+ TPasMPMemory.AllocateAlignedMemory(result,InstanceSize,PasMPCPUCacheLineSize);
  result:=InitInstance(result);
 end;
 
 procedure TPasMPUnboundedTypedStackItem<T>.FreeInstance;
 begin
  CleanupInstance;
- TPasMP.FreeMemAligned(self);
+ TPasMPMemory.FreeAlignedMemory(self);
 end;
 
 constructor TPasMPUnboundedTypedStack<T>.Create;
 begin
  inherited Create;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- TPasMP.GetMemAligned(fStack,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
+ TPasMPMemory.AllocateAlignedMemory(fStack,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
  fStack^.PointerValue:=nil;
  fStack^.TagValue:=0;
 {$else}
@@ -4380,7 +4434,7 @@ begin
   Pop(Item);
  end;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- TPasMP.FreeMemAligned(fStack);
+ TPasMPMemory.FreeAlignedMemory(fStack);
 {$else}
  fCriticalSection.Free;
 {$endif}
@@ -4658,10 +4712,10 @@ begin
  fMemoryPoolBuckets:=nil;
  fCountMemoryPoolBuckets:=1;
  SetLength(fMemoryPoolBuckets,fCountMemoryPoolBuckets);
- TPasMP.GetMemAligned(fMemoryPoolBuckets[0],SizeOf(TPasMPJobAllocatorMemoryPoolBucket),SizeOf(TPasMPJob));
+ TPasMPMemory.AllocateAlignedMemory(fMemoryPoolBuckets[0],SizeOf(TPasMPJobAllocatorMemoryPoolBucket),SizeOf(TPasMPJob));
  fCountAllocatedJobs:=0;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- TPasMP.GetMemAligned(fFreeJobs,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
+ TPasMPMemory.AllocateAlignedMemory(fFreeJobs,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
  fFreeJobs^.PointerValue:=nil;
  fFreeJobs^.TagValue:=0;
 {$else}
@@ -4673,11 +4727,11 @@ destructor TPasMPJobAllocator.Destroy;
 var MemoryPoolBucketIndex:longint;
 begin
  for MemoryPoolBucketIndex:=0 to fCountMemoryPoolBuckets-1 do begin
-  TPasMP.FreeMemAligned(fMemoryPoolBuckets[MemoryPoolBucketIndex]);
+  TPasMPMemory.FreeAlignedMemory(fMemoryPoolBuckets[MemoryPoolBucketIndex]);
  end;
  SetLength(fMemoryPoolBuckets,0);
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- TPasMP.FreeMemAligned(fFreeJobs);
+ TPasMPMemory.FreeAlignedMemory(fFreeJobs);
 {$else}
  fCriticalSection.Free;
 {$endif}
@@ -4692,7 +4746,7 @@ begin
  if OldCountMemoryPoolBuckets<fCountMemoryPoolBuckets then begin
   SetLength(fMemoryPoolBuckets,fCountMemoryPoolBuckets);
   for MemoryPoolBucketIndex:=OldCountMemoryPoolBuckets to fCountMemoryPoolBuckets-1 do begin
-   TPasMP.GetMemAligned(fMemoryPoolBuckets[MemoryPoolBucketIndex],SizeOf(TPasMPJobAllocatorMemoryPoolBucket),SizeOf(TPasMPJob));
+   TPasMPMemory.AllocateAlignedMemory(fMemoryPoolBuckets[MemoryPoolBucketIndex],SizeOf(TPasMPJobAllocatorMemoryPoolBucket),SizeOf(TPasMPJob));
   end;
  end else begin
   fCountMemoryPoolBuckets:=OldCountMemoryPoolBuckets;
@@ -5468,35 +5522,6 @@ begin
   CreateGlobalInstance;
  end;
  result:=GlobalPasMP;
-end;
-
-class procedure TPasMP.GetMemAligned(var p;Size:longint;Align:longint=PasMPCPUCacheLineSize);
-var Original,Aligned:pointer;
-    Mask:ptruint;
-begin
- if (Align and (Align-1))<>0 then begin
-  Align:=RoundUpToPowerOfTwo(Align);
- end;
- Mask:=Align-1;
- inc(Size,((Align shl 1)+SizeOf(pointer)));
- GetMem(Original,Size);
- FillChar(Original^,Size,#0);
- Aligned:=pointer(ptruint(ptruint(Original)+SizeOf(pointer)));
- if (Align>1) and ((ptruint(Aligned) and Mask)<>0) then begin
-  inc(ptruint(Aligned),ptruint(ptruint(Align)-(ptruint(Aligned) and Mask)));
- end;
- pointer(pointer(ptruint(ptruint(Aligned)-SizeOf(pointer)))^):=Original;
- pointer(pointer(@p)^):=Aligned;
-end;
-
-class procedure TPasMP.FreeMemAligned(const p);
-var pp:pointer;
-begin
- pp:=pointer(pointer(@p)^);
- if assigned(pp) then begin
-  pp:=pointer(pointer(ptruint(ptruint(pp)-SizeOf(pointer)))^);
-  FreeMem(pp);
- end;
 end;
 
 class function TPasMP.GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):longint;
