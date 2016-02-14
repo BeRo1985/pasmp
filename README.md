@@ -17,7 +17,7 @@ License: zlib
 - Compatible with FreePascal >= 2.6.x and Delphi >= 7
 - Cross platform (Windows (needs Vista or higher, so no XP, no 9x, no NT 3.0, no NT 4.x), Linux, etc.)
 
-## Target information (i.e. System requirements)
+## Target informations (i.e. System requirements)
 
 - 32-bit x86 targets must support the cmpxchg8b instruction (it present on most all post-80486 processors, so >= Pentium 1 and newer)
 - 64-bit x86 targets must support the cmpxchg16b instruction (early AMD64 processors before Revision F and some early stepping D Intel Nocona processors lacked the CMPXCHG16B instruction, otherwise all 64-bit x86 processors should have support for the cmpxchg16b instruction)
