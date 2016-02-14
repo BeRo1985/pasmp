@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-14-21-56-0000                       *
+ *                        Version 2016-02-14-22-05-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1850,6 +1850,62 @@ begin
   dec(Size,SizeOf(byte));
  end;
 end;
+
+class function TPasMP.GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}longword{$endif}):longword;
+begin
+ result:=(ThreadID*83492791) xor ((ThreadID shr 24)*19349669) xor ((ThreadID shr 16)*73856093) xor ((ThreadID shr 8)*50331653);
+end;
+
+class function TPasMP.RoundUpToPowerOfTwo(x:TPasMPPtrUInt):TPasMPPtrUInt;
+begin
+ dec(x);
+ x:=x or (x shr 1);
+ x:=x or (x shr 2);
+ x:=x or (x shr 4);
+ x:=x or (x shr 8);
+ x:=x or (x shr 16);
+{$ifdef CPU64}
+ x:=x or (x shr 32);
+{$endif}
+ result:=x+1;
+end;
+
+class function TPasMP.RoundUpToMask(x,m:TPasMPPtrUInt):TPasMPPtrUInt;
+begin
+ if (x and (m-1))<>0 then begin
+  result:=(x+m) and not (m-1);
+ end else begin
+  result:=x;
+ end;
+end;
+
+class procedure TPasMP.Yield; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef Windows}
+begin
+ SwitchToThread;
+end;
+{$else}
+{$ifdef Unix}
+{$ifdef usecthreads}
+begin
+ sched_yield;
+end;
+{$else}
+var timeout:timeval;
+begin
+ timeout.tv_sec:=0;
+ timeout.tv_usec:=0;
+ fpselect(0,nil,nil,nil,@timeout);
+end;
+{$endif}
+{$else}
+{$ifdef fpc}
+begin
+ ThreadSwitch;
+end;
+{$endif}
+{$endif}
+{$endif}
 
 class function TPasMPInterlocked.Increment(var Target:longint):longint;
 begin
@@ -5759,34 +5815,6 @@ begin
  inherited Destroy;
 end;
 
-class function TPasMP.GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}longword{$endif}):longword;
-begin
- result:=(ThreadID*83492791) xor ((ThreadID shr 24)*19349669) xor ((ThreadID shr 16)*73856093) xor ((ThreadID shr 8)*50331653);
-end;
-
-class function TPasMP.RoundUpToPowerOfTwo(x:TPasMPPtrUInt):TPasMPPtrUInt;
-begin
- dec(x);
- x:=x or (x shr 1);
- x:=x or (x shr 2);
- x:=x or (x shr 4);
- x:=x or (x shr 8);
- x:=x or (x shr 16);
-{$ifdef CPU64}
- x:=x or (x shr 32);
-{$endif}
- result:=x+1;
-end;
-
-class function TPasMP.RoundUpToMask(x,m:TPasMPPtrUInt):TPasMPPtrUInt;
-begin
- if (x and (m-1))<>0 then begin
-  result:=(x+m) and not (m-1);
- end else begin
-  result:=x;
- end;
-end;
-
 class function TPasMP.CreateGlobalInstance:TPasMP;
 begin
  TPasMPMemoryBarrier.Sync;
@@ -6005,34 +6033,6 @@ begin
  end;
 end;
 {$endif}
-{$endif}
-{$endif}
-{$endif}
-
-class procedure TPasMP.Yield; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
-begin
- SwitchToThread;
-end;
-{$else}
-{$ifdef Unix}
-{$ifdef usecthreads}
-begin
- sched_yield;
-end;
-{$else}
-var timeout:timeval;
-begin
- timeout.tv_sec:=0;
- timeout.tv_usec:=0;
- fpselect(0,nil,nil,nil,@timeout);
-end;
-{$endif}
-{$else}
-{$ifdef fpc}
-begin
- ThreadSwitch;
-end;
 {$endif}
 {$endif}
 {$endif}
