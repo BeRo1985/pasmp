@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-14-12-00-0000                       *
+ *                        Version 2016-02-14-13-08-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -490,6 +490,27 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure Release; overload; override;
        function Acquire(const AcquireCount:longint):TWaitResult; reintroduce; overload;
        function Release(const ReleaseCount:longint):longint; reintroduce; overload;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPInvertedSemaphore=class(TSynchroObject)
+      private
+       fInitialCount:longint;
+       fMaximumCount:longint;
+       fCurrentCount:longint;
+       fConditionVariableLock:TPasMPConditionVariableLock;
+       fConditionVariable:TPasMPConditionVariable;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*3)+SizeOf(TPasMPConditionVariableLock)+SizeOf(TPasMPConditionVariable)))-1] of byte;
+      public
+       constructor Create(const InitialCount,MaximumCount:longint);
+       destructor Destroy; override;
+       procedure Acquire; overload; override; // Acquire a number of resource elements. It never blocks.
+       procedure Release; overload; override; // Release a number of resource elements. It never blocks, but it may wake up waiting threads.
+       function Acquire(const AcquireCount:longint;out Count:longint):longint; reintroduce; overload;
+       function Release(const ReleaseCount:longint;out Count:longint):longint; reintroduce; overload;
+       function Wait:TWaitResult; // Block until the inverted semaphore reaches zero
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -2510,6 +2531,92 @@ begin
 end;
 {$endif}
 {$endif}
+
+constructor TPasMPInvertedSemaphore.Create(const InitialCount,MaximumCount:longint);
+begin
+ inherited Create;
+ fInitialCount:=InitialCount;
+ fMaximumCount:=MaximumCount;
+ fCurrentCount:=InitialCount;
+ fConditionVariableLock:=TPasMPConditionVariableLock.Create;
+ fConditionVariable:=TPasMPConditionVariable.Create;
+end;
+
+destructor TPasMPInvertedSemaphore.Destroy;
+begin
+ fConditionVariable.Free;
+ fConditionVariableLock.Free;
+ inherited Destroy;
+end;
+
+procedure TPasMPInvertedSemaphore.Acquire;
+var Temp:longint;
+begin
+ Acquire(1,Temp);
+end;
+
+procedure TPasMPInvertedSemaphore.Release;
+var Temp:longint;
+begin
+ Release(1,Temp);
+end;
+
+function TPasMPInvertedSemaphore.Acquire(const AcquireCount:longint;out Count:longint):longint;
+var Counter:longint;
+    Done:boolean;
+begin
+ fConditionVariableLock.Acquire;
+ try                          
+  if AcquireCount<=0 then begin
+   result:=0;
+  end else if (fCurrentCount+AcquireCount)<fMaximumCount then begin
+   result:=AcquireCount;
+  end else begin
+   result:=fMaximumCount-fCurrentCount;
+  end;
+  inc(fCurrentCount,result);
+  Count:=fCurrentCount;
+ finally
+  fConditionVariableLock.Release;
+ end;
+end;
+
+function TPasMPInvertedSemaphore.Release(const ReleaseCount:longint;out Count:longint):longint;
+begin
+ fConditionVariableLock.Acquire;
+ try
+  if ReleaseCount<=0 then begin
+   result:=0;
+  end else if fCurrentCount<ReleaseCount then begin
+   result:=fCurrentCount;
+  end else begin
+   result:=ReleaseCount;
+  end;
+  dec(fCurrentCount,result);
+  if fCurrentCount=0 then begin
+   fConditionVariable.Broadcast;
+  end;
+  Count:=fCurrentCount;
+ finally
+  fConditionVariableLock.Release;
+ end;
+end;
+
+function TPasMPInvertedSemaphore.Wait:TWaitResult;
+begin
+ result:=wrSignaled;
+ fConditionVariableLock.Acquire;
+ try
+  while fCurrentCount<>0 do begin
+   result:=fConditionVariable.Wait(fConditionVariableLock,INFINITE);
+   if result<>wrSignaled then begin
+    break;
+   end;
+  end;
+ finally
+  fConditionVariableLock.Release;
+ end;
+end;
 
 constructor TPasMPMultiReaderSingleWriterLock.Create;
 begin
