@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-14-11-36-0000                       *
+ *                        Version 2016-02-14-11-44-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -446,7 +446,7 @@ type TPasMPAvailableCPUCores=array of longint;
        fWaitCounter:longint;
        fReleaseCounter:longint;
        fGenerationCounter:longint;
-       fLock:TPasMPLock;
+       fCriticalSection:TPasMPCriticalSection;
        fEvent:TPasMPEvent;
       protected
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*3)+SizeOf(TPasMPLock)+SizeOf(TPasMPEvent)))-1] of byte;
@@ -2142,7 +2142,7 @@ begin
  pthread_cond_init(@fConditionVariable,nil);
 {$else}
  fWaitCounter:=0;
- fLock:=TPasMPLock.Create;
+ fCriticalSection:=TPasMPCriticalSection.Create;
  fReleaseCounter:=0;
  fGenerationCounter:=0;
  fEvent:=TPasMPEvent.Create(nil,true,false,'');
@@ -2157,7 +2157,7 @@ begin
 {$ifdef Unix}
  pthread_cond_destroy(@fConditionVariable);
 {$else}
- fLock.Free;
+ fCriticalSection.Free;
  fEvent.Free;
 {$endif}
 {$endif}
@@ -2225,12 +2225,12 @@ begin
 
  result:=wrError;
 
- fLock.Acquire;
+ fCriticalSection.Acquire;
  try
   inc(fWaitCounter);
   SavedGenerationCounter:=fGenerationCounter;
  finally
-  fLock.Release;
+  fCriticalSection.Release;
  end;
 
  Lock.Release;
@@ -2241,7 +2241,7 @@ begin
      try
       WaitDone:=(fReleaseCounter>0) and (SavedGenerationCounter<>fGenerationCounter);
      finally
-      fLock.Release;
+      fCriticalSection.Release;
      end;
      if WaitDone then begin
       result:=wrSignaled;
@@ -2265,13 +2265,13 @@ begin
   Lock.Acquire;
  end;
 
- fLock.Acquire;
+ fCriticalSection.Acquire;
  try
   dec(fWaitCounter);
   dec(fReleaseCounter);
   WasLastWaiter:=fReleaseCounter=0;
  finally
-  fLock.Release;
+  fCriticalSection.Release;
  end;
 
  if WasLastWaiter then begin
@@ -2294,7 +2294,7 @@ begin
 end;
 {$else}
 begin
- fLock.Acquire;
+ fCriticalSection.Acquire;
  try
   if fWaitCounter>fReleaseCounter then begin
    inc(fReleaseCounter);
@@ -2302,7 +2302,7 @@ begin
    fEvent.SetEvent;
   end;
  finally
-  fLock.Release;
+  fCriticalSection.Release;
  end;
 end;
 {$endif}
@@ -2320,7 +2320,7 @@ begin
 end;
 {$else}
 begin
- fLock.Acquire;
+ fCriticalSection.Acquire;
  try
   if fWaitCounter>0 then begin
    fReleaseCounter:=fWaitCounter;
@@ -2328,7 +2328,7 @@ begin
    fEvent.SetEvent;
   end;
  finally
-  fLock.Release;
+  fCriticalSection.Release;
  end;
 end;
 {$endif}
