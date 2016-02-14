@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-14-13-16-0000                       *
+ *                        Version 2016-02-14-13-29-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -476,11 +476,21 @@ type TPasMPAvailableCPUCores=array of longint;
       protected
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-(SizeOf(longint)*3))-1] of byte;
 {$else}
+{$define PasMPSemaphoreUseConditionVariable}
        fCurrentCount:longint;
+{$ifdef PasMPSemaphoreUseConditionVariable}
+       fConditionVariableLock:TPasMPConditionVariableLock;
+       fConditionVariable:TPasMPConditionVariable;
+{$else}
        fCriticalSection:TPasMPCriticalSection;
        fEvent:TPasMPEvent;
+{$endif}
       protected
+{$ifdef PasMPSemaphoreUseConditionVariable}
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*3)+SizeOf(TPasMPConditionVariableLock)+SizeOf(TPasMPConditionVariable)))-1] of byte;
+{$else}
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*3)+SizeOf(TPasMPCriticalSection)+SizeOf(TPasMPEvent)))-1] of byte;
+{$endif}
 {$endif}
 {$endif}
       public
@@ -2371,8 +2381,13 @@ begin
  sem_init(@fHandle,0,InitialCount);
 {$else}
  fCurrentCount:=fInitialCount;
+{$ifdef PasMPSemaphoreUseConditionVariable}
+ fConditionVariableLock:=TPasMPConditionVariableLock.Create;
+ fConditionVariable:=TPasMPConditionVariable.Create;
+{$else}
  fCriticalSection:=TPasMPCriticalSection.Create;
  fEvent:=TPasMPEvent.Create(nil,false,false,'');
+{$endif}
 {$endif}
 {$endif}
 end;
@@ -2385,8 +2400,13 @@ begin
 {$ifdef unix}
  sem_destroy(@fHandle);
 {$else}
+{$ifdef PasMPSemaphoreUseConditionVariable}
+ fConditionVariable.Free;
+ fConditionVariableLock.Free;
+{$else}
  fEvent.Free;
  fCriticalSection.Free;
+{$endif}
 {$endif}
 {$endif}
  inherited Destroy;
@@ -2453,6 +2473,32 @@ begin
  end;
 end;
 {$else}
+{$ifdef PasMPSemaphoreUseConditionVariable}
+var Counter:longint;
+begin
+ result:=wrError;
+ fConditionVariableLock.Acquire;
+ try
+  for Counter:=1 to AcquireCount do begin
+   result:=wrSignaled;
+   while fCurrentCount=0 do begin
+    result:=fConditionVariable.Wait(fConditionVariableLock,INFINITE);
+    if result<>wrSignaled then begin
+     break;
+    end;
+   end;
+   if result<>wrSignaled then begin
+    break;
+   end;
+   if fCurrentCount<>0 then begin
+    dec(fCurrentCount);
+   end;
+  end;
+ finally
+  fConditionVariableLock.Release;
+ end;
+end;
+{$else}
 var Counter:longint;
     Done:boolean;
 begin
@@ -2481,6 +2527,7 @@ begin
 end;
 {$endif}
 {$endif}
+{$endif}
 
 function TPasMPSemaphore.Release(const ReleaseCount:longint):longint;
 {$ifdef Windows}
@@ -2500,6 +2547,29 @@ begin
     break;
    end;
   end;
+ end;
+end;
+{$else}
+{$ifdef PasMPSemaphoreUseConditionVariable}
+begin
+ fConditionVariableLock.Acquire;
+ try
+  if ((fCurrentCount+ReleaseCount)<fCurrentCount) or
+     ((fCurrentCount+ReleaseCount)>fMaximumCount) then begin
+   // Invalid release count
+   result:=0;
+  end else begin
+   if fCurrentCount<>0 then begin
+    // There can't be any thread to wake up if the value of fCurrentCount isn't zero
+    inc(fCurrentCount,ReleaseCount);
+   end else begin
+    fCurrentCount:=ReleaseCount;
+    fConditionVariable.Broadcast;
+   end;
+   result:=fCurrentCount;
+  end;
+ finally
+  fConditionVariableLock.Release;
  end;
 end;
 {$else}
@@ -2529,6 +2599,7 @@ begin
   fEvent.SetEvent;
  end;
 end;
+{$endif}
 {$endif}
 {$endif}
 
