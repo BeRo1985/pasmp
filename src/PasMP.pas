@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-14-21-28-0000                       *
+ *                        Version 2016-02-14-21-34-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -768,14 +768,11 @@ type TPasMPAvailableCPUCores=array of longint;
       public
        constructor Create(const Size:longint);
        destructor Destroy; override;
-       function Push(const Item:T):boolean; overload;
-       function TryPeekForPush:pointer;
-       function TryPush(const Item:T):boolean; overload;
-       function TryPush:boolean; overload;
-       function Pop(out Item:T):boolean; overload;
-       function TryPeekForPop:pointer;
-       function TryPop:boolean; overload;
+       function TryPush(const Item:T):boolean;
+       procedure Push(const Item:T);
+       function Peek:pointer;
        function TryPop(out Item:T):boolean; overload;
+       procedure Pop(out Item:T);
        function AvailableForPush:longint;
        function AvailableForPop:longint;
      end;
@@ -3896,94 +3893,6 @@ begin
  inherited Destroy;
 end;
 
-function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Push(const Item:T):boolean;
-var LocalReadIndex,LocalWriteIndex:longint;
-begin
- repeat
-{$if not (defined(CPU386) or defined(CPUx86_64))}
-  TPasMPMemoryBarrier.ReadWrite;
-{$ifend}
-  LocalReadIndex:=fReadIndex;
-{$if defined(CPU386) or defined(CPUx86_64)}
-  TPasMPMemoryBarrier.ReadDependency;
-{$else}
-  TPasMPMemoryBarrier.Read;
-{$ifend}
-  LocalWriteIndex:=fWriteIndex;
-  if LocalWriteIndex>=LocalReadIndex then begin
-   result:=(((fSize+LocalReadIndex)-LocalWriteIndex)-1)>0;
-  end else begin
-   result:=((LocalReadIndex-LocalWriteIndex)-1)>0;
-  end;
-  if result then begin
-   break;
-  end else begin
-   TPasMP.Yield;
-  end;
- until false;
- LocalWriteIndex:=fWriteIndex;
- fData[LocalWriteIndex]:=Item;
- inc(LocalWriteIndex);
- if LocalWriteIndex>=fSize then begin
-  LocalWriteIndex:=0;
- end;
- TPasMPMemoryBarrier.ReadWrite;
- fWriteIndex:=LocalWriteIndex;
-end;
-
-function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.TryPeekForPush:pointer;
-var LocalReadIndex,LocalWriteIndex,Available:longint;
-begin
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.ReadWrite;
-{$ifend}
- LocalReadIndex:=fReadIndex;
-{$if defined(CPU386) or defined(CPUx86_64)}
- TPasMPMemoryBarrier.ReadDependency;
-{$else}
- TPasMPMemoryBarrier.Read;
-{$ifend}
- LocalWriteIndex:=fWriteIndex;
- if LocalWriteIndex>=LocalReadIndex then begin
-  Available:=((fSize+LocalReadIndex)-LocalWriteIndex)-1;
- end else begin
-  Available:=(LocalReadIndex-LocalWriteIndex)-1;
- end;
- if Available>0 then begin
-  result:=@fData[LocalWriteIndex];
- end else begin
-  result:=nil;
- end;
-end;
-
-function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.TryPush:boolean;
-var LocalReadIndex,LocalWriteIndex:longint;
-begin
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.ReadWrite;
-{$ifend}
- LocalReadIndex:=fReadIndex;
-{$if defined(CPU386) or defined(CPUx86_64)}
- TPasMPMemoryBarrier.ReadDependency;
-{$else}
- TPasMPMemoryBarrier.Read;
-{$ifend}
- LocalWriteIndex:=fWriteIndex;
- if LocalWriteIndex>=LocalReadIndex then begin
-  result:=(((fSize+LocalReadIndex)-LocalWriteIndex)-1)>0;
- end else begin
-  result:=((LocalReadIndex-LocalWriteIndex)-1)>0;
- end;
- if result then begin
-  inc(LocalWriteIndex);
-  if LocalWriteIndex>=fSize then begin
-   LocalWriteIndex:=0;
-  end;
-  TPasMPMemoryBarrier.ReadWrite;
-  fWriteIndex:=LocalWriteIndex;
- end;
-end;
-
 function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.TryPush(const Item:T):boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
@@ -4014,7 +3923,7 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Pop(out Item:T):boolean;
+procedure TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Push(const Item:T);
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
  repeat
@@ -4029,27 +3938,27 @@ begin
 {$ifend}
   LocalWriteIndex:=fWriteIndex;
   if LocalWriteIndex>=LocalReadIndex then begin
-   result:=(LocalWriteIndex-LocalReadIndex)>0;
+   if (((fSize+LocalReadIndex)-LocalWriteIndex)-1)>0 then begin
+    break;
+   end;
   end else begin
-   result:=((fSize-LocalReadIndex)+LocalWriteIndex)>0;
+   if ((LocalReadIndex-LocalWriteIndex)-1)>0 then begin
+    break;
+   end;
   end;
-  if result then begin
-   break;
-  end else begin
-   TPasMP.Yield;
-  end;
+  TPasMP.Yield;
  until false;
- LocalReadIndex:=fReadIndex;
- Item:=fData[LocalReadIndex];
- inc(LocalReadIndex);
- if LocalReadIndex>=fSize then begin
-  LocalReadIndex:=0;
+ LocalWriteIndex:=fWriteIndex;
+ fData[LocalWriteIndex]:=Item;
+ inc(LocalWriteIndex);
+ if LocalWriteIndex>=fSize then begin
+  LocalWriteIndex:=0;
  end;
  TPasMPMemoryBarrier.ReadWrite;
- fReadIndex:=LocalReadIndex;
+ fWriteIndex:=LocalWriteIndex;
 end;
 
-function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.TryPeekForPop:pointer;
+function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Peek:pointer;
 var LocalReadIndex,LocalWriteIndex,Available:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -4072,35 +3981,6 @@ begin
   result:=@fData[LocalReadIndex];
  end else begin
   result:=nil;
- end;
-end;
-
-function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.TryPop:boolean;
-var LocalReadIndex,LocalWriteIndex:longint;
-begin
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.ReadWrite;
-{$ifend}
- LocalReadIndex:=fReadIndex;
-{$if defined(CPU386) or defined(CPUx86_64)}
- TPasMPMemoryBarrier.ReadDependency;
-{$else}
- TPasMPMemoryBarrier.Read;
-{$ifend}
- LocalWriteIndex:=fWriteIndex;
- if LocalWriteIndex>=LocalReadIndex then begin
-  result:=(LocalWriteIndex-LocalReadIndex)>0;
- end else begin
-  result:=((fSize-LocalReadIndex)+LocalWriteIndex)>0;
- end;
- if result then begin
-  LocalReadIndex:=fReadIndex;
-  inc(LocalReadIndex);
-  if LocalReadIndex>=fSize then begin
-   LocalReadIndex:=0;
-  end;
-  TPasMPMemoryBarrier.ReadWrite;
-  fReadIndex:=LocalReadIndex;
  end;
 end;
 
@@ -4132,6 +4012,41 @@ begin
   TPasMPMemoryBarrier.ReadWrite;
   fReadIndex:=LocalReadIndex;
  end;
+end;
+
+procedure TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Pop(out Item:T);
+var LocalReadIndex,LocalWriteIndex:longint;
+begin
+ repeat
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+  TPasMPMemoryBarrier.ReadWrite;
+{$ifend}
+  LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+  TPasMPMemoryBarrier.ReadDependency;
+{$else}
+  TPasMPMemoryBarrier.Read;
+{$ifend}
+  LocalWriteIndex:=fWriteIndex;
+  if LocalWriteIndex>=LocalReadIndex then begin
+   if (LocalWriteIndex-LocalReadIndex)>0 then begin
+    break;
+   end;
+  end else begin
+   if ((fSize-LocalReadIndex)+LocalWriteIndex)>0 then begin
+    break;
+   end;
+  end;
+  TPasMP.Yield;
+ until false;
+ LocalReadIndex:=fReadIndex;
+ Item:=fData[LocalReadIndex];
+ inc(LocalReadIndex);
+ if LocalReadIndex>=fSize then begin
+  LocalReadIndex:=0;
+ end;
+ TPasMPMemoryBarrier.ReadWrite;
+ fReadIndex:=LocalReadIndex;
 end;
 
 function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.AvailableForPush:longint;
