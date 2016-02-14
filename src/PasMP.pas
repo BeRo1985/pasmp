@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-14-11-33-0000                       *
+ *                        Version 2016-02-14-11-36-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -536,7 +536,7 @@ type TPasMPAvailableCPUCores=array of longint;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPSlimReaderWriterLock=class
+     TPasMPSlimReaderWriterLock=class(TSynchroObject)
 {$ifdef Windows}
       private
        fSRWLock:TPasMPSRWLock;
@@ -560,14 +560,14 @@ type TPasMPAvailableCPUCores=array of longint;
       public
        constructor Create;
        destructor Destroy; override;
-       procedure Acquire; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure Acquire; override;
        function TryAcquire:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       procedure Release; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure Release; override;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPSpinLock=class
+     TPasMPSpinLock=class(TSynchroObject)
 {$ifdef unix}
       private
        fSpinLock:pthread_spinlock_t;
@@ -582,9 +582,9 @@ type TPasMPAvailableCPUCores=array of longint;
       public
        constructor Create;
        destructor Destroy; override;
-       procedure Acquire; {$if defined(Unix)}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$else}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$ifend}{$ifend}
+       procedure Acquire; override;
        function TryAcquire:longbool; {$if defined(Unix)}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$else}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$ifend}{$ifend}
-       procedure Release; {$if defined(Unix)}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$else}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$ifend}{$ifend}
+       procedure Release; override;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -2776,7 +2776,7 @@ begin
  inherited Destroy;
 end;
 
-procedure TPasMPSlimReaderWriterLock.Acquire; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPSlimReaderWriterLock.Acquire;
 {$ifdef Windows}
 begin
  AcquireSRWLockExclusive(@fSRWLock);
@@ -2826,7 +2826,7 @@ end;
 {$endif}
 {$endif}
 
-procedure TPasMPSlimReaderWriterLock.Release; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPSlimReaderWriterLock.Release;
 {$ifdef Windows}
 begin
  ReleaseSRWLockExclusive(@fSRWLock);
@@ -2869,7 +2869,7 @@ begin
  inherited Destroy;
 end;
 
-procedure TPasMPSpinLock.Acquire; {$if defined(Unix)}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPSpinLock.Acquire; {$if defined(Unix)}
 begin
  pthread_spin_lock(@fSpinLock);
 end;
@@ -2973,7 +2973,7 @@ end;
 {$endif}
 {$ifend}
 
-procedure TPasMPSpinLock.Release; {$if defined(Unix)}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPSpinLock.Release; {$if defined(Unix)}
 begin
  pthread_spin_unlock(@fSpinLock);
 end;
