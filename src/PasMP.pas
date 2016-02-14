@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-14-11-56-0000                       *
+ *                        Version 2016-02-14-12-00-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -663,6 +663,10 @@ type TPasMPAvailableCPUCores=array of longint;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 {$endif}
 
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPThread=class(TThread);
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
      PPasMPJob=^TPasMPJob;
 
 {$ifdef HAS_ANONYMOUS_METHODS}
@@ -774,7 +778,7 @@ type TPasMPAvailableCPUCores=array of longint;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPWorkerSystemThread=class(TThread)
+     TPasMPWorkerSystemThread=class(TPasMPThread)
       private
        fJobWorkerThread:TPasMPJobWorkerThread;
       protected
