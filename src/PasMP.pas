@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-14-11-00-0000                       *
+ *                        Version 2016-02-14-11-33-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -339,6 +339,11 @@ type TPasMPAvailableCPUCores=array of longint;
 
      TPasMPEvent=class(TEvent);
 
+     TPasMPSimpleEvent=class(TPasMPEvent)
+      public
+       constructor Create;
+     end;
+
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPCriticalSection=class(TCriticalSection)
       protected
@@ -347,7 +352,7 @@ type TPasMPAvailableCPUCores=array of longint;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPMutex=class
+     TPasMPMutex=class(TSynchroObject)
 {$ifdef Windows}
       private
        fMutex:THandle;
@@ -376,8 +381,8 @@ type TPasMPAvailableCPUCores=array of longint;
        constructor Create(const DesiredAccess:longword;const bInitialOwner:boolean;const lpName:string); overload;
 {$endif}
        destructor Destroy; override;
-       procedure Acquire; {$ifdef CAN_INLINE}inline;{$endif}
-       procedure Release; {$ifdef CAN_INLINE}inline;{$endif}
+       procedure Acquire; override;
+       procedure Release; override;
 {$ifdef Windows}
        property Mutex:THandle read fMutex;
 {$else}
@@ -391,7 +396,7 @@ type TPasMPAvailableCPUCores=array of longint;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPLock=class
+     TPasMPLock=class(TSynchroObject)
 {$ifdef Windows}
       private
        fCriticalSection:TRTLCriticalSection;
@@ -413,8 +418,8 @@ type TPasMPAvailableCPUCores=array of longint;
       public
        constructor Create;
        destructor Destroy; override;
-       procedure Acquire; {$ifdef CAN_INLINE}inline;{$endif}
-       procedure Release; {$ifdef CAN_INLINE}inline;{$endif}
+       procedure Acquire; override;
+       procedure Release; override;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -457,7 +462,7 @@ type TPasMPAvailableCPUCores=array of longint;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPSemaphore=class
+     TPasMPSemaphore=class(TSynchroObject)
       private
        fInitialCount:longint;
        fMaximumCount:longint;
@@ -481,8 +486,10 @@ type TPasMPAvailableCPUCores=array of longint;
       public
        constructor Create(const InitialCount,MaximumCount:longint);
        destructor Destroy; override;
-       function Acquire(const AcquireCount:longint=1):TWaitResult;
-       function Release(const ReleaseCount:longint=1):longint;
+       procedure Acquire; overload; override;
+       procedure Release; overload; override;
+       function Acquire(const AcquireCount:longint):TWaitResult; reintroduce; overload;
+       function Release(const ReleaseCount:longint):longint; reintroduce; overload;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -1942,6 +1949,11 @@ begin
  result:=(ThreadID*83492791) xor ((ThreadID shr 24)*19349669) xor ((ThreadID shr 16)*73856093) xor ((ThreadID shr 8)*50331653);
 end;
 
+constructor TPasMPSimpleEvent.Create;
+begin
+ inherited Create(nil,false,false,'');
+end;
+
 constructor TPasMPMutex.Create;
 begin
  inherited Create;
@@ -2028,7 +2040,7 @@ begin
  inherited Destroy;
 end;
 
-procedure TPasMPMutex.Acquire; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMutex.Acquire;
 begin
 {$ifdef Windows}
  case WaitForSingleObject(fMutex,INFINITE) of
@@ -2051,7 +2063,7 @@ begin
 {$endif}
 end;
 
-procedure TPasMPMutex.Release; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMutex.Release;
 begin
 {$ifdef Windows}
  if not ReleaseMutex(fMutex) then begin
@@ -2094,7 +2106,7 @@ begin
  inherited Destroy;
 end;
 
-procedure TPasMPLock.Acquire; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPLock.Acquire;
 begin
 {$ifdef Windows}
  EnterCriticalSection(fCriticalSection);
@@ -2107,7 +2119,7 @@ begin
 {$endif}
 end;
 
-procedure TPasMPLock.Release; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPLock.Release; 
 begin
 {$ifdef Windows}
  LeaveCriticalSection(fCriticalSection);
@@ -2355,7 +2367,17 @@ begin
  inherited Destroy;
 end;
 
-function TPasMPSemaphore.Acquire(const AcquireCount:longint=1):TWaitResult;
+procedure TPasMPSemaphore.Acquire;
+begin
+ Acquire(1);
+end;
+
+procedure TPasMPSemaphore.Release;
+begin
+ Release(1);
+end;
+
+function TPasMPSemaphore.Acquire(const AcquireCount:longint):TWaitResult;
 {$ifdef Windows}
 var Counter:longint;
 begin
@@ -2435,7 +2457,7 @@ end;
 {$endif}
 {$endif}
 
-function TPasMPSemaphore.Release(const ReleaseCount:longint=1):longint;
+function TPasMPSemaphore.Release(const ReleaseCount:longint):longint;
 {$ifdef Windows}
 begin
  ReleaseSemaphore(fHandle,ReleaseCount,@result);
