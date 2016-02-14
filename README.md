@@ -17,6 +17,20 @@ License: zlib
 - Compatible with FreePascal >= 2.6.x and Delphi >= 7
 - Cross platform (Windows (needs Vista or higher, so no XP, no 9x, no NT 3.0, no NT 4.x), Linux, etc.)
 
+## Target information (i.e. System requirements)
+
+- 32-bit x86 targets must support the cmpxchg8b instruction (it present on most all post-80486 processors, so >= Pentium 1 and newer)
+- 64-bit x86 targets must support the cmpxchg16b instruction (early AMD64 processors before Revision F and some early stepping D Intel Nocona processors lacked the CMPXCHG16B instruction, otherwise all 64-bit x86 processors should have support for the cmpxchg16b instruction)
+- ARM targets must support the ldrexd and strexd instructions (it present on ARMv6k and ARMv7 and higher ARM processors)
+- MIPS targets aren't supported in the lock-free PasMP build variant (only as lock-based PasMP build variant), until I've found a way to do Double-Compare-And-Swap on the MIPS target. I would be most pleased to have your hints and suggestions to help up me to implement DCAS (or a lock-free ABA-free multiple producer multiple consumer queue and stack) on the MIPS target. 
+- PowerPC targets aren't supported in the lock-free PasMP build variant (only as lock-based PasMP build variant), until I've found a way to do Double-Compare-And-Swap on the PowerPC target. I would be most pleased to have your hints and suggestions to help up me to implement DCAS (or a lock-free ABA-free multiple producer multiple consumer queue and stack) on the PowerPC target. 
+
+
+
+
+
+
+
  
 
 
