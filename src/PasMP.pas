@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-14-11-44-0000                       *
+ *                        Version 2016-02-14-11-48-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -561,7 +561,7 @@ type TPasMPAvailableCPUCores=array of longint;
        constructor Create;
        destructor Destroy; override;
        procedure Acquire; override;
-       function TryAcquire:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       function TryAcquire:boolean;
        procedure Release; override;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
@@ -583,7 +583,7 @@ type TPasMPAvailableCPUCores=array of longint;
        constructor Create;
        destructor Destroy; override;
        procedure Acquire; override;
-       function TryAcquire:longbool; {$if defined(Unix)}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$else}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$ifend}{$ifend}
+       function TryAcquire:longbool; {$if not defined(Unix)}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$ifend}{$ifend}
        procedure Release; override;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
@@ -2801,7 +2801,7 @@ end;
 {$endif}
 {$endif}
 
-function TPasMPSlimReaderWriterLock.TryAcquire:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+function TPasMPSlimReaderWriterLock.TryAcquire:boolean;
 {$ifdef Windows}
 begin
  result:=TryAcquireSRWLockExclusive(@fSRWLock);
@@ -2931,7 +2931,7 @@ end;
 {$endif}
 {$ifend}
 
-function TPasMPSpinLock.TryAcquire:longbool; {$if defined(Unix)}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+function TPasMPSpinLock.TryAcquire:longbool; {$if defined(Unix)}
 begin
  result:=pthread_spin_trylock(@fSpinLock)=0;
 end;
