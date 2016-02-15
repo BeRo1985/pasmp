@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-15-09-28-0000                       *
+ *                        Version 2016-02-15-11-24-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -754,6 +754,30 @@ type TPasMPAvailableCPUCores=array of longint;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPSingleProducerSingleConsumerBoundedQueue=class
+      protected
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fReadIndex:longint;
+       fCacheLineFillUp0:array[0..(PasMPCPUCacheLineSize-SizeOf(longint))-1] of byte; // for to force fReadIndex and fWriteIndex to different CPU cache lines
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fWriteIndex:longint;
+       fCacheLineFillUp1:array[0..(PasMPCPUCacheLineSize-SizeOf(longint))-1] of byte; // for to force fWriteIndex and fData to different CPU cache lines
+       fData:array of byte;
+       fMaximalCount:longint;
+       fItemSize:longint;
+       fCacheLineFillUp2:array[0..(PasMPCPUCacheLineSize-(SizeOf(pointer)+SizeOf(longint)))-1] of byte; // as CPU cache line alignment
+      public
+       constructor Create(const MaximalCount,ItemSize:longint);
+       destructor Destroy; override;
+       function TryPush(const Item):boolean;
+       procedure Push(const Item);
+       function Peek:pointer;
+       function TryPop(out Item):boolean;
+       procedure Pop(out Item);
+       function AvailableForPush:longint;
+       function AvailableForPop:longint;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
 {$ifdef HAS_GENERICS}
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>=class
@@ -763,15 +787,15 @@ type TPasMPAvailableCPUCores=array of longint;
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fWriteIndex:longint;
        fCacheLineFillUp1:array[0..(PasMPCPUCacheLineSize-SizeOf(longint))-1] of byte; // for to force fWriteIndex and fData to different CPU cache lines
        fData:array of T;
-       fSize:longint;
+       fMaximalCount:longint;
        fCacheLineFillUp2:array[0..(PasMPCPUCacheLineSize-(SizeOf(pointer)+SizeOf(longint)))-1] of byte; // as CPU cache line alignment
       public
-       constructor Create(const Size:longint);
+       constructor Create(const MaximalCount:longint);
        destructor Destroy; override;
        function TryPush(const Item:T):boolean;
        procedure Push(const Item:T);
        function Peek:pointer;
-       function TryPop(out Item:T):boolean; overload;
+       function TryPop(out Item:T):boolean;
        procedure Pop(out Item:T);
        function AvailableForPush:longint;
        function AvailableForPop:longint;
@@ -807,7 +831,7 @@ type TPasMPAvailableCPUCores=array of longint;
        fItemSize:longint;
        fInternalItemSize:longint;
       public
-       constructor Create(const AMaximalCount,ItemSize:longint);
+       constructor Create(const MaximalCount,ItemSize:longint);
        destructor Destroy; override;
        function IsEmpty:boolean;
        function IsFull:boolean;
@@ -844,7 +868,7 @@ type TPasMPAvailableCPUCores=array of longint;
        fMaximalCount:longint;
        fInternalItemSize:longint;
       public
-       constructor Create(const AMaximalCount:longint);
+       constructor Create(const MaximalCount:longint);
        destructor Destroy; override;
        function IsEmpty:boolean;
        function IsFull:boolean;
@@ -3944,15 +3968,172 @@ begin
  end;
 end;
 
-{$ifdef HAS_GENERICS}
-constructor TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Create(const Size:longint);
+constructor TPasMPSingleProducerSingleConsumerBoundedQueue.Create(const MaximalCount,ItemSize:longint);
 begin
  inherited Create;
- fSize:=Size;
+ fMaximalCount:=MaximalCount;
+ fItemSize:=ItemSize;
  fReadIndex:=0;
  fWriteIndex:=0;
  fData:=nil;
- SetLength(fData,fSize);
+ SetLength(fData,fMaximalCount*fItemSize);
+end;
+
+destructor TPasMPSingleProducerSingleConsumerBoundedQueue.Destroy;
+begin
+ SetLength(fData,0);
+ inherited Destroy;
+end;
+
+function TPasMPSingleProducerSingleConsumerBoundedQueue.TryPush(const Item):boolean;
+var LocalReadIndex,LocalWriteIndex:longint;
+begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+ TPasMPMemoryBarrier.ReadWrite;
+{$ifend}
+ LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ TPasMPMemoryBarrier.ReadDependency;
+{$else}
+ TPasMPMemoryBarrier.Read;
+{$ifend}
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  result:=(((fMaximalCount+LocalReadIndex)-LocalWriteIndex)-1)>0;
+ end else begin
+  result:=((LocalReadIndex-LocalWriteIndex)-1)>0;
+ end;
+ if result then begin
+  LocalWriteIndex:=fWriteIndex;
+  Move(Item,fData[LocalWriteIndex*fItemSize],fItemSize);
+  inc(LocalWriteIndex);
+  if LocalWriteIndex>=fMaximalCount then begin
+   LocalWriteIndex:=0;
+  end;
+  TPasMPMemoryBarrier.ReadWrite;
+  fWriteIndex:=LocalWriteIndex;
+ end;
+end;
+
+procedure TPasMPSingleProducerSingleConsumerBoundedQueue.Push(const Item);
+begin
+ while not TryPush(Item) do begin
+  TPasMP.Yield;
+ end;
+end;
+
+function TPasMPSingleProducerSingleConsumerBoundedQueue.Peek:pointer;
+var LocalReadIndex,LocalWriteIndex,Available:longint;
+begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+ TPasMPMemoryBarrier.ReadWrite;
+{$ifend}
+ LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ TPasMPMemoryBarrier.ReadDependency;
+{$else}
+ TPasMPMemoryBarrier.Read;
+{$ifend}
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  Available:=LocalWriteIndex-LocalReadIndex;
+ end else begin
+  Available:=(fMaximalCount-LocalReadIndex)+LocalWriteIndex;
+ end;
+ if Available>0 then begin
+  LocalReadIndex:=fReadIndex;
+  result:=@fData[LocalReadIndex*fItemSize];
+ end else begin
+  result:=nil;
+ end;
+end;
+
+function TPasMPSingleProducerSingleConsumerBoundedQueue.TryPop(out Item):boolean;
+var LocalReadIndex,LocalWriteIndex:longint;
+begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+ TPasMPMemoryBarrier.ReadWrite;
+{$ifend}
+ LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ TPasMPMemoryBarrier.ReadDependency;
+{$else}
+ TPasMPMemoryBarrier.Read;
+{$ifend}
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  result:=(LocalWriteIndex-LocalReadIndex)>0;
+ end else begin
+  result:=((fMaximalCount-LocalReadIndex)+LocalWriteIndex)>0;
+ end;
+ if result then begin
+  LocalReadIndex:=fReadIndex;
+  Move(fData[LocalReadIndex*fItemSize],Item,fItemSize);
+  inc(LocalReadIndex);
+  if LocalReadIndex>=fMaximalCount then begin
+   LocalReadIndex:=0;
+  end;
+  TPasMPMemoryBarrier.ReadWrite;
+  fReadIndex:=LocalReadIndex;
+ end;
+end;
+
+procedure TPasMPSingleProducerSingleConsumerBoundedQueue.Pop(out Item);
+begin
+ while not TryPop(Item) do begin
+  TPasMP.Yield;
+ end;
+end;
+
+function TPasMPSingleProducerSingleConsumerBoundedQueue.AvailableForPush:longint;
+var LocalReadIndex,LocalWriteIndex:longint;
+begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+ TPasMPMemoryBarrier.ReadWrite;
+{$ifend}
+ LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ TPasMPMemoryBarrier.ReadDependency;
+{$else}
+ TPasMPMemoryBarrier.Read;
+{$ifend}
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  result:=((fMaximalCount+LocalReadIndex)-LocalWriteIndex)-1;
+ end else begin
+  result:=(LocalReadIndex-LocalWriteIndex)-1;
+ end;
+end;
+
+function TPasMPSingleProducerSingleConsumerBoundedQueue.AvailableForPop:longint;
+var LocalReadIndex,LocalWriteIndex:longint;
+begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+ TPasMPMemoryBarrier.ReadWrite;
+{$ifend}
+ LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ TPasMPMemoryBarrier.ReadDependency;
+{$else}
+ TPasMPMemoryBarrier.Read;
+{$ifend}
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  result:=LocalWriteIndex-LocalReadIndex;
+ end else begin
+  result:=(fMaximalCount-LocalReadIndex)+LocalWriteIndex;
+ end;
+end;
+
+{$ifdef HAS_GENERICS}
+constructor TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Create(const MaximalCount:longint);
+begin
+ inherited Create;
+ fMaximalCount:=MaximalCount;
+ fReadIndex:=0;
+ fWriteIndex:=0;
+ fData:=nil;
+ SetLength(fData,fMaximalCount);
 end;
 
 destructor TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Destroy;
@@ -3975,7 +4156,7 @@ begin
 {$ifend}
  LocalWriteIndex:=fWriteIndex;
  if LocalWriteIndex>=LocalReadIndex then begin
-  result:=(((fSize+LocalReadIndex)-LocalWriteIndex)-1)>0;
+  result:=(((fMaximalCount+LocalReadIndex)-LocalWriteIndex)-1)>0;
  end else begin
   result:=((LocalReadIndex-LocalWriteIndex)-1)>0;
  end;
@@ -3983,7 +4164,7 @@ begin
   LocalWriteIndex:=fWriteIndex;
   fData[LocalWriteIndex]:=Item;
   inc(LocalWriteIndex);
-  if LocalWriteIndex>=fSize then begin
+  if LocalWriteIndex>=fMaximalCount then begin
    LocalWriteIndex:=0;
   end;
   TPasMPMemoryBarrier.ReadWrite;
@@ -3992,38 +4173,10 @@ begin
 end;
 
 procedure TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Push(const Item:T);
-var LocalReadIndex,LocalWriteIndex:longint;
 begin
- repeat
-{$if not (defined(CPU386) or defined(CPUx86_64))}
-  TPasMPMemoryBarrier.ReadWrite;
-{$ifend}
-  LocalReadIndex:=fReadIndex;
-{$if defined(CPU386) or defined(CPUx86_64)}
-  TPasMPMemoryBarrier.ReadDependency;
-{$else}
-  TPasMPMemoryBarrier.Read;
-{$ifend}
-  LocalWriteIndex:=fWriteIndex;
-  if LocalWriteIndex>=LocalReadIndex then begin
-   if (((fSize+LocalReadIndex)-LocalWriteIndex)-1)>0 then begin
-    break;
-   end;
-  end else begin
-   if ((LocalReadIndex-LocalWriteIndex)-1)>0 then begin
-    break;
-   end;
-  end;
+ while not TryPush(Item) do begin
   TPasMP.Yield;
- until false;
- LocalWriteIndex:=fWriteIndex;
- fData[LocalWriteIndex]:=Item;
- inc(LocalWriteIndex);
- if LocalWriteIndex>=fSize then begin
-  LocalWriteIndex:=0;
  end;
- TPasMPMemoryBarrier.ReadWrite;
- fWriteIndex:=LocalWriteIndex;
 end;
 
 function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Peek:pointer;
@@ -4042,7 +4195,7 @@ begin
  if LocalWriteIndex>=LocalReadIndex then begin
   Available:=LocalWriteIndex-LocalReadIndex;
  end else begin
-  Available:=(fSize-LocalReadIndex)+LocalWriteIndex;
+  Available:=(fMaximalCount-LocalReadIndex)+LocalWriteIndex;
  end;
  if Available>0 then begin
   LocalReadIndex:=fReadIndex;
@@ -4068,13 +4221,13 @@ begin
  if LocalWriteIndex>=LocalReadIndex then begin
   result:=(LocalWriteIndex-LocalReadIndex)>0;
  end else begin
-  result:=((fSize-LocalReadIndex)+LocalWriteIndex)>0;
+  result:=((fMaximalCount-LocalReadIndex)+LocalWriteIndex)>0;
  end;
  if result then begin
   LocalReadIndex:=fReadIndex;
   Item:=fData[LocalReadIndex];
   inc(LocalReadIndex);
-  if LocalReadIndex>=fSize then begin
+  if LocalReadIndex>=fMaximalCount then begin
    LocalReadIndex:=0;
   end;
   TPasMPMemoryBarrier.ReadWrite;
@@ -4083,38 +4236,10 @@ begin
 end;
 
 procedure TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Pop(out Item:T);
-var LocalReadIndex,LocalWriteIndex:longint;
 begin
- repeat
-{$if not (defined(CPU386) or defined(CPUx86_64))}
-  TPasMPMemoryBarrier.ReadWrite;
-{$ifend}
-  LocalReadIndex:=fReadIndex;
-{$if defined(CPU386) or defined(CPUx86_64)}
-  TPasMPMemoryBarrier.ReadDependency;
-{$else}
-  TPasMPMemoryBarrier.Read;
-{$ifend}
-  LocalWriteIndex:=fWriteIndex;
-  if LocalWriteIndex>=LocalReadIndex then begin
-   if (LocalWriteIndex-LocalReadIndex)>0 then begin
-    break;
-   end;
-  end else begin
-   if ((fSize-LocalReadIndex)+LocalWriteIndex)>0 then begin
-    break;
-   end;
-  end;
+ while not TryPop(Item) do begin
   TPasMP.Yield;
- until false;
- LocalReadIndex:=fReadIndex;
- Item:=fData[LocalReadIndex];
- inc(LocalReadIndex);
- if LocalReadIndex>=fSize then begin
-  LocalReadIndex:=0;
  end;
- TPasMPMemoryBarrier.ReadWrite;
- fReadIndex:=LocalReadIndex;
 end;
 
 function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.AvailableForPush:longint;
@@ -4131,7 +4256,7 @@ begin
 {$ifend}
  LocalWriteIndex:=fWriteIndex;
  if LocalWriteIndex>=LocalReadIndex then begin
-  result:=((fSize+LocalReadIndex)-LocalWriteIndex)-1;
+  result:=((fMaximalCount+LocalReadIndex)-LocalWriteIndex)-1;
  end else begin
   result:=(LocalReadIndex-LocalWriteIndex)-1;
  end;
@@ -4153,12 +4278,12 @@ begin
  if LocalWriteIndex>=LocalReadIndex then begin
   result:=LocalWriteIndex-LocalReadIndex;
  end else begin
-  result:=(fSize-LocalReadIndex)+LocalWriteIndex;
+  result:=(fMaximalCount-LocalReadIndex)+LocalWriteIndex;
  end;
 end;
 {$endif}
 
-constructor TPasMPBoundedStack.Create(const AMaximalCount,ItemSize:longint);
+constructor TPasMPBoundedStack.Create(const MaximalCount,ItemSize:longint);
 var i:longint;
     p:PByte;
     StackItem:PPasMPBoundedStackItem;
@@ -4176,7 +4301,7 @@ begin
  fStack:=nil;
  fFree:=nil;
 {$endif}
- fMaximalCount:=AMaximalCount;
+ fMaximalCount:=MaximalCount;
  fItemSize:=ItemSize;
  fInternalItemSize:=TPasMP.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPTaggedPointer)+fItemSize,PasMPCPUCacheLineSize));
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
@@ -4399,7 +4524,7 @@ begin
 end;
 
 {$ifdef HAS_GENERICS}
-constructor TPasMPBoundedTypedStack<T>.Create(const AMaximalCount:longint);
+constructor TPasMPBoundedTypedStack<T>.Create(const MaximalCount:longint);
 var i:longint;
     p:PByte;
     StackItem:PPasMPBoundedTypedStackItem;
@@ -4417,7 +4542,7 @@ begin
  fStack:=nil;
  fFree:=nil;
 {$endif}
- fMaximalCount:=AMaximalCount;
+ fMaximalCount:=MaximalCount;
  fInternalItemSize:=Max(TPasMP.RoundUpToPowerOfTwo(SizeOf(TPasMPBoundedTypedStackItem)),PasMPCPUCacheLineSize);
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
