@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-15-11-24-0000                       *
+ *                        Version 2016-02-15-11-43-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -4386,13 +4386,13 @@ begin
    Move(Item,StackItem^.Data,fItemSize);
    StackItem^.Next.PointerValue:=nil;
    repeat
-  {$ifdef CPU64}
+{$ifdef CPU64}
     NextHead.PointerValue:=nil;
     NextHead.TagValue:=0;
     OriginalHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,NextHead.Value);
-  {$else}
+{$else}
     OriginalHead.Value.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value.Value,-1,-1);
-  {$endif}
+{$endif}
     StackItem^.Next.PointerValue:=OriginalHead.PointerValue;
     NextHead.PointerValue:=StackItem;
     NextHead.TagValue:=OriginalHead.TagValue+1;
@@ -4413,18 +4413,20 @@ end;
 var StackItem:PPasMPStackItem;
 begin
  result:=false;
- fCriticalSection.Acquire;
- try
-  StackItem:=fFree;
-  if assigned(StackItem) then begin
-   fFree:=StackItem^.Next;
-   StackItem^.Next:=fStack;
-   fStack:=StackItem;
-   Move(Item,StackItem^.Data,fItemSize);
-   result:=true;
+ if assigned(fFree) then begin
+  fCriticalSection.Acquire;
+  try
+   if assigned(fFree) then begin
+    StackItem:=fFree;
+    fFree:=StackItem^.Next;
+    StackItem^.Next:=fStack;
+    fStack:=StackItem;
+    Move(Item,StackItem^.Data,fItemSize);
+    result:=true;
+   end;
+  finally
+   fCriticalSection.Release;
   end;
- finally
-  fCriticalSection.Release;
  end;
 end;
 {$endif}
@@ -4500,18 +4502,20 @@ end;
 var StackItem:PPasMPStackItem;
 begin
  result:=false;
- fCriticalSection.Acquire;
- try
-  StackItem:=fStack;
-  if assigned(StackItem) then begin
-   fStack:=StackItem^.Next;
-   Move(StackItem^.Data,Item,fItemSize);
-   StackItem^.Next:=fFree;
-   fFree:=StackItem;
-   result:=true;
+ if assigned(fStack) then begin
+  fCriticalSection.Acquire;
+  try
+   if assigned(fStack) then begin
+    StackItem:=fStack;
+    fStack:=StackItem^.Next;
+    Move(StackItem^.Data,Item,fItemSize);
+    StackItem^.Next:=fFree;
+    fFree:=StackItem;
+    result:=true;
+   end;
+  finally
+   fCriticalSection.Release;
   end;
- finally
-  fCriticalSection.Release;
  end;
 end;
 {$endif}
@@ -4663,18 +4667,20 @@ end;
 var StackItem:PPasMPStackItem;
 begin
  result:=false;
- fCriticalSection.Acquire;
- try
-  StackItem:=fFree;
-  if assigned(StackItem) then begin
-   fFree:=StackItem^.Next;
-   StackItem^.Next:=fStack;
-   fStack:=StackItem;
-   Move(Item,StackItem^.Data,fItemSize);
-   result:=true;
+ if assigned(fFree) then begin
+  fCriticalSection.Acquire;
+  try
+   if assigned(fFree) then begin
+    StackItem:=fFree;
+    fFree:=StackItem^.Next;
+    StackItem^.Next:=fStack;
+    fStack:=StackItem;
+    StackItem^.Data:=Item;
+    result:=true;
+   end;
+  finally
+   fCriticalSection.Release;
   end;
- finally
-  fCriticalSection.Release;
  end;
 end;
 {$endif}
@@ -4751,18 +4757,20 @@ end;
 var StackItem:PPasMPStackItem;
 begin
  result:=false;
- fCriticalSection.Acquire;
- try
-  StackItem:=fStack;
-  if assigned(StackItem) then begin
-   fStack:=StackItem^.Next;
-   Move(StackItem^.Data,Item,fItemSize);
-   StackItem^.Next:=fFree;
-   fFree:=StackItem;
-   result:=true;
+ if assigned(fStack) then begin
+  fCriticalSection.Acquire;
+  try
+   if assigned(fStack) then begin
+    StackItem:=fStack;
+    fStack:=StackItem^.Next;
+    Item:=StackItem^.Data;
+    StackItem^.Next:=fFree;
+    fFree:=StackItem;
+    result:=true;
+   end;
+  finally
+   fCriticalSection.Release;
   end;
- finally
-  fCriticalSection.Release;
  end;
 end;
 {$endif}
@@ -4915,17 +4923,19 @@ end;
 var StackItem:PPasMPStackItem;
 begin
  result:=false;
- fCriticalSection.Acquire;
- try
-  if assigned(fStack) then begin
-   StackItem:=fStack;
-   fStack:=StackItem^.Next;
-   Move(StackItem^.Data,Item,fItemSize);
-   TPasMPMemory.FreeAlignedMemory(StackItem);
-   result:=true;
+ if assigned(fStack) then begin
+  fCriticalSection.Acquire;
+  try
+   if assigned(fStack) then begin
+    StackItem:=fStack;
+    fStack:=StackItem^.Next;
+    Move(StackItem^.Data,Item,fItemSize);
+    TPasMPMemory.FreeAlignedMemory(StackItem);
+    result:=true;
+   end;
+  finally
+   fCriticalSection.Release;
   end;
- finally
-  fCriticalSection.Release;
  end;
 end;
 {$endif}
@@ -5047,6 +5057,7 @@ end;
 procedure TPasMPUnboundedTypedStack<T>.Push(const Item:T);
 begin
  while not TryPush(Item) do begin
+  TPasMP.Yield;
  end;
 end;
 
@@ -5097,21 +5108,24 @@ end;
 {$else}
 var StackItem:TPasMPUnboundedTypedStackItem<T>;
 begin
- fCriticalSection.Acquire;
- try
-  if assigned(fStack) then begin
-   StackItem:=fStack;
-   try
-    fStack:=StackItem.fNext;
-    Item:=StackItem.fData;
-   finally
-    StackItem.Free;
+ result:=false;
+ if assigned(fStack) then begin
+  fCriticalSection.Acquire;
+  try
+   if assigned(fStack) then begin
+    StackItem:=fStack;
+    try
+     fStack:=StackItem.fNext;
+     Item:=StackItem.fData;
+     result:=true;
+    finally
+     StackItem.Free;
+    end;
    end;
+  finally
+   fCriticalSection.Release;
   end;
- finally
-  fCriticalSection.Release;
  end;
- result:=true;
 end;
 {$endif}
 
