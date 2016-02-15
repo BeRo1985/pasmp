@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-15-20-05-0000                       *
+ *                        Version 2016-02-15-20-45-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -4405,7 +4405,7 @@ begin
  fFree:=TPasMPInterlockedStack.Create;
  fMaximalCount:=MaximalCount;
  fItemSize:=ItemSize;
- fInternalItemSize:=TPasMP.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPTaggedPointer)+fItemSize,PasMPCPUCacheLineSize));
+ fInternalItemSize:=TPasMP.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPBoundedStackItem)+fItemSize,PasMPCPUCacheLineSize));
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
  for i:=0 to fMaximalCount-1 do begin
