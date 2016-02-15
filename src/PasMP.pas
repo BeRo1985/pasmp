@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-15-20-45-0000                       *
+ *                        Version 2016-02-15-23-04-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -741,7 +741,8 @@ type TPasMPAvailableCPUCores=array of longint;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
-     TPasMPInterlockedStackPointer=pointer;
+     PPasMPInterlockedStackEntry=^TPasMPInterlockedStackEntry;
+     TPasMPInterlockedStackEntry=pointer;
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPInterlockedStack=class
@@ -759,7 +760,44 @@ type TPasMPAvailableCPUCores=array of longint;
        function IsEmpty:boolean; {$ifdef CAN_INLINE}inline;{$endif}
        function Push(const Entry:pointer):pointer; {$ifdef CAN_INLINE}inline;{$endif}
        function Pop:pointer; {$ifdef CAN_INLINE}inline;{$endif}
-       procedure Flush; {$ifdef CAN_INLINE}inline;{$endif}
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+     PPasMPInterlockedQueueEntry=^TPasMPInterlockedQueueEntry;
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+     TPasMPInterlockedQueueEntry=record
+      Previous:pointer;
+      Next:pointer;
+     end;
+{$else}
+     TPasMPInterlockedQueueEntry=pointer;
+
+     PPasMPInterlockedQueueNode=^TPasMPInterlockedQueueNode;
+     TPasMPInterlockedQueueNode=record
+      Next:pointer;
+      Data:pointer;
+     end;
+{$endif}
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPInterlockedQueue=class
+      private
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+       fHead:PPasMPTaggedPointer;
+       fTail:PPasMPTaggedPointer;
+{$else}
+       fHeadCriticalSection:TPasMPCriticalSection;
+       fTailCriticalSection:TPasMPCriticalSection;
+       fHead:PPasMPInterlockedQueueNode;
+       fTail:PPasMPInterlockedQueueNode;
+{$endif}
+      public
+       constructor Create;
+       destructor Destroy; override;
+       procedure Clear; {$ifdef CAN_INLINE}inline;{$endif}
+       function IsEmpty:boolean; {$ifdef CAN_INLINE}inline;{$endif}
+       function Enqueue(const Entry:pointer):pointer; {$ifdef CAN_INLINE}inline;{$endif}
+       function Dequeue:pointer; {$ifdef CAN_INLINE}inline;{$endif}
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -832,7 +870,7 @@ type TPasMPAvailableCPUCores=array of longint;
 
      PPasMPBoundedStackItem=^TPasMPBoundedStackItem;
      TPasMPBoundedStackItem=record
-      Next:TPasMPInterlockedStackPointer;
+      Next:TPasMPInterlockedStackEntry;
       Data:record
        // Empty
       end;
@@ -863,7 +901,7 @@ type TPasMPAvailableCPUCores=array of longint;
       private
        type PPasMPBoundedTypedStackItem=^TPasMPBoundedTypedStackItem;
             TPasMPBoundedTypedStackItem=record
-             Next:TPasMPInterlockedStackPointer;
+             Next:TPasMPInterlockedStackEntry;
              Data:T;
             end;
       private
@@ -885,7 +923,7 @@ type TPasMPAvailableCPUCores=array of longint;
 
      PPasMPUnboundedStackItem=^TPasMPUnboundedStackItem;
      TPasMPUnboundedStackItem=record
-      Next:TPasMPInterlockedStackPointer;
+      Next:TPasMPInterlockedStackEntry;
       Data:record
        // Empty
       end;
@@ -911,7 +949,7 @@ type TPasMPAvailableCPUCores=array of longint;
       private
        type PPasMPUnboundedTypedStackItem=^TPasMPUnboundedTypedStackItem;
             TPasMPUnboundedTypedStackItem=record
-             Next:TPasMPInterlockedStackPointer;
+             Next:TPasMPInterlockedStackEntry;
              Data:T;
             end;
       private
@@ -963,7 +1001,7 @@ type TPasMPAvailableCPUCores=array of longint;
         Data:pointer;                               // ------- => just a dummy variable as struct field offset anchor
        );                                           // 20 / 32
        1:(
-        Next:TPasMPInterlockedStackPointer;
+        Next:TPasMPInterlockedStackEntry;
        );
        2:(
         // for 32-bit targets: use one whole cache line (1x 64 bytes = 16x 32-bit pointers/integers) to avoid false sharing (1 cache line => 64 bytes on the most CPUs) and also to have some free place for meta data
@@ -3639,7 +3677,7 @@ end;
 {$else}
 begin
  inherited Create;
- fCriticalSection:=TCriticalSection.Create;
+ fCriticalSection:=TPasMPCriticalSection.Create;
  fHead:=nil;
 end;
 {$endif}
@@ -3770,13 +3808,135 @@ begin
 end;
 {$endif}
 
-procedure TPasMPInterlockedStack.Flush;
-var p:pointer;
+constructor TPasMPInterlockedQueue.Create;
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 begin
- repeat
-  p:=Pop;
- until not assigned(p);
+ inherited Create;
+ fHead.PointerValue:=nil;
+ fHead.TagValue:=0;
+ fTail.PointerValue:=nil;
+ fTail.TagValue:=0;
 end;
+{$else}
+begin
+ inherited Create;
+ fHeadCriticalSection:=TPasMPCriticalSection.Create;
+ fTailCriticalSection:=TPasMPCriticalSection.Create;
+ fHead:=nil;
+ TPasMPMemory.AllocateAlignedMemory(fHead,SizeOf(TPasMPInterlockedQueueNode),PasMPCPUCacheLineSize);
+ fHead^.Next:=nil;
+ fHead^.Data:=nil;
+ fTail:=fHead;
+end;
+{$endif}
+
+destructor TPasMPInterlockedQueue.Destroy;
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+begin
+ inherited Destroy;
+end;
+{$else}
+var CurrentNode,NextNode:PPasMPInterlockedQueueNode;
+begin
+ CurrentNode:=fHead;
+ while assigned(CurrentNode) do begin
+  NextNode:=CurrentNode^.Next;
+  TPasMPMemory.FreeAlignedMemory(CurrentNode);
+  CurrentNode:=NextNode;
+ end;
+ fTailCriticalSection.Free;
+ fHeadCriticalSection.Free;
+ inherited Destroy;
+end;
+{$endif}
+
+procedure TPasMPInterlockedQueue.Clear;
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+begin
+ fHead.PointerValue:=nil;
+ fHead.TagValue:=0;
+ fTail.PointerValue:=nil;
+ fTail.TagValue:=0;
+end;
+{$else}
+var CurrentNode,NextNode:PPasMPInterlockedQueueNode;
+begin
+ CurrentNode:=fHead;
+ while assigned(CurrentNode) do begin
+  NextNode:=CurrentNode^.Next;
+  TPasMPMemory.FreeAlignedMemory(CurrentNode);
+  CurrentNode:=NextNode;
+ end;
+ fHead:=nil;
+ TPasMPMemory.AllocateAlignedMemory(fHead,SizeOf(TPasMPInterlockedQueueNode),PasMPCPUCacheLineSize);
+ fHead^.Next:=nil;
+ fHead^.Data:=nil;
+ fTail:=fHead;
+end;
+{$endif}
+
+function TPasMPInterlockedQueue.IsEmpty:boolean;
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+begin
+ result:=not assigned(fTail.PointerValue);
+end;
+{$else}
+begin
+ result:=not assigned(fTail);
+end;
+{$endif}
+
+function TPasMPInterlockedQueue.Enqueue(const Entry:pointer):pointer;
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+begin
+ result:=nil;
+end;
+{$else}
+var Node:PPasMPInterlockedQueueNode;
+begin
+ TPasMPMemory.AllocateAlignedMemory(Node,SizeOf(TPasMPInterlockedQueueNode),PasMPCPUCacheLineSize);
+ Node^.Next:=nil;
+ Node^.Data:=Entry;
+ fTailCriticalSection.Acquire;
+ try
+  result:=fTail^.Data;
+  fTail^.Next:=Node;
+  fTail:=Node;
+ finally
+  fTailCriticalSection.Release;
+ end;
+end;
+{$endif}
+
+function TPasMPInterlockedQueue.Dequeue:pointer;
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+begin
+ result:=nil;
+end;
+{$else}
+var Node,NewHead:PPasMPInterlockedQueueNode;
+begin
+ if assigned(fHead) and assigned(fHead^.Next) then begin
+  fHeadCriticalSection.Acquire;
+  try
+   Node:=fHead;
+   NewHead:=fHead^.Next;
+   if assigned(NewHead) then begin
+    result:=NewHead^.Data;
+    fHead:=NewHead;
+    TPasMPMemory.FreeAlignedMemory(Node);
+   end else begin
+    result:=nil;
+   end;
+  finally
+   fHeadCriticalSection.Release;
+  end;
+ end else begin
+  result:=nil;
+ end;
+end;
+{$endif}
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 constructor TPasMPSingleProducerSingleConsumerRingBuffer.Create(const Size:longint);
 begin
@@ -4674,9 +4834,6 @@ constructor TPasMPJobAllocator.Create(const AJobWorkerThread:TPasMPJobWorkerThre
 begin
  inherited Create;
  fJobWorkerThread:=AJobWorkerThread;
-{$ifndef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- fCriticalSection:=TPasMPCriticalSection.Create;
-{$endif}
  fMemoryPoolBuckets:=nil;
  fCountMemoryPoolBuckets:=1;
  SetLength(fMemoryPoolBuckets,fCountMemoryPoolBuckets);
