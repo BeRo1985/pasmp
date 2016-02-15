@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-15-15-51-0000                       *
+ *                        Version 2016-02-15-15-54-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -391,7 +391,7 @@ type TPasMPAvailableCPUCores=array of longint;
        class function Read(var Source:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Read(var Source:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
-       class function Read(var Source:TPasMPInt128):TPasMPInt128; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Read(var Source:TPasMPInt128):TPasMPInt128; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(fpc)}inline;{$ifend}
 {$ifend}
 {$ifend}
        class function Write(var Target:longint;const Source:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
@@ -399,7 +399,7 @@ type TPasMPAvailableCPUCores=array of longint;
        class function Write(var Target:int64;const Source:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Write(var Target:TPasMPInt64;const Source:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
-       class function Write(var Target:TPasMPInt128;const Source:TPasMPInt128):TPasMPInt128; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Write(var Target:TPasMPInt128;const Source:TPasMPInt128):TPasMPInt128; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(fpc)}inline;{$ifend}
 {$ifend}
 {$ifend}
      end;
