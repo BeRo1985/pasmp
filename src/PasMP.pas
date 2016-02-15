@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-15-23-10-0000                       *
+ *                        Version 2016-02-15-23-16-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -745,7 +745,7 @@ type TPasMPAvailableCPUCores=array of longint;
      TPasMPInterlockedStackEntry=pointer;
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPInterlockedStack=class
+     TPasMPInterlockedStack=class // only for PasMP internal usage
       private
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
        fHead:PPasMPTaggedPointer;
@@ -780,7 +780,7 @@ type TPasMPAvailableCPUCores=array of longint;
 {$endif}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPInterlockedQueue=class
+     TPasMPInterlockedQueue=class // only for PasMP internal usage
       private
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
        fHead:PPasMPTaggedPointer;
