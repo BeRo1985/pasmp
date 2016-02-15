@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-14-22-05-0000                       *
+ *                        Version 2016-02-15-09-28-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -531,9 +531,9 @@ type TPasMPAvailableCPUCores=array of longint;
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_cond_t))-1] of byte;
 {$else}
       private
-       fWaitCounter:longint;
-       fReleaseCounter:longint;
-       fGenerationCounter:longint;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fWaitCounter:longint;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fReleaseCounter:longint;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fGenerationCounter:longint;
        fCriticalSection:TPasMPCriticalSection;
        fEvent:TPasMPEvent;
       protected
@@ -565,7 +565,7 @@ type TPasMPAvailableCPUCores=array of longint;
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-(SizeOf(longint)*3))-1] of byte;
 {$else}
 {$define PasMPSemaphoreUseConditionVariable}
-       fCurrentCount:longint;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fCurrentCount:longint;
 {$ifdef PasMPSemaphoreUseConditionVariable}
        fConditionVariableLock:TPasMPConditionVariableLock;
        fConditionVariable:TPasMPConditionVariable;
@@ -596,7 +596,7 @@ type TPasMPAvailableCPUCores=array of longint;
       private
        fInitialCount:longint;
        fMaximumCount:longint;
-       fCurrentCount:longint;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fCurrentCount:longint;
        fConditionVariableLock:TPasMPConditionVariableLock;
        fConditionVariable:TPasMPConditionVariable;
       protected
@@ -632,8 +632,8 @@ type TPasMPAvailableCPUCores=array of longint;
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_rwlock_t))-1] of byte;
 {$else}
       private
-       fReaders:longint;
-       fWriters:longint;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fReaders:longint;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fWriters:longint;
        fConditionVariableLock:TPasMPConditionVariableLock;
        fConditionVariable:TPasMPConditionVariable;
       protected
@@ -669,7 +669,7 @@ type TPasMPAvailableCPUCores=array of longint;
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_rwlock_t))-1] of byte;
 {$else}
       private
-       fCount:longint;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fCount:longint;
        fConditionVariableLock:TPasMPConditionVariableLock;
        fConditionVariable:TPasMPConditionVariable;
       protected
@@ -694,7 +694,7 @@ type TPasMPAvailableCPUCores=array of longint;
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_spinlock_t))-1] of byte;
 {$else}
       private
-       fState:longint;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fState:longint;
       protected
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(longint))-1] of byte;
 {$endif}
@@ -716,8 +716,8 @@ type TPasMPAvailableCPUCores=array of longint;
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_barrier_t))-1] of byte;
 {$else}
       private
-       fCount:longint;
-       fTotal:longint;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fCount:longint;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fTotal:longint;
        fConditionVariableLock:TPasMPConditionVariableLock;
        fConditionVariable:TPasMPConditionVariable;
       protected
@@ -733,9 +733,9 @@ type TPasMPAvailableCPUCores=array of longint;
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPSingleProducerSingleConsumerRingBuffer=class
       protected
-       fReadIndex:longint;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fReadIndex:longint;
        fCacheLineFillUp0:array[0..(PasMPCPUCacheLineSize-SizeOf(longint))-1] of byte; // for to force fReadIndex and fWriteIndex to different CPU cache lines
-       fWriteIndex:longint;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fWriteIndex:longint;
        fCacheLineFillUp1:array[0..(PasMPCPUCacheLineSize-SizeOf(longint))-1] of byte; // for to force fWriteIndex and fData to different CPU cache lines
        fData:array of byte;
        fSize:longint;
@@ -758,9 +758,9 @@ type TPasMPAvailableCPUCores=array of longint;
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>=class
       protected
-       fReadIndex:longint;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fReadIndex:longint;
        fCacheLineFillUp0:array[0..(PasMPCPUCacheLineSize-SizeOf(longint))-1] of byte; // for to force fReadIndex and fWriteIndex to different CPU cache lines
-       fWriteIndex:longint;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fWriteIndex:longint;
        fCacheLineFillUp1:array[0..(PasMPCPUCacheLineSize-SizeOf(longint))-1] of byte; // for to force fWriteIndex and fData to different CPU cache lines
        fData:array of T;
        fSize:longint;
@@ -795,12 +795,12 @@ type TPasMPAvailableCPUCores=array of longint;
      TPasMPBoundedStack=class
       private
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-       fStack:PPasMPTaggedPointer;
-       fFree:PPasMPTaggedPointer;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fStack:PPasMPTaggedPointer;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fFree:PPasMPTaggedPointer;
 {$else}
        fCriticalSection:TPasMPCriticalSection;
-       fStack:pointer;
-       fFree:pointer;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fStack:pointer;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fFree:pointer;
 {$endif}
        fData:pointer;
        fMaximalCount:longint;
@@ -833,12 +833,12 @@ type TPasMPAvailableCPUCores=array of longint;
             end;
       private
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-       fStack:PPasMPTaggedPointer;
-       fFree:PPasMPTaggedPointer;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fStack:PPasMPTaggedPointer;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fFree:PPasMPTaggedPointer;
 {$else}
        fCriticalSection:TPasMPCriticalSection;
-       fStack:pointer;
-       fFree:pointer;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fStack:pointer;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fFree:pointer;
 {$endif}
        fData:pointer;
        fMaximalCount:longint;
@@ -872,10 +872,10 @@ type TPasMPAvailableCPUCores=array of longint;
      TPasMPUnboundedStack=class
       private
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-       fStack:PPasMPTaggedPointer;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fStack:PPasMPTaggedPointer;
 {$else}
        fCriticalSection:TPasMPCriticalSection;
-       fStack:pointer;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fStack:pointer;
 {$endif}
        fItemSize:longint;
       public
@@ -894,9 +894,9 @@ type TPasMPAvailableCPUCores=array of longint;
      TPasMPUnboundedTypedStackItem<T>=class
       private
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-       fNext:TPasMPTaggedPointer;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fNext:TPasMPTaggedPointer;
 {$else}
-       fNext:pointer;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fNext:pointer;
 {$endif}
        fData:T;
       public
@@ -911,10 +911,10 @@ type TPasMPAvailableCPUCores=array of longint;
      TPasMPUnboundedTypedStack<T>=class
       private
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-       fStack:PPasMPTaggedPointer;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fStack:PPasMPTaggedPointer;
 {$else}
        fCriticalSection:TPasMPCriticalSection;
-       fStack:pointer;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fStack:pointer;
 {$endif}
       public
        constructor Create;
