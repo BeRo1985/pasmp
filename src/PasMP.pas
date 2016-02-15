@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-15-15-14-0000                       *
+ *                        Version 2016-02-15-15-51-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -206,6 +206,8 @@ unit PasMP;
  // count and less OS-API calls than with the FPC_THREADVAR_RELOCATE variant
 {$ifend}
 {$endif}
+
+{$define PasMPUseWakeUpConditionVariable}
 
 interface
 
@@ -1149,6 +1151,7 @@ type TPasMPAvailableCPUCores=array of longint;
       private
        fAvailableCPUCores:TPasMPAvailableCPUCores;
        fDoCPUCorePinning:longbool;
+       fSleepingOnIdle:longbool;
        fFPUExceptionMask:TFPUExceptionMask;
        fFPUPrecisionMode:TFPUPrecisionMode;
        fFPURoundingMode:TFPURoundingMode;
@@ -1157,9 +1160,13 @@ type TPasMPAvailableCPUCores=array of longint;
        fSleepingJobWorkerThreads:longint;
        fWorkingJobWorkerThreads:longint;
        fSystemIsReadyEvent:TPasMPEvent;
+{$ifdef PasMPUseWakeUpConditionVariable}
        fWakeUpCounter:longint;
        fWakeUpConditionVariableLock:TPasMPConditionVariableLock;
        fWakeUpConditionVariable:TPasMPConditionVariable;
+{$else}
+       fWakeUpEvent:TPasMPEvent;
+{$endif}
        fCriticalSection:TPasMPCriticalSection;
        fJobAllocatorCriticalSection:TPasMPCriticalSection;
        fJobAllocator:TPasMPJobAllocator;
@@ -1199,7 +1206,7 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure ParallelIndirectMergeSortJobFunction(const Job:PPasMPJob;const ThreadIndex:longint);
        procedure ParallelIndirectMergeSortRootJobFunction(const Job:PPasMPJob;const ThreadIndex:longint);
       public
-       constructor Create(const MaxThreads:longint=-1;const ThreadHeadRoomForForeignTasks:longint=0;const DoCPUCorePinning:boolean=true);
+       constructor Create(const MaxThreads:longint=-1;const ThreadHeadRoomForForeignTasks:longint=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true);
        destructor Destroy; override;
        class function CreateGlobalInstance:TPasMP;
        class function GetGlobalInstance:TPasMP; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
@@ -1247,7 +1254,8 @@ var GlobalPasMP:TPasMP=nil; // "Optional" singleton-like global PasMP instance
 
     GlobalPasMPMaximalThreads:longint=-1;
     GlobalPasMPThreadHeadRoomForForeignTasks:longint=0;
-    GlobalPasMPDoCPUCorePinning:boolean=false;
+    GlobalPasMPDoCPUCorePinning:boolean=true;
+    GlobalPasMPSleepingOnIdle:boolean=true;
 
     GPasMP:TPasMP absolute GlobalPasMP; // A shorter name for lazy peoples
 
@@ -5643,7 +5651,7 @@ begin
  end;
 end;
 
-constructor TPasMP.Create(const MaxThreads:longint=-1;const ThreadHeadRoomForForeignTasks:longint=0;const DoCPUCorePinning:boolean=true);
+constructor TPasMP.Create(const MaxThreads:longint=-1;const ThreadHeadRoomForForeignTasks:longint=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true);
 var Index:longint;
 begin
 
@@ -5656,6 +5664,8 @@ begin
  fAvailableCPUCores:=nil;
 
  fDoCPUCorePinning:=DoCPUCorePinning;
+ 
+ fSleepingOnIdle:=SleepingOnIdle;
 
  fCountJobWorkerThreads:=TPasMP.GetCountOfHardwareThreads(fAvailableCPUCores)-ThreadHeadRoomForForeignTasks;
  if fCountJobWorkerThreads<1 then begin
@@ -5669,12 +5679,16 @@ begin
  end;
 
  fSleepingJobWorkerThreads:=0;
- 
+
  fSystemIsReadyEvent:=TPasMPEvent.Create(nil,true,false,'');
 
+{$ifdef PasMPUseWakeUpConditionVariable}
  fWakeUpCounter:=0;
  fWakeUpConditionVariableLock:=TPasMPConditionVariableLock.Create;
  fWakeUpConditionVariable:=TPasMPConditionVariable.Create;
+{$else}
+ fWakeUpEvent:=TPasMPEvent.Create(nil,true,false,'');
+{$endif}
 
  fJobWorkerThreads:=nil;
  SetLength(fJobWorkerThreads,fCountJobWorkerThreads);
@@ -5738,8 +5752,12 @@ begin
  fJobAllocator.Free;
  fJobAllocatorCriticalSection.Free;
  fSystemIsReadyEvent.Free;
+{$ifdef PasMPUseWakeUpConditionVariable}
  fWakeUpConditionVariable.Free;
  fWakeUpConditionVariableLock.Free;
+{$else}
+ fWakeUpEvent.Free;
+{$endif}
 {$ifndef UseThreadLocalStorage}
  fJobWorkerThreadHashTableCriticalSection.Free;
 {$endif}
@@ -5756,7 +5774,8 @@ begin
    if not assigned(GlobalPasMP) then begin
     GlobalPasMP:=TPasMP.Create(GlobalPasMPMaximalThreads,
                                GlobalPasMPThreadHeadRoomForForeignTasks,
-                               GlobalPasMPDoCPUCorePinning);
+                               GlobalPasMPDoCPUCorePinning,
+                               GlobalPasMPSleepingOnIdle);
     TPasMPMemoryBarrier.Sync;
    end;
   finally
@@ -6076,24 +6095,42 @@ end;
 {$endif}
 
 procedure TPasMP.WaitForWakeUp;
+{$ifdef PasMPUseWakeUpConditionVariable}
 var SavedWakeUpCounter:longint;
 begin
- fWakeUpConditionVariableLock.Acquire;
- try
-  TPasMPInterlocked.Increment(fSleepingJobWorkerThreads);
-  SavedWakeUpCounter:=fWakeUpCounter;
-  repeat
-   fWakeUpConditionVariable.Wait(fWakeUpConditionVariableLock);
-  until SavedWakeUpCounter<>fWakeUpCounter;
-  TPasMPInterlocked.Decrement(fSleepingJobWorkerThreads);
- finally
-  fWakeUpConditionVariableLock.Release;
+ if fSleepingOnIdle then begin
+  fWakeUpConditionVariableLock.Acquire;
+  try
+   TPasMPInterlocked.Increment(fSleepingJobWorkerThreads);
+   SavedWakeUpCounter:=fWakeUpCounter;
+   repeat
+    fWakeUpConditionVariable.Wait(fWakeUpConditionVariableLock);
+   until SavedWakeUpCounter<>fWakeUpCounter;
+   TPasMPInterlocked.Decrement(fSleepingJobWorkerThreads);
+  finally
+   fWakeUpConditionVariableLock.Release;
+  end;
+ end else begin
+  TPasMP.Yield;
  end;
 end;
+{$else}
+begin
+ if fSleepingOnIdle then begin
+  fWakeUpEvent.ResetEvent;
+  TPasMPInterlocked.Increment(fSleepingJobWorkerThreads);
+  fWakeUpEvent.WaitFor(INFINITE);
+  TPasMPInterlocked.Decrement(fSleepingJobWorkerThreads);
+ end else begin
+  TPasMP.Yield;
+ end;
+end;
+{$endif}
 
 procedure TPasMP.WakeUpAll;
+{$ifdef PasMPUseWakeUpConditionVariable}
 begin
- if fSleepingJobWorkerThreads>0 then begin
+ if fSleepingOnIdle and (fSleepingJobWorkerThreads>0) then begin
   fWakeUpConditionVariableLock.Acquire;
   try
    inc(fWakeUpCounter);
@@ -6103,7 +6140,14 @@ begin
   end;
  end;
 end;
-                         
+{$else}
+begin
+ if fSleepingOnIdle and (fSleepingJobWorkerThreads>0) then begin
+  fWakeUpEvent.SetEvent;
+ end;
+end;
+{$endif}
+
 function TPasMP.CanSpread:boolean;
 var CurrentJobWorkerThread,JobWorkerThread:TPasMPJobWorkerThread;
     ThreadIndex,Index:longint;
