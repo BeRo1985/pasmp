@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-15-15-54-0000                       *
+ *                        Version 2016-02-15-20-05-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -801,13 +801,10 @@ type TPasMPAvailableCPUCores=array of longint;
       public
        constructor Create(const MaximalCount,ItemSize:longint);
        destructor Destroy; override;
-       function TryPush(const Item):boolean;
-       procedure Push(const Item);
-       function Peek:pointer;
-       function TryPop(out Item):boolean;
-       procedure Pop(out Item);
-       function AvailableForPush:longint;
-       function AvailableForPop:longint;
+       function Enqueue(const Item):boolean;
+       function Dequeue(out Item):boolean;
+       function AvailableForEnqueue:longint;
+       function AvailableForDequeue:longint;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -825,13 +822,10 @@ type TPasMPAvailableCPUCores=array of longint;
       public
        constructor Create(const MaximalCount:longint);
        destructor Destroy; override;
-       function TryPush(const Item:T):boolean;
-       procedure Push(const Item:T);
-       function Peek:pointer;
-       function TryPop(out Item:T):boolean;
-       procedure Pop(out Item:T);
-       function AvailableForPush:longint;
-       function AvailableForPop:longint;
+       function Enqueue(const Item:T):boolean;
+       function Dequeue(out Item:T):boolean;
+       function AvailableForEnqueue:longint;
+       function AvailableForDequeue:longint;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 {$endif}
@@ -858,10 +852,8 @@ type TPasMPAvailableCPUCores=array of longint;
        destructor Destroy; override;
        function IsEmpty:boolean;
        function IsFull:boolean;
-       function TryPush(const Item):boolean;
-       procedure Push(const Item);
-       function TryPop(out Item):boolean;
-       procedure Pop(out Item);
+       function Push(const Item):boolean;
+       function Pop(out Item):boolean;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -885,21 +877,15 @@ type TPasMPAvailableCPUCores=array of longint;
        destructor Destroy; override;
        function IsEmpty:boolean;
        function IsFull:boolean;
-       function TryPush(const Item:T):boolean;
-       procedure Push(const Item:T);
-       function TryPop(out Item:T):boolean;
-       procedure Pop(out Item:T);
+       function Push(const Item:T):boolean;
+       function Pop(out Item:T):boolean;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 {$endif}
 
      PPasMPUnboundedStackItem=^TPasMPUnboundedStackItem;
      TPasMPUnboundedStackItem=record
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-      Next:TPasMPTaggedPointer;
-{$else}
       Next:TPasMPInterlockedStackPointer;
-{$endif}
       Data:record
        // Empty
       end;
@@ -908,59 +894,35 @@ type TPasMPAvailableCPUCores=array of longint;
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPUnboundedStack=class
       private
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-       {$ifdef HAS_VOLATILE}[volatile]{$endif}fStack:PPasMPTaggedPointer;
-{$else}
-       fCriticalSection:TPasMPCriticalSection;
-       {$ifdef HAS_VOLATILE}[volatile]{$endif}fStack:pointer;
-{$endif}
+       fStack:TPasMPInterlockedStack;
        fItemSize:longint;
       public
        constructor Create(const ItemSize:longint);
        destructor Destroy; override;
        function IsEmpty:boolean;
-       function TryPush(const Item):boolean;
-       procedure Push(const Item);
-       function TryPop(out Item):boolean;
-       procedure Pop(out Item);
+       function Push(const Item):boolean;
+       function Pop(out Item):boolean;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$ifdef HAS_GENERICS}
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPUnboundedTypedStackItem<T>=class
-      private
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-       {$ifdef HAS_VOLATILE}[volatile]{$endif}fNext:TPasMPTaggedPointer;
-{$else}
-       {$ifdef HAS_VOLATILE}[volatile]{$endif}fNext:TPasMPInterlockedStackPointer;
-{$endif}
-       fData:T;
-      public
-       constructor Create;
-       destructor Destroy; override;
-       class function NewInstance:TObject; override;
-       procedure FreeInstance; override;
-     end;
-{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
-
-{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPUnboundedTypedStack<T>=class
       private
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-       {$ifdef HAS_VOLATILE}[volatile]{$endif}fStack:PPasMPTaggedPointer;
-{$else}
-       fCriticalSection:TPasMPCriticalSection;
-       {$ifdef HAS_VOLATILE}[volatile]{$endif}fStack:pointer;
-{$endif}
+       type PPasMPUnboundedTypedStackItem=^TPasMPUnboundedTypedStackItem;
+            TPasMPUnboundedTypedStackItem=record
+             Next:TPasMPInterlockedStackPointer;
+             Data:T;
+            end;
+      private
+       fStack:TPasMPInterlockedStack;
+       fItemSize:longint;
       public
-       constructor Create;
+       constructor Create(const ItemSize:longint);
        destructor Destroy; override;
        function IsEmpty:boolean;
-       function TryPush(const Item:T):boolean;
-       procedure Push(const Item:T);
-       function TryPop(out Item:T):boolean;
-       procedure Pop(out Item:T);
+       function Push(const Item:T):boolean;
+       function Pop(out Item:T):boolean;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 {$endif}
@@ -4215,7 +4177,7 @@ begin
  inherited Destroy;
 end;
 
-function TPasMPSingleProducerSingleConsumerBoundedQueue.TryPush(const Item):boolean;
+function TPasMPSingleProducerSingleConsumerBoundedQueue.Enqueue(const Item):boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -4245,40 +4207,7 @@ begin
  end;
 end;
 
-procedure TPasMPSingleProducerSingleConsumerBoundedQueue.Push(const Item);
-begin
- while not TryPush(Item) do begin
-  TPasMP.Yield;
- end;
-end;
-
-function TPasMPSingleProducerSingleConsumerBoundedQueue.Peek:pointer;
-var LocalReadIndex,LocalWriteIndex,Available:longint;
-begin
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.ReadWrite;
-{$ifend}
- LocalReadIndex:=fReadIndex;
-{$if defined(CPU386) or defined(CPUx86_64)}
- TPasMPMemoryBarrier.ReadDependency;
-{$else}
- TPasMPMemoryBarrier.Read;
-{$ifend}
- LocalWriteIndex:=fWriteIndex;
- if LocalWriteIndex>=LocalReadIndex then begin
-  Available:=LocalWriteIndex-LocalReadIndex;
- end else begin
-  Available:=(fMaximalCount-LocalReadIndex)+LocalWriteIndex;
- end;
- if Available>0 then begin
-  LocalReadIndex:=fReadIndex;
-  result:=@fData[LocalReadIndex*fItemSize];
- end else begin
-  result:=nil;
- end;
-end;
-
-function TPasMPSingleProducerSingleConsumerBoundedQueue.TryPop(out Item):boolean;
+function TPasMPSingleProducerSingleConsumerBoundedQueue.Dequeue(out Item):boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -4308,14 +4237,7 @@ begin
  end;
 end;
 
-procedure TPasMPSingleProducerSingleConsumerBoundedQueue.Pop(out Item);
-begin
- while not TryPop(Item) do begin
-  TPasMP.Yield;
- end;
-end;
-
-function TPasMPSingleProducerSingleConsumerBoundedQueue.AvailableForPush:longint;
+function TPasMPSingleProducerSingleConsumerBoundedQueue.AvailableForEnqueue:longint;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -4335,7 +4257,7 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerBoundedQueue.AvailableForPop:longint;
+function TPasMPSingleProducerSingleConsumerBoundedQueue.AvailableForDequeue:longint;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -4372,7 +4294,7 @@ begin
  inherited Destroy;
 end;
 
-function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.TryPush(const Item:T):boolean;
+function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Enqueue(const Item:T):boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -4402,40 +4324,7 @@ begin
  end;
 end;
 
-procedure TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Push(const Item:T);
-begin
- while not TryPush(Item) do begin
-  TPasMP.Yield;
- end;
-end;
-
-function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Peek:pointer;
-var LocalReadIndex,LocalWriteIndex,Available:longint;
-begin
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.ReadWrite;
-{$ifend}
- LocalReadIndex:=fReadIndex;
-{$if defined(CPU386) or defined(CPUx86_64)}
- TPasMPMemoryBarrier.ReadDependency;
-{$else}
- TPasMPMemoryBarrier.Read;
-{$ifend}
- LocalWriteIndex:=fWriteIndex;
- if LocalWriteIndex>=LocalReadIndex then begin
-  Available:=LocalWriteIndex-LocalReadIndex;
- end else begin
-  Available:=(fMaximalCount-LocalReadIndex)+LocalWriteIndex;
- end;
- if Available>0 then begin
-  LocalReadIndex:=fReadIndex;
-  result:=@fData[LocalReadIndex];
- end else begin
-  result:=nil;
- end;
-end;
-
-function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.TryPop(out Item:T):boolean;
+function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Dequeue(out Item:T):boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -4465,14 +4354,7 @@ begin
  end;
 end;
 
-procedure TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Pop(out Item:T);
-begin
- while not TryPop(Item) do begin
-  TPasMP.Yield;
- end;
-end;
-
-function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.AvailableForPush:longint;
+function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.AvailableForEnqueue:longint;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -4492,7 +4374,7 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.AvailableForPop:longint;
+function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.AvailableForDequeue:longint;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -4551,7 +4433,7 @@ begin
  result:=fFree.IsEmpty;
 end;
 
-function TPasMPBoundedStack.TryPush(const Item):boolean;
+function TPasMPBoundedStack.Push(const Item):boolean;
 var StackItem:PPasMPBoundedStackItem;
 begin
  StackItem:=fFree.Pop;
@@ -4564,14 +4446,7 @@ begin
  end;
 end;
 
-procedure TPasMPBoundedStack.Push(const Item);
-begin
- while not TryPush(Item) do begin
-  TPasMP.Yield;
- end;
-end;
-
-function TPasMPBoundedStack.TryPop(out Item):boolean;
+function TPasMPBoundedStack.Pop(out Item):boolean;
 var StackItem:PPasMPBoundedStackItem;
 begin
  StackItem:=fStack.Pop;
@@ -4581,13 +4456,6 @@ begin
   result:=true;
  end else begin
   result:=false;
- end;
-end;
-
-procedure TPasMPBoundedStack.Pop(out Item);
-begin
- while not TryPop(Item) do begin
-  TPasMP.Yield;
  end;
 end;
 
@@ -4639,7 +4507,7 @@ begin
  result:=fFree.IsEmpty;
 end;
 
-function TPasMPBoundedTypedStack<T>.TryPush(const Item:T):boolean;
+function TPasMPBoundedTypedStack<T>.Push(const Item:T):boolean;
 var StackItem:PPasMPBoundedTypedStackItem;
 begin
  StackItem:=fFree.Pop;
@@ -4652,14 +4520,7 @@ begin
  end;
 end;
 
-procedure TPasMPBoundedTypedStack<T>.Push(const Item:T);
-begin
- while not TryPush(Item) do begin
-  TPasMP.Yield;
- end;
-end;
-
-function TPasMPBoundedTypedStack<T>.TryPop(out Item:T):boolean;
+function TPasMPBoundedTypedStack<T>.Pop(out Item:T):boolean;
 var StackItem:PPasMPBoundedTypedStackItem;
 begin
  StackItem:=fStack.Pop;
@@ -4672,365 +4533,107 @@ begin
   result:=false;
  end;
 end;
-
-procedure TPasMPBoundedTypedStack<T>.Pop(out Item:T);
-begin
- while not TryPop(Item) do begin
-  TPasMP.Yield;
- end;
-end;
 {$endif}
 
 constructor TPasMPUnboundedStack.Create(const ItemSize:longint);
 begin
  inherited Create;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- TPasMPMemory.AllocateAlignedMemory(fStack,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
- fStack^.PointerValue:=nil;
- fStack^.TagValue:=0;
-{$else}
- fCriticalSection:=TPasMPCriticalSection.Create;
- fStack:=nil;
-{$endif}
+ fStack:=TPasMPInterlockedStack.Create;
  fItemSize:=ItemSize;
 end;
 
 destructor TPasMPUnboundedStack.Destroy;
 var StackItem:PPasMPUnboundedStackItem;
 begin
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- while assigned(fStack^.PointerValue) do begin
-  StackItem:=fStack^.PointerValue;
-  fStack^.PointerValue:=StackItem^.Next.PointerValue;
-  TPasMPMemory.FreeAlignedMemory(StackItem);
- end;
- TPasMPMemory.FreeAlignedMemory(fStack);
-{$else}
- while assigned(fStack) do begin
-  StackItem:=fStack;
-  fStack:=StackItem^.Next;
-  TPasMPMemory.FreeAlignedMemory(StackItem);
- end;
- fCriticalSection.Free;
-{$endif}
+ repeat
+  StackItem:=fStack.Pop;
+  if assigned(StackItem) then begin
+   TPasMPMemory.FreeAlignedMemory(StackItem);
+  end else begin
+   break;
+  end;
+ until false;
+ fStack.Free;
  inherited Destroy;
 end;
 
 function TPasMPUnboundedStack.IsEmpty:boolean;
 begin
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- result:=not assigned(fStack.PointerValue);
-{$else}
- result:=not assigned(fStack);
-{$endif}
+ result:=fStack.IsEmpty;
 end;
 
-function TPasMPUnboundedStack.TryPush(const Item):boolean;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-var OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:TPasMPTaggedPointer;
-    StackItem:PPasMPUnboundedStackItem;
+function TPasMPUnboundedStack.Push(const Item):boolean;
+var StackItem:PPasMPUnboundedStackItem;
 begin
  TPasMPMemory.AllocateAlignedMemory(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
  Move(Item,StackItem^.Data,fItemSize);
- repeat
-{$ifdef CPU64}
-  NextHead.PointerValue:=nil;
-  NextHead.TagValue:=0;
-  OriginalHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,NextHead.Value);
-{$else}
-  OriginalHead.Value.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value.Value,-1,-1);
-{$endif}
-  StackItem^.Next.PointerValue:=OriginalHead.PointerValue;
-  NextHead.PointerValue:=StackItem;
-  NextHead.TagValue:=OriginalHead.TagValue+1;
-{$ifdef CPU64}
-  ResultHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,OriginalHead.Value);
-  if (ResultHead.PointerValue=OriginalHead.PointerValue) and (ResultHead.TagValue=OriginalHead.TagValue) then begin
-   break;
-  end;
- until false;
-{$else}
- until TPasMPInterlocked.CompareExchange(fStack^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)=OriginalHead.Value.Value;
-{$endif}
+ fStack.Push(StackItem);
  result:=true;
 end;
-{$else}
+
+function TPasMPUnboundedStack.Pop(out Item):boolean;
 var StackItem:PPasMPUnboundedStackItem;
 begin
- fCriticalSection.Acquire;
- try
-  TPasMPMemory.AllocateAlignedMemory(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
-  Move(Item,StackItem^.Data,fItemSize);
-  StackItem^.fNext:=fStack;
-  fStack:=StackItem;
- finally
-  fCriticalSection.Release;
- end;
- result:=true;
-end;
-{$endif}
-
-procedure TPasMPUnboundedStack.Push(const Item);
-begin
- while not TryPush(Item) do begin
-  TPasMP.Yield;
- end;
-end;
-
-function TPasMPUnboundedStack.TryPop(out Item):boolean;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-var OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:TPasMPTaggedPointer;
-    StackItem:PPasMPUnboundedStackItem;
-begin
- result:=false;
- if assigned(fStack^.PointerValue) then begin
-  repeat
-{$ifdef CPU64}
-   NextHead.PointerValue:=nil;
-   NextHead.TagValue:=0;
-   OriginalHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,NextHead.Value);
-{$else}
-   OriginalHead.Value.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value.Value,-1,-1);
-{$endif}
-   if assigned(OriginalHead.PointerValue) then begin
-    NextHead.TagValue:=OriginalHead.TagValue+1;
-    NextHead.PointerValue:=PPasMPUnboundedStackItem(OriginalHead.PointerValue)^.Next.PointerValue;
-{$ifdef CPU64}
-    ResultHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,OriginalHead.Value);
-    if (ResultHead.PointerValue=OriginalHead.PointerValue) and (ResultHead.TagValue=OriginalHead.TagValue) then begin
-     break;
-    end;
-{$else}
-    if TPasMPInterlocked.CompareExchange(fStack^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)=OriginalHead.Value.Value then begin
-     break;
-    end;
-{$endif}
-   end else begin
-    break;
-   end;
-  until false;
-  StackItem:=PPasMPUnboundedStackItem(OriginalHead.PointerValue);
-  if assigned(StackItem) then begin
-   Move(StackItem^.Data,Item,fItemSize);
-   TPasMPMemory.FreeAlignedMemory(StackItem);
-   result:=true;
-  end;
- end;
-end;
-{$else}
-var StackItem:PPasMPStackItem;
-begin
- result:=false;
- if assigned(fStack) then begin
-  fCriticalSection.Acquire;
-  try
-   if assigned(fStack) then begin
-    StackItem:=fStack;
-    fStack:=StackItem^.Next;
-    Move(StackItem^.Data,Item,fItemSize);
-    TPasMPMemory.FreeAlignedMemory(StackItem);
-    result:=true;
-   end;
-  finally
-   fCriticalSection.Release;
-  end;
- end;
-end;
-{$endif}
-
-procedure TPasMPUnboundedStack.Pop(out Item);
-begin
- while not TryPop(Item) do begin
-  TPasMP.Yield;
+ StackItem:=fStack.Pop;
+ if assigned(StackItem) then begin
+  Move(StackItem^.Data,Item,fItemSize);
+  TPasMPMemory.FreeAlignedMemory(StackItem);
+  result:=true;
+ end else begin
+  result:=false;
  end;
 end;
 
 {$ifdef HAS_GENERICS}
-constructor TPasMPUnboundedTypedStackItem<T>.Create;
+constructor TPasMPUnboundedTypedStack<T>.Create(const ItemSize:longint);
 begin
  inherited Create;
- if assigned(@fNext) and assigned(@fData) then begin
-  // For to suppress "Private field TPasMPUnboundedTypedStackItem$1.* is never used" warnings on FreePascal
- end;
-end;
-
-destructor TPasMPUnboundedTypedStackItem<T>.Destroy;
-begin
- inherited Destroy;
-end;
-
-class function TPasMPUnboundedTypedStackItem<T>.NewInstance:TObject;
-begin
- TPasMPMemory.AllocateAlignedMemory(result,InstanceSize,PasMPCPUCacheLineSize);
- result:=InitInstance(result);
-end;
-
-procedure TPasMPUnboundedTypedStackItem<T>.FreeInstance;
-begin
- CleanupInstance;
- TPasMPMemory.FreeAlignedMemory(self);
-end;
-
-constructor TPasMPUnboundedTypedStack<T>.Create;
-begin
- inherited Create;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- TPasMPMemory.AllocateAlignedMemory(fStack,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
- fStack^.PointerValue:=nil;
- fStack^.TagValue:=0;
-{$else}
- fCriticalSection:=TPasMPCriticalSection.Create;
- fStack:=nil;
-{$endif}
+ fStack:=TPasMPInterlockedStack.Create;
+ fItemSize:=ItemSize;
 end;
 
 destructor TPasMPUnboundedTypedStack<T>.Destroy;
-var Item:T;
+var StackItem:PPasMPUnboundedTypedStackItem;
 begin
- while not IsEmpty do begin
-  Pop(Item);
- end;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- TPasMPMemory.FreeAlignedMemory(fStack);
-{$else}
- fCriticalSection.Free;
-{$endif}
+ repeat
+  StackItem:=fStack.Pop;
+  if assigned(StackItem) then begin
+   Finalize(StackItem^);
+   TPasMPMemory.FreeAlignedMemory(StackItem);
+  end else begin
+   break;
+  end;
+ until false;
+ fStack.Free;
  inherited Destroy;
 end;
 
 function TPasMPUnboundedTypedStack<T>.IsEmpty:boolean;
 begin
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
- result:=not assigned(fStack.PointerValue);
-{$else}
- result:=not assigned(fStack);
-{$endif}
+ result:=fStack.IsEmpty;
 end;
 
-function TPasMPUnboundedTypedStack<T>.TryPush(const Item:T):boolean;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-var OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:TPasMPTaggedPointer;
-    StackItem:TPasMPUnboundedTypedStackItem<T>;
+function TPasMPUnboundedTypedStack<T>.Push(const Item:T):boolean;
+var StackItem:PPasMPUnboundedTypedStackItem;
 begin
- StackItem:=TPasMPUnboundedTypedStackItem<T>.Create;
- StackItem.fData:=Item;
- repeat
-{$ifdef CPU64}
-  NextHead.PointerValue:=nil;
-  NextHead.TagValue:=0;
-  OriginalHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,NextHead.Value);
-{$else}
-  OriginalHead.Value.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value.Value,-1,-1);
-{$endif}
-  StackItem.fNext.PointerValue:=OriginalHead.PointerValue;
-  NextHead.PointerValue:=StackItem;
-  NextHead.TagValue:=OriginalHead.TagValue+1;
-{$ifdef CPU64}
-  ResultHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,OriginalHead.Value);
-  if (ResultHead.PointerValue=OriginalHead.PointerValue) and (ResultHead.TagValue=OriginalHead.TagValue) then begin
-   break;
-  end;
- until false;
-{$else}
- until TPasMPInterlocked.CompareExchange(fStack^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)=OriginalHead.Value.Value;
-{$endif}
+ TPasMPMemory.AllocateAlignedMemory(StackItem,SizeOf(TPasMPUnboundedTypedStackItem)+fItemSize,PasMPCPUCacheLineSize);
+ Initialize(StackItem^);
+ StackItem^.Data:=Item;
+ fStack.Push(StackItem);
  result:=true;
 end;
-{$else}
-var StackItem:TPasMPUnboundedTypedStackItem<T>;
-begin
- fCriticalSection.Acquire;
- try
-  StackItem:=TPasMPUnboundedTypedStackItem<T>.Create;
-  StackItem.fNext:=fStack;
-  StackItem.fData:=Item;
-  fStack:=StackItem;
- finally
-  fCriticalSection.Release;
- end;
- result:=true;
-end;
-{$endif}
 
-procedure TPasMPUnboundedTypedStack<T>.Push(const Item:T);
+function TPasMPUnboundedTypedStack<T>.Pop(out Item:T):boolean;
+var StackItem:PPasMPUnboundedTypedStackItem;
 begin
- while not TryPush(Item) do begin
-  TPasMP.Yield;
- end;
-end;
-
-function TPasMPUnboundedTypedStack<T>.TryPop(out Item:T):boolean;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-var OriginalHead,NextHead{$ifdef CPU64},ResultHead{$endif}:TPasMPTaggedPointer;
-    StackItem:TPasMPUnboundedTypedStackItem<T>;
-begin
- result:=false;
- if assigned(fStack^.PointerValue) then begin
-  repeat
-{$ifdef CPU64}
-   NextHead.PointerValue:=nil;
-   NextHead.TagValue:=0;
-   OriginalHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,NextHead.Value);
-{$else}
-   OriginalHead.Value.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value.Value,-1,-1);
-{$endif}
-   if assigned(OriginalHead.PointerValue) then begin
-    NextHead.TagValue:=OriginalHead.TagValue+1;
-    StackItem:=OriginalHead.PointerValue;
-    NextHead.PointerValue:=StackItem.fNext.PointerValue;
-{$ifdef CPU64}
-    ResultHead.Value:=TPasMPInterlocked.CompareExchange(fStack^.Value,NextHead.Value,OriginalHead.Value);
-    if (ResultHead.PointerValue=OriginalHead.PointerValue) and (ResultHead.TagValue=OriginalHead.TagValue) then begin
-     break;
-    end;
-{$else}
-    if TPasMPInterlocked.CompareExchange(fStack^.Value.Value,NextHead.Value.Value,OriginalHead.Value.Value)=OriginalHead.Value.Value then begin
-     break;
-    end;
-{$endif}
-   end else begin
-    break;
-   end;
-  until false;
-  StackItem:=OriginalHead.PointerValue;
-  if assigned(StackItem) then begin
-   try
-    Item:=StackItem.fData;
-   finally
-    StackItem.Free;
-   end;
-   result:=true;
-  end;
- end;
-end;
-{$else}
-var StackItem:TPasMPUnboundedTypedStackItem<T>;
-begin
- result:=false;
- if assigned(fStack) then begin
-  fCriticalSection.Acquire;
-  try
-   if assigned(fStack) then begin
-    StackItem:=fStack;
-    try
-     fStack:=StackItem.fNext;
-     Item:=StackItem.fData;
-     result:=true;
-    finally
-     StackItem.Free;
-    end;
-   end;
-  finally
-   fCriticalSection.Release;
-  end;
- end;
-end;
-{$endif}
-
-procedure TPasMPUnboundedTypedStack<T>.Pop(out Item:T);
-begin
- while not TryPop(Item) do begin
-  TPasMP.Yield;
+ StackItem:=fStack.Pop;
+ if assigned(StackItem) then begin
+  Item:=StackItem^.Data;
+  Finalize(StackItem^);
+  TPasMPMemory.FreeAlignedMemory(StackItem);
+  result:=true;
+ end else begin
+  result:=false;
  end;
 end;
 {$endif}
