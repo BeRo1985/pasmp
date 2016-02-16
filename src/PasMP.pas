@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-16-16-22-0000                       *
+ *                        Version 2016-02-16-17-02-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -760,7 +760,7 @@ type TPasMPAvailableCPUCores=array of longint;
        destructor Destroy; override;
        procedure Clear; {$ifdef CAN_INLINE}inline;{$endif}
        function IsEmpty:boolean; {$ifdef CAN_INLINE}inline;{$endif}
-       function Push(const Entry:pointer):pointer; {$ifdef CAN_INLINE}inline;{$endif}
+       function Push(const Item:pointer):pointer; {$ifdef CAN_INLINE}inline;{$endif}
        function Pop:pointer; {$ifdef CAN_INLINE}inline;{$endif}
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
@@ -773,7 +773,9 @@ type TPasMPAvailableCPUCores=array of longint;
 {$else}
       Next:pointer;
 {$endif}
-      Data:pointer;
+      Data:record
+       // Empty
+      end;
      end;
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
@@ -790,13 +792,15 @@ type TPasMPAvailableCPUCores=array of longint;
        fHead:PPasMPInterlockedQueueNode;
        fTail:PPasMPInterlockedQueueNode;
 {$endif}
+       fItemSize:longint;
+       fInternalNodeSize:longint;
       public
-       constructor Create;
+       constructor Create(ItemSize:longint);
        destructor Destroy; override;
        procedure Clear; {$ifdef CAN_INLINE}inline;{$endif}
        function IsEmpty:boolean; {$ifdef CAN_INLINE}inline;{$endif}
-       function Enqueue(const Entry:pointer):pointer; {$ifdef CAN_INLINE}inline;{$endif}
-       function Dequeue:pointer; {$ifdef CAN_INLINE}inline;{$endif}
+       procedure Enqueue(const Item); {$ifdef CAN_INLINE}inline;{$endif}
+       function Dequeue(out Item):boolean; {$ifdef CAN_INLINE}inline;{$endif}
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -955,11 +959,99 @@ type TPasMPAvailableCPUCores=array of longint;
        fStack:TPasMPInterlockedStack;
        fItemSize:longint;
       public
-       constructor Create(const ItemSize:longint);
+       constructor Create;
        destructor Destroy; override;
        function IsEmpty:boolean;
        function Push(const Item:T):boolean;
        function Pop(out Item:T):boolean;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+{$endif}
+
+     PPasMPBoundedQueueItem=^TPasMPBoundedQueueItem;
+     TPasMPBoundedQueueItem=record
+      Next:TPasMPInterlockedStackEntry;
+      Data:record
+       // Empty
+      end;
+     end;
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPBoundedQueue=class
+      private
+       fQueue:TPasMPInterlockedQueue;
+       fFree:TPasMPInterlockedStack;
+       fData:pointer;
+       fMaximalCount:longint;
+       fItemSize:longint;
+       fInternalItemSize:longint;
+      public
+       constructor Create(const MaximalCount,ItemSize:longint);
+       destructor Destroy; override;
+       function IsEmpty:boolean;
+       function IsFull:boolean;
+       function Enqueue(const Item):boolean;
+       function Dequeue(out Item):boolean;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+{$ifdef HAS_GENERICS}
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPBoundedTypedQueue<T>=class
+      private
+       type PPasMPBoundedTypedQueueItem=^TPasMPBoundedTypedQueueItem;
+            TPasMPBoundedTypedQueueItem=record
+             Next:TPasMPInterlockedStackEntry;
+             Data:T;
+            end;
+      private
+       fQueue:TPasMPInterlockedQueue;
+       fFree:TPasMPInterlockedStack;
+       fData:pointer;
+       fMaximalCount:longint;
+       fInternalItemSize:longint;
+      public
+       constructor Create(const MaximalCount:longint);
+       destructor Destroy; override;
+       function IsEmpty:boolean;
+       function IsFull:boolean;
+       function Enqueue(const Item:T):boolean;
+       function Dequeue(out Item:T):boolean;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+{$endif}
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPUnboundedQueue=class
+      private
+       fQueue:TPasMPInterlockedQueue;
+       fItemSize:longint;
+      public
+       constructor Create(const ItemSize:longint);
+       destructor Destroy; override;
+       function IsEmpty:boolean;
+       procedure Enqueue(const Item);
+       function Dequeue(out Item):boolean;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+{$ifdef HAS_GENERICS}
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPUnboundedTypedQueue<T>=class
+      private
+       type PPasMPUnboundedTypedQueueItem=^TPasMPUnboundedTypedQueueItem;
+            TPasMPUnboundedTypedQueueItem=record
+             Data:T;
+            end;
+      private
+       fQueue:TPasMPInterlockedQueue;
+       fItemSize:longint;
+      public
+       constructor Create;
+       destructor Destroy; override;
+       function IsEmpty:boolean;
+       procedure Enqueue(const Item:T);
+       function Dequeue(out Item:T):boolean;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 {$endif}
@@ -3727,14 +3819,14 @@ begin
 end;
 {$endif}
 
-function TPasMPInterlockedStack.Push(const Entry:pointer):pointer;
+function TPasMPInterlockedStack.Push(const Item:pointer):pointer;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 var OldHead,NewHead,ComparsionHead:TPasMPTaggedPointer;
 begin
  OldHead:=fHead^;
  repeat
-  pointer(Entry^):=OldHead.PointerValue;
-  NewHead.PointerValue:=Entry;
+  pointer(Item^):=OldHead.PointerValue;
+  NewHead.PointerValue:=Item;
   NewHead.TagValue:=OldHead.TagValue+1;
   ComparsionHead:=OldHead;
   OldHead.Value:=TPasMPInterlocked.CompareExchange(fHead^.Value,NewHead.Value,ComparsionHead.Value);
@@ -3746,8 +3838,8 @@ begin
  fCriticalSection.Acquire;
  try
   result:=fHead;
-  pointer(Entry^):=fHead;
-  fHead:=Entry;
+  pointer(Item^):=fHead;
+  fHead:=Item;
  finally
   fCriticalSection.Leave;
  end;
@@ -3796,6 +3888,8 @@ constructor TPasMPInterlockedQueue.Create;
 var Node:PPasMPInterlockedQueueNode;
 begin
  inherited Create;
+ fItemSize:=ItemSize;
+ fInternalNodeSize:=TPasMP.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPInterlockedQueueNode)+fItemSize,PasMPCPUCacheLineSize));
  fHead:=nil;
  fTail:=nil;
  TPasMPMemory.AllocateAlignedMemory(fHead,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
@@ -3813,12 +3907,13 @@ end;
 {$else}
 begin
  inherited Create;
+ fItemSize:=ItemSize;
+ fInternalNodeSize:=TPasMP.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPInterlockedQueueNode)+fItemSize,PasMPCPUCacheLineSize));
  fHeadCriticalSection:=TPasMPCriticalSection.Create;
  fTailCriticalSection:=TPasMPCriticalSection.Create;
  fHead:=nil;
- TPasMPMemory.AllocateAlignedMemory(fHead,SizeOf(TPasMPInterlockedQueueNode),PasMPCPUCacheLineSize);
+ TPasMPMemory.AllocateAlignedMemory(fHead,fInternalNodeSize,PasMPCPUCacheLineSize);
  fHead^.Next:=nil;
- fHead^.Data:=nil;
  fTail:=fHead;
 end;
 {$endif}
@@ -3866,7 +3961,7 @@ begin
    CurrentNode:=NextNode;
   end;
  end;
- TPasMPMemory.AllocateAlignedMemory(Node,SizeOf(TPasMPInterlockedQueueNode),PasMPCPUCacheLineSize);
+ TPasMPMemory.AllocateAlignedMemory(Node,fInternalNodeSize,PasMPCPUCacheLineSize);
  Node^.Previous.PointerValue:=nil;
  Node^.Previous.TagValue:=0;
  Node^.Next.PointerValue:=nil;
@@ -3886,9 +3981,8 @@ begin
   CurrentNode:=NextNode;
  end;
  fHead:=nil;
- TPasMPMemory.AllocateAlignedMemory(fHead,SizeOf(TPasMPInterlockedQueueNode),PasMPCPUCacheLineSize);
+ TPasMPMemory.AllocateAlignedMemory(fHead,fInternalNodeSize,PasMPCPUCacheLineSize);
  fHead^.Next:=nil;
- fHead^.Data:=nil;
  fTail:=fHead;
 end;
 {$endif}
@@ -3904,16 +3998,16 @@ begin
 end;
 {$endif}
 
-function TPasMPInterlockedQueue.Enqueue(const Entry:pointer):pointer;
+procedure TPasMPInterlockedQueue.Enqueue(const Item);
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 // Based on http://people.csail.mit.edu/edya/publications/OptimisticFIFOQueue-journal.pdf
 var Node:PPasMPInterlockedQueueNode;
     Tail,OldTail,NewTail:TPasMPTaggedPointer;
 begin
- TPasMPMemory.AllocateAlignedMemory(Node,SizeOf(TPasMPInterlockedQueueNode),PasMPCPUCacheLineSize);
+ TPasMPMemory.AllocateAlignedMemory(Node,fInternalNodeSize,PasMPCPUCacheLineSize);
  Node^.Previous.PointerValue:=nil;
  Node^.Previous.TagValue:=0;
- Node^.Data:=Entry;
+ Move(Item,Node^.Data,fItemSize);
  OldTail:=fTail^;
  repeat
   Tail:=OldTail;
@@ -3925,17 +4019,15 @@ begin
  until {$ifdef CPU64}(OldTail.PointerValue=Tail.PointerValue) and (OldTail.TagValue=Tail.TagValue){$else}OldTail.Value.Value=Tail.Value.Value{$endif};
  PPasMPInterlockedQueueNode(Tail.PointerValue)^.Previous.PointerValue:=Node;
  PPasMPInterlockedQueueNode(Tail.PointerValue)^.Previous.TagValue:=Tail.TagValue;
- result:=PPasMPInterlockedQueueNode(Tail.PointerValue)^.Data;
 end;
 {$else}
 var Node:PPasMPInterlockedQueueNode;
 begin
- TPasMPMemory.AllocateAlignedMemory(Node,SizeOf(TPasMPInterlockedQueueNode),PasMPCPUCacheLineSize);
+ TPasMPMemory.AllocateAlignedMemory(Node,fInternalNodeSize,PasMPCPUCacheLineSize);
  Node^.Next:=nil;
- Node^.Data:=Entry;
+ Move(Item,Node^.Data,fItemSize);
  fTailCriticalSection.Acquire;
  try
-  result:=fTail^.Data;
   fTail^.Next:=Node;
   fTail:=Node;
  finally
@@ -3944,13 +4036,12 @@ begin
 end;
 {$endif}
 
-function TPasMPInterlockedQueue.Dequeue:pointer;
+function TPasMPInterlockedQueue.Dequeue(out Item):boolean;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 // Based on http://people.csail.mit.edu/edya/publications/OptimisticFIFOQueue-journal.pdf
 var Tail,Head,CheckHead,FirstNodePrevious,NewHead,OldHead,CurrentNode,NextNode,NewNode:TPasMPTaggedPointer;
 begin
- TPasMPMemoryBarrier.ReadWrite;
- result:=nil;
+ result:=false;
  repeat
   Head.Value:=fHead^.Value;
   Tail.Value:=fTail^.Value;
@@ -3989,9 +4080,10 @@ begin
       NewHead.TagValue:=Head.TagValue+1;
       OldHead.Value:=TPasMPInterlocked.CompareExchange(fHead^.Value,NewHead.Value,Head.Value);
       if {$ifdef CPU64}(OldHead.PointerValue=Head.PointerValue) and (OldHead.TagValue=Head.TagValue){$else}OldHead.Value.Value=Head.Value.Value{$endif} then begin
-       result:=PPasMPInterlockedQueueNode(FirstNodePrevious.PointerValue)^.Data;
+       Move(PPasMPInterlockedQueueNode(FirstNodePrevious.PointerValue)^.Data,Item,fItemSize);
        TPasMPMemory.FreeAlignedMemory(Head.PointerValue);
-       break;
+       result:=true;
+       exit;
       end;
      end;
     end;
@@ -4004,24 +4096,21 @@ end;
 {$else}
 var Node,NewHead:PPasMPInterlockedQueueNode;
 begin
- if assigned(fHead) and assigned(fHead^.Next) then begin
+ result:=false;
+ if assigned(fHead) and (fHead<>fTail) then begin
   fHeadCriticalSection.Acquire;
   try
    Node:=fHead;
    NewHead:=fHead^.Next;
    if assigned(NewHead) then begin
-    result:=NewHead^.Data;
-    NewHead^.Data:=nil;
+    Move(NewHead^.Data,Item,fItemSize);
     fHead:=NewHead;
     TPasMPMemory.FreeAlignedMemory(Node);
-   end else begin
-    result:=nil;
+    result:=true;
    end;
   finally
    fHeadCriticalSection.Release;
   end;
- end else begin
-  result:=nil;
  end;
 end;
 {$endif}
@@ -4834,11 +4923,11 @@ begin
 end;
 
 {$ifdef HAS_GENERICS}
-constructor TPasMPUnboundedTypedStack<T>.Create(const ItemSize:longint);
+constructor TPasMPUnboundedTypedStack<T>.Create;
 begin
  inherited Create;
  fStack:=TPasMPInterlockedStack.Create;
- fItemSize:=ItemSize;
+ fItemSize:=SizeOf(T);
 end;
 
 destructor TPasMPUnboundedTypedStack<T>.Destroy;
@@ -4883,6 +4972,221 @@ begin
   result:=true;
  end else begin
   result:=false;
+ end;
+end;
+{$endif}
+
+constructor TPasMPBoundedQueue.Create(const MaximalCount,ItemSize:longint);
+var i:longint;
+    p:PByte;
+    QueueItem:PPasMPBoundedQueueItem;
+begin
+ inherited Create;
+ fQueue:=TPasMPInterlockedQueue.Create(SizeOf(PPasMPBoundedQueueItem));
+ fFree:=TPasMPInterlockedStack.Create;
+ fMaximalCount:=MaximalCount;
+ fItemSize:=ItemSize;
+ fInternalItemSize:=TPasMP.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPBoundedQueueItem)+fItemSize,PasMPCPUCacheLineSize));
+ TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
+ p:=fData;
+ for i:=0 to fMaximalCount-1 do begin
+  QueueItem:=pointer(p);
+  inc(p,fInternalItemSize);
+  fFree.Push(QueueItem);
+ end;
+end;
+
+destructor TPasMPBoundedQueue.Destroy;
+begin
+ TPasMPMemory.FreeAlignedMemory(fData);
+ fFree.Free;
+ fQueue.Free;
+ inherited Destroy;
+end;
+
+function TPasMPBoundedQueue.IsEmpty:boolean;
+begin
+ result:=fQueue.IsEmpty;
+end;
+
+function TPasMPBoundedQueue.IsFull:boolean;
+begin
+ result:=fFree.IsEmpty;
+end;
+
+function TPasMPBoundedQueue.Enqueue(const Item):boolean;
+var QueueItem:PPasMPBoundedQueueItem;
+begin
+ QueueItem:=fFree.Pop;
+ if assigned(QueueItem) then begin
+  Move(Item,QueueItem^.Data,fItemSize);
+  fQueue.Enqueue(QueueItem);
+  result:=true;
+ end else begin
+  result:=false;
+ end;
+end;
+
+function TPasMPBoundedQueue.Dequeue(out Item):boolean;
+var StackItem:PPasMPBoundedQueueItem;
+begin
+ result:=fQueue.Dequeue(StackItem);
+ if result then begin
+  Move(StackItem^.Data,Item,fItemSize);
+  fFree.Push(StackItem);
+ end;
+end;
+
+{$ifdef HAS_GENERICS}
+constructor TPasMPBoundedTypedQueue<T>.Create(const MaximalCount:longint);
+var i:longint;
+    p:PByte;
+    QueueItem:PPasMPBoundedTypedQueueItem;
+begin
+ inherited Create;
+ fQueue:=TPasMPInterlockedQueue.Create(SizeOf(PPasMPBoundedQueueItem));
+ fFree:=TPasMPInterlockedStack.Create;
+ fMaximalCount:=MaximalCount;
+ fInternalItemSize:=Max(TPasMP.RoundUpToPowerOfTwo(SizeOf(TPasMPBoundedTypedQueueItem)),PasMPCPUCacheLineSize);
+ TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
+ p:=fData;
+ for i:=0 to fMaximalCount-1 do begin
+  QueueItem:=pointer(p);
+  Initialize(QueueItem^);
+  inc(p,fInternalItemSize);
+  fFree.Push(QueueItem);
+ end;
+end;
+
+destructor TPasMPBoundedTypedQueue<T>.Destroy;
+var i:longint;
+    p:PByte;
+    QueueItem:PPasMPBoundedTypedQueueItem;
+begin
+ p:=fData;
+ for i:=0 to fMaximalCount-1 do begin
+  QueueItem:=pointer(p);
+  Finalize(QueueItem^);
+  inc(p,fInternalItemSize);
+ end;
+ TPasMPMemory.FreeAlignedMemory(fData);
+ fFree.Free;
+ fQueue.Free;
+ inherited Destroy;
+end;
+
+function TPasMPBoundedTypedQueue<T>.IsEmpty:boolean;
+begin
+ result:=fQueue.IsEmpty;
+end;
+
+function TPasMPBoundedTypedQueue<T>.IsFull:boolean;
+begin
+ result:=fFree.IsEmpty;
+end;
+
+function TPasMPBoundedTypedQueue<T>.Enqueue(const Item:T):boolean;
+var QueueItem:PPasMPBoundedTypedQueueItem;
+begin
+ QueueItem:=fFree.Pop;
+ if assigned(QueueItem) then begin
+  Initialize(QueueItem^);
+  QueueItem^.Data:=Item;
+  fQueue.Enqueue(QueueItem);
+  result:=true;
+ end else begin
+  result:=false;
+ end;
+end;
+
+function TPasMPBoundedTypedQueue<T>.Dequeue(out Item:T):boolean;
+var QueueItem:PPasMPBoundedTypedQueueItem;
+begin
+ result:=fQueue.Dequeue(QueueItem);
+ if result then begin
+  Item:=QueueItem^.Data;
+  Finalize(QueueItem^);
+  fFree.Push(QueueItem);
+  result:=true;
+ end else begin
+  result:=false;
+ end;
+end;
+{$endif}
+
+constructor TPasMPUnboundedQueue.Create(const ItemSize:longint);
+begin
+ inherited Create;
+ fQueue:=TPasMPInterlockedQueue.Create(ItemSize);
+ fItemSize:=ItemSize;
+end;
+
+destructor TPasMPUnboundedQueue.Destroy;
+begin
+ fQueue.Free;
+ inherited Destroy;
+end;
+
+function TPasMPUnboundedQueue.IsEmpty:boolean;
+begin
+ result:=fQueue.IsEmpty;
+end;
+
+procedure TPasMPUnboundedQueue.Enqueue(const Item);
+begin
+ fQueue.Enqueue(Item);
+end;
+
+function TPasMPUnboundedQueue.Dequeue(out Item):boolean;
+begin
+ result:=fQueue.Dequeue(Item);
+end;
+
+{$ifdef HAS_GENERICS}
+constructor TPasMPUnboundedTypedQueue<T>.Create;
+begin
+ inherited Create;
+ fQueue:=TPasMPInterlockedQueue.Create(SizeOf(PPasMPUnboundedTypedQueueItem));
+end;
+
+destructor TPasMPUnboundedTypedQueue<T>.Destroy;
+var QueueItem:PPasMPUnboundedTypedQueueItem;
+begin
+ while fQueue.Dequeue(QueueItem) do begin
+  if assigned(QueueItem) then begin
+   Finalize(QueueItem^);
+   TPasMPMemory.FreeAlignedMemory(QueueItem);
+  end;
+ end;
+ fQueue.Free;
+ inherited Destroy;
+end;
+
+function TPasMPUnboundedTypedQueue<T>.IsEmpty:boolean;
+begin
+ result:=fQueue.IsEmpty;
+end;
+
+procedure TPasMPUnboundedTypedQueue<T>.Enqueue(const Item:T);
+var QueueItem:PPasMPUnboundedTypedQueueItem;
+begin
+ TPasMPMemory.AllocateAlignedMemory(QueueItem,SizeOf(TPasMPUnboundedTypedQueueItem),PasMPCPUCacheLineSize);
+ Initialize(QueueItem^);
+ QueueItem^.Data:=Item;
+ fQueue.Enqueue(QueueItem);
+end;
+
+function TPasMPUnboundedTypedQueue<T>.Dequeue(out Item:T):boolean;
+var QueueItem:PPasMPUnboundedTypedQueueItem;
+begin
+ result:=fQueue.Dequeue(QueueItem);
+ if result then begin
+  result:=assigned(QueueItem);
+  if result then begin
+   Item:=QueueItem^.Data;
+   Finalize(QueueItem^);
+   TPasMPMemory.FreeAlignedMemory(QueueItem);
+  end;
  end;
 end;
 {$endif}
