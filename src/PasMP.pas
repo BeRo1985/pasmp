@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-16-16-05-0000                       *
+ *                        Version 2016-02-16-16-14-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -3708,17 +3708,9 @@ end;
 
 function TPasMPInterlockedStack.IsEmpty:boolean;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-{$if defined(CPU386) or defined(CPUx86_64)}
 begin
  result:=not assigned(fHead^.PointerValue);
 end;
-{$else}
-var Head:TPasMPTaggedPointer;
-begin
- OldHead.Value:=TPasMPInterlocked.Read(fHead^.Value);
- result:=not assigned(OldHead.PointerValue);
-end;
-{$ifend}
 {$else}
 begin
  result:=true;
@@ -3739,11 +3731,7 @@ function TPasMPInterlockedStack.Push(const Entry:pointer):pointer;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 var OldHead,NewHead,ComparsionHead:TPasMPTaggedPointer;
 begin
-{$if defined(CPU386) or defined(CPUx86_64)}
  OldHead:=fHead^;
-{$else}
- OldHead.Value:=TPasMPInterlocked.Read(fHead^.Value);
-{$ifend}
  repeat
   pointer(Entry^):=OldHead.PointerValue;
   NewHead.PointerValue:=Entry;
@@ -3771,11 +3759,7 @@ function TPasMPInterlockedStack.Pop:pointer;
 var OldHead,NewHead,ComparsionHead:TPasMPTaggedPointer;
 begin
  if assigned(fHead^.PointerValue) then begin
-{$if defined(CPU386) or defined(CPUx86_64)}
   OldHead:=fHead^;
-{$else}
-  OldHead.Value:=TPasMPInterlocked.Read(fHead^.Value);
-{$ifend}
   while assigned(OldHead.PointerValue) do begin
    NewHead.PointerValue:=pointer(OldHead.PointerValue^);
    NewHead.TagValue:=NewHead.TagValue+1;
@@ -3965,14 +3949,13 @@ function TPasMPInterlockedQueue.Dequeue:pointer;
 // Based on http://people.csail.mit.edu/edya/publications/OptimisticFIFOQueue-journal.pdf
 var Tail,Head,CheckHead,FirstNodePrevious,NewHead,OldHead,CurrentNode,NextNode,NewNode:TPasMPTaggedPointer;
 begin
+ TPasMPMemoryBarrier.ReadWrite;
  result:=nil;
  repeat
-  Head.Value:=TPasMPInterlocked.Read(fHead^.Value);
-  TPasMPMemoryBarrier.ReadDependency;
-  Tail.Value:=TPasMPInterlocked.Read(fTail^.Value);
+  Head.Value:=fHead^.Value;
+  Tail.Value:=fTail^.Value;
   FirstNodePrevious:=PPasMPInterlockedQueueNode(Head.PointerValue)^.Previous;
-  TPasMPMemoryBarrier.ReadDependency;
-  CheckHead.Value:=TPasMPInterlocked.Read(fHead^.Value);
+  CheckHead.Value:=fHead^.Value;
   if {$ifdef cpu64}(Head.PointerValue=CheckHead.PointerValue) and (Head.TagValue=CheckHead.TagValue){$else}Head.Value.Value=CheckHead.Value.Value{$endif} then begin
    if {$ifdef cpu64}(Head.PointerValue<>Tail.PointerValue) or (Head.TagValue<>Tail.TagValue){$else}Head.Value.Value<>Tail.Value.Value{$endif} then begin
     // Not in the original paper, but there is a race condition where push adds a node, but leaves Node^.Next^.Previous uninitialized for a short time.
@@ -3984,7 +3967,7 @@ begin
       // Fix list
       CurrentNode:=Tail;
       repeat
-       CheckHead.Value:=TPasMPInterlocked.Read(fHead^.Value);
+       CheckHead.Value:=fHead^.Value;
 {$ifdef cpu64}
        if ((Head.PointerValue=CheckHead.PointerValue) and (Head.TagValue=CheckHead.TagValue)) and
           ((CurrentNode.PointerValue<>Head.PointerValue) or (CurrentNode.TagValue<>Head.TagValue)) then begin
@@ -3994,7 +3977,7 @@ begin
         NextNode:=PPasMPInterlockedQueueNode(CurrentNode.PointerValue)^.Next;
         NewNode.PointerValue:=CurrentNode.PointerValue;
         NewNode.TagValue:=CurrentNode.TagValue-1;
-        TPasMPInterlocked.Write(PPasMPInterlockedQueueNode(NextNode.PointerValue)^.Previous.Value,NewNode.Value);
+        PPasMPInterlockedQueueNode(NextNode.PointerValue)^.Previous.Value:=NewNode.Value;
         CurrentNode.PointerValue:=NextNode.PointerValue;
         CurrentNode.TagValue:=NextNode.TagValue-1;
        end else begin
