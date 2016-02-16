@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-16-17-05-0000                       *
+ *                        Version 2016-02-16-17-36-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -3920,14 +3920,17 @@ end;
 destructor TPasMPInterlockedQueue.Destroy;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 var CurrentNode,NextNode:PPasMPInterlockedQueueNode;
+    Item:pointer;
 begin
- if assigned(fHead) then begin
-  CurrentNode:=fHead^.PointerValue;
-  while assigned(CurrentNode) do begin
-   NextNode:=CurrentNode^.Next.PointerValue;
-   TPasMPMemory.FreeAlignedMemory(CurrentNode);
-   CurrentNode:=NextNode;
-  end;
+ GetMem(Item,fItemSize);
+ try
+  repeat
+  until not Dequeue(Item^);
+ finally
+  FreeMem(Item);
+ end;
+ if assigned(PPasMPInterlockedQueueNode(fTail)^.Previous.PointerValue) then begin
+  TPasMPMemory.FreeAlignedMemory(PPasMPInterlockedQueueNode(fTail)^.Previous.PointerValue);
  end;
  TPasMPMemory.FreeAlignedMemory(fTail);
  TPasMPMemory.FreeAlignedMemory(fHead);
@@ -3950,15 +3953,18 @@ end;
 
 procedure TPasMPInterlockedQueue.Clear;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-var CurrentNode,NextNode,Node:PPasMPInterlockedQueueNode;
+var Node:PPasMPInterlockedQueueNode;
+    Item:pointer;
 begin
- if assigned(fHead) then begin
-  CurrentNode:=fHead^.PointerValue;
-  while assigned(CurrentNode) do begin
-   NextNode:=CurrentNode^.Next.PointerValue;
-   TPasMPMemory.FreeAlignedMemory(CurrentNode);
-   CurrentNode:=NextNode;
-  end;
+ GetMem(Item,fItemSize);
+ try
+  repeat
+  until not Dequeue(Item^);
+ finally
+  FreeMem(Item);
+ end;
+ if assigned(PPasMPInterlockedQueueNode(fTail)^.Previous.PointerValue) then begin
+  TPasMPMemory.FreeAlignedMemory(PPasMPInterlockedQueueNode(fTail)^.Previous.PointerValue);
  end;
  TPasMPMemory.AllocateAlignedMemory(Node,fInternalNodeSize,PasMPCPUCacheLineSize);
  Node^.Previous.PointerValue:=nil;
@@ -4086,9 +4092,9 @@ begin
       end;
      end;
     end;
+   end else begin
+    break;
    end;
-  end else begin
-   break;
   end;
  until false;
 end;
