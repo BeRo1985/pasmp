@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-16-16-14-0000                       *
+ *                        Version 2016-02-16-16-19-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -932,6 +932,7 @@ type TPasMPAvailableCPUCores=array of longint;
      TPasMPUnboundedStack=class
       private
        fStack:TPasMPInterlockedStack;
+       fFree:TPasMPInterlockedStack;
        fItemSize:longint;
       public
        constructor Create(const ItemSize:longint);
@@ -953,6 +954,7 @@ type TPasMPAvailableCPUCores=array of longint;
             end;
       private
        fStack:TPasMPInterlockedStack;
+       fFree:TPasMPInterlockedStack;
        fItemSize:longint;
       public
        constructor Create(const ItemSize:longint);
@@ -4788,6 +4790,7 @@ constructor TPasMPUnboundedStack.Create(const ItemSize:longint);
 begin
  inherited Create;
  fStack:=TPasMPInterlockedStack.Create;
+ fFree:=TPasMPInterlockedStack.Create;
  fItemSize:=ItemSize;
 end;
 
@@ -4802,7 +4805,16 @@ begin
    break;
   end;
  until false;
+ repeat
+  StackItem:=fFree.Pop;
+  if assigned(StackItem) then begin
+   TPasMPMemory.FreeAlignedMemory(StackItem);
+  end else begin
+   break;
+  end;
+ until false;
  fStack.Free;
+ fFree.Free;
  inherited Destroy;
 end;
 
@@ -4814,7 +4826,10 @@ end;
 function TPasMPUnboundedStack.Push(const Item):boolean;
 var StackItem:PPasMPUnboundedStackItem;
 begin
- TPasMPMemory.AllocateAlignedMemory(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
+ StackItem:=fFree.Pop;
+ if not assigned(StackItem) then begin
+  TPasMPMemory.AllocateAlignedMemory(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
+ end;
  Move(Item,StackItem^.Data,fItemSize);
  fStack.Push(StackItem);
  result:=true;
@@ -4826,7 +4841,7 @@ begin
  StackItem:=fStack.Pop;
  if assigned(StackItem) then begin
   Move(StackItem^.Data,Item,fItemSize);
-  TPasMPMemory.FreeAlignedMemory(StackItem);
+  fFree.Push(StackItem);
   result:=true;
  end else begin
   result:=false;
@@ -4838,6 +4853,7 @@ constructor TPasMPUnboundedTypedStack<T>.Create(const ItemSize:longint);
 begin
  inherited Create;
  fStack:=TPasMPInterlockedStack.Create;
+ fFree:=TPasMPInterlockedStack.Create;
  fItemSize:=ItemSize;
 end;
 
@@ -4853,6 +4869,16 @@ begin
    break;
   end;
  until false;
+ repeat
+  StackItem:=fFree.Pop;
+  if assigned(StackItem) then begin
+   Finalize(StackItem^);
+   TPasMPMemory.FreeAlignedMemory(StackItem);
+  end else begin
+   break;
+  end;
+ until false;
+ fFree.Free;
  fStack.Free;
  inherited Destroy;
 end;
@@ -4865,7 +4891,10 @@ end;
 function TPasMPUnboundedTypedStack<T>.Push(const Item:T):boolean;
 var StackItem:PPasMPUnboundedTypedStackItem;
 begin
- TPasMPMemory.AllocateAlignedMemory(StackItem,SizeOf(TPasMPUnboundedTypedStackItem)+fItemSize,PasMPCPUCacheLineSize);
+ StackItem:=fFree.Pop;
+ if not assigned(StackItem) then begin
+  TPasMPMemory.AllocateAlignedMemory(StackItem,SizeOf(TPasMPUnboundedTypedStackItem)+fItemSize,PasMPCPUCacheLineSize);
+ end;
  Initialize(StackItem^);
  StackItem^.Data:=Item;
  fStack.Push(StackItem);
@@ -4879,7 +4908,7 @@ begin
  if assigned(StackItem) then begin
   Item:=StackItem^.Data;
   Finalize(StackItem^);
-  TPasMPMemory.FreeAlignedMemory(StackItem);
+  fFree.Push(StackItem);
   result:=true;
  end else begin
   result:=false;
