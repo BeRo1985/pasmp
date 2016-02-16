@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-16-15-53-0000                       *
+ *                        Version 2016-02-16-16-05-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -3986,7 +3986,7 @@ begin
       repeat
        CheckHead.Value:=TPasMPInterlocked.Read(fHead^.Value);
 {$ifdef cpu64}
-       if ((Head.PointerValue=fHead^.PointerValue) and (Head.TagValue=fHead^.TagValue)) and
+       if ((Head.PointerValue=CheckHead.PointerValue) and (Head.TagValue=CheckHead.TagValue)) and
           ((CurrentNode.PointerValue<>Head.PointerValue) or (CurrentNode.TagValue<>Head.TagValue)) then begin
 {$else}
        if (Head.Value.Value=CheckHead.Value.Value) and (CurrentNode.Value.Value<>Head.Value.Value) then begin
