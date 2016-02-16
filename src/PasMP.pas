@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-16-17-02-0000                       *
+ *                        Version 2016-02-16-17-05-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1045,7 +1045,6 @@ type TPasMPAvailableCPUCores=array of longint;
             end;
       private
        fQueue:TPasMPInterlockedQueue;
-       fItemSize:longint;
       public
        constructor Create;
        destructor Destroy; override;
@@ -4114,7 +4113,6 @@ begin
  end;
 end;
 {$endif}
-{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 constructor TPasMPSingleProducerSingleConsumerRingBuffer.Create(const Size:longint);
 begin
