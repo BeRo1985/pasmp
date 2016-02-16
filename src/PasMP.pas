@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-15-23-16-0000                       *
+ *                        Version 2016-02-16-15-53-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -745,6 +745,8 @@ type TPasMPAvailableCPUCores=array of longint;
      TPasMPInterlockedStackEntry=pointer;
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     // The lock-free variant is based on the idea behind the concept of the internal workings of the "Interlocked Singly Linked Lists" Windows API, just stripped by the Depth stuff
+     // The lock-based variant is based of my head
      TPasMPInterlockedStack=class // only for PasMP internal usage
       private
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
@@ -763,23 +765,20 @@ type TPasMPAvailableCPUCores=array of longint;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
-     PPasMPInterlockedQueueEntry=^TPasMPInterlockedQueueEntry;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-     TPasMPInterlockedQueueEntry=record
-      Previous:pointer;
-      Next:pointer;
-     end;
-{$else}
-     TPasMPInterlockedQueueEntry=pointer;
-
      PPasMPInterlockedQueueNode=^TPasMPInterlockedQueueNode;
      TPasMPInterlockedQueueNode=record
+{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+      Previous:TPasMPTaggedPointer;
+      Next:TPasMPTaggedPointer;
+{$else}
       Next:pointer;
+{$endif}
       Data:pointer;
      end;
-{$endif}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     // The lock-free variant is based on http://people.csail.mit.edu/edya/publications/OptimisticFIFOQueue-journal.pdf
+     // The lock-based variant is based on the two-lock concurrent queue
      TPasMPInterlockedQueue=class // only for PasMP internal usage
       private
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
@@ -3810,12 +3809,22 @@ end;
 
 constructor TPasMPInterlockedQueue.Create;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+var Node:PPasMPInterlockedQueueNode;
 begin
  inherited Create;
- fHead.PointerValue:=nil;
- fHead.TagValue:=0;
- fTail.PointerValue:=nil;
- fTail.TagValue:=0;
+ fHead:=nil;
+ fTail:=nil;
+ TPasMPMemory.AllocateAlignedMemory(fHead,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
+ TPasMPMemory.AllocateAlignedMemory(fTail,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
+ TPasMPMemory.AllocateAlignedMemory(Node,SizeOf(TPasMPInterlockedQueueNode),PasMPCPUCacheLineSize);
+ Node^.Previous.PointerValue:=nil;
+ Node^.Previous.TagValue:=0;
+ Node^.Next.PointerValue:=nil;
+ Node^.Next.TagValue:=0;
+ fHead^.PointerValue:=Node;
+ fHead^.TagValue:=0;
+ fTail^.PointerValue:=Node;
+ fTail^.TagValue:=0;
 end;
 {$else}
 begin
@@ -3832,7 +3841,18 @@ end;
 
 destructor TPasMPInterlockedQueue.Destroy;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+var CurrentNode,NextNode:PPasMPInterlockedQueueNode;
 begin
+ if assigned(fHead) then begin
+  CurrentNode:=fHead^.PointerValue;
+  while assigned(CurrentNode) do begin
+   NextNode:=CurrentNode^.Next.PointerValue;
+   TPasMPMemory.FreeAlignedMemory(CurrentNode);
+   CurrentNode:=NextNode;
+  end;
+ end;
+ TPasMPMemory.FreeAlignedMemory(fTail);
+ TPasMPMemory.FreeAlignedMemory(fHead);
  inherited Destroy;
 end;
 {$else}
@@ -3852,11 +3872,25 @@ end;
 
 procedure TPasMPInterlockedQueue.Clear;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+var CurrentNode,NextNode,Node:PPasMPInterlockedQueueNode;
 begin
- fHead.PointerValue:=nil;
- fHead.TagValue:=0;
- fTail.PointerValue:=nil;
- fTail.TagValue:=0;
+ if assigned(fHead) then begin
+  CurrentNode:=fHead^.PointerValue;
+  while assigned(CurrentNode) do begin
+   NextNode:=CurrentNode^.Next.PointerValue;
+   TPasMPMemory.FreeAlignedMemory(CurrentNode);
+   CurrentNode:=NextNode;
+  end;
+ end;
+ TPasMPMemory.AllocateAlignedMemory(Node,SizeOf(TPasMPInterlockedQueueNode),PasMPCPUCacheLineSize);
+ Node^.Previous.PointerValue:=nil;
+ Node^.Previous.TagValue:=0;
+ Node^.Next.PointerValue:=nil;
+ Node^.Next.TagValue:=0;
+ fHead^.PointerValue:=Node;
+ fHead^.TagValue:=0;
+ fTail^.PointerValue:=Node;
+ fTail^.TagValue:=0;
 end;
 {$else}
 var CurrentNode,NextNode:PPasMPInterlockedQueueNode;
@@ -3878,18 +3912,36 @@ end;
 function TPasMPInterlockedQueue.IsEmpty:boolean;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 begin
- result:=not assigned(fTail.PointerValue);
+ result:=fHead^.PointerValue=fTail^.PointerValue;
 end;
 {$else}
 begin
- result:=not assigned(fTail);
+ result:=fHead=fTail;
 end;
 {$endif}
 
 function TPasMPInterlockedQueue.Enqueue(const Entry:pointer):pointer;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+// Based on http://people.csail.mit.edu/edya/publications/OptimisticFIFOQueue-journal.pdf
+var Node:PPasMPInterlockedQueueNode;
+    Tail,OldTail,NewTail:TPasMPTaggedPointer;
 begin
- result:=nil;
+ TPasMPMemory.AllocateAlignedMemory(Node,SizeOf(TPasMPInterlockedQueueNode),PasMPCPUCacheLineSize);
+ Node^.Previous.PointerValue:=nil;
+ Node^.Previous.TagValue:=0;
+ Node^.Data:=Entry;
+ OldTail:=fTail^;
+ repeat
+  Tail:=OldTail;
+  Node^.Next.PointerValue:=Tail.PointerValue;
+  Node^.Next.TagValue:=Tail.TagValue+1;
+  NewTail.PointerValue:=Node;
+  NewTail.TagValue:=Tail.TagValue+1;
+  OldTail.Value:=TPasMPInterlocked.CompareExchange(fTail^.Value,NewTail.Value,Tail.Value);
+ until {$ifdef CPU64}(OldTail.PointerValue=Tail.PointerValue) and (OldTail.TagValue=Tail.TagValue){$else}OldTail.Value.Value=Tail.Value.Value{$endif};
+ PPasMPInterlockedQueueNode(Tail.PointerValue)^.Previous.PointerValue:=Node;
+ PPasMPInterlockedQueueNode(Tail.PointerValue)^.Previous.TagValue:=Tail.TagValue;
+ result:=PPasMPInterlockedQueueNode(Tail.PointerValue)^.Data;
 end;
 {$else}
 var Node:PPasMPInterlockedQueueNode;
@@ -3910,8 +3962,61 @@ end;
 
 function TPasMPInterlockedQueue.Dequeue:pointer;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+// Based on http://people.csail.mit.edu/edya/publications/OptimisticFIFOQueue-journal.pdf
+var Tail,Head,CheckHead,FirstNodePrevious,NewHead,OldHead,CurrentNode,NextNode,NewNode:TPasMPTaggedPointer;
 begin
  result:=nil;
+ repeat
+  Head.Value:=TPasMPInterlocked.Read(fHead^.Value);
+  TPasMPMemoryBarrier.ReadDependency;
+  Tail.Value:=TPasMPInterlocked.Read(fTail^.Value);
+  FirstNodePrevious:=PPasMPInterlockedQueueNode(Head.PointerValue)^.Previous;
+  TPasMPMemoryBarrier.ReadDependency;
+  CheckHead.Value:=TPasMPInterlocked.Read(fHead^.Value);
+  if {$ifdef cpu64}(Head.PointerValue=CheckHead.PointerValue) and (Head.TagValue=CheckHead.TagValue){$else}Head.Value.Value=CheckHead.Value.Value{$endif} then begin
+   if {$ifdef cpu64}(Head.PointerValue<>Tail.PointerValue) or (Head.TagValue<>Tail.TagValue){$else}Head.Value.Value<>Tail.Value.Value{$endif} then begin
+    // Not in the original paper, but there is a race condition where push adds a node, but leaves Node^.Next^.Previous uninitialized for a short time.
+    // This only manifests too when FirstNodePrevious.TagValue = Head.TagValue, which is also very rare. If they aren't equal, FixList fixes the issue
+		// (or at least it takes long enough, so that things settle). So here ensure time is not wasted getting to the end-game only to try to dereference
+    // nil.
+    if assigned(FirstNodePrevious.PointerValue) then begin
+     if FirstNodePrevious.TagValue<>Head.TagValue then begin
+      // Fix list
+      CurrentNode:=Tail;
+      repeat
+       CheckHead.Value:=TPasMPInterlocked.Read(fHead^.Value);
+{$ifdef cpu64}
+       if ((Head.PointerValue=fHead^.PointerValue) and (Head.TagValue=fHead^.TagValue)) and
+          ((CurrentNode.PointerValue<>Head.PointerValue) or (CurrentNode.TagValue<>Head.TagValue)) then begin
+{$else}
+       if (Head.Value.Value=CheckHead.Value.Value) and (CurrentNode.Value.Value<>Head.Value.Value) then begin
+{$endif}
+        NextNode:=PPasMPInterlockedQueueNode(CurrentNode.PointerValue)^.Next;
+        NewNode.PointerValue:=CurrentNode.PointerValue;
+        NewNode.TagValue:=CurrentNode.TagValue-1;
+        TPasMPInterlocked.Write(PPasMPInterlockedQueueNode(NextNode.PointerValue)^.Previous.Value,NewNode.Value);
+        CurrentNode.PointerValue:=NextNode.PointerValue;
+        CurrentNode.TagValue:=NextNode.TagValue-1;
+       end else begin
+        break;
+       end;
+      until false;
+     end else begin
+      NewHead.PointerValue:=FirstNodePrevious.PointerValue;
+      NewHead.TagValue:=Head.TagValue+1;
+      OldHead.Value:=TPasMPInterlocked.CompareExchange(fHead^.Value,NewHead.Value,Head.Value);
+      if {$ifdef CPU64}(OldHead.PointerValue=Head.PointerValue) and (OldHead.TagValue=Head.TagValue){$else}OldHead.Value.Value=Head.Value.Value{$endif} then begin
+       result:=PPasMPInterlockedQueueNode(FirstNodePrevious.PointerValue)^.Data;
+       TPasMPMemory.FreeAlignedMemory(Head.PointerValue);
+       break;
+      end;
+     end;
+    end;
+   end;
+  end else begin
+   break;
+  end;
+ until false;
 end;
 {$else}
 var Node,NewHead:PPasMPInterlockedQueueNode;
