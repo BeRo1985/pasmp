@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-16-17-36-0000                       *
+ *                        Version 2016-02-17-17-09-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -350,42 +350,42 @@ type TPasMPAvailableCPUCores=array of longint;
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPInterlocked=class
       public
-       class function Increment(var Target:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Increment(var Destination:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$ifdef CPU64}
-       class function Increment(var Target:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Increment(var Destination:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$endif}
-       class function Decrement(var Target:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Decrement(var Destination:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$ifdef CPU64}
-       class function Decrement(var Target:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Decrement(var Destination:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$endif}
-       class function Add(var Target:longint;const Value:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Add(var Destination:longint;const Value:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$ifdef CPU64}
-       class function Add(var Target:int64;const Value:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Add(var Destination:int64;const Value:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$endif}
-       class function Sub(var Target:longint;const Value:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Sub(var Destination:longint;const Value:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$ifdef CPU64}
-       class function Sub(var Target:int64;const Value:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Sub(var Destination:int64;const Value:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$endif}
-       class function Exchange(var Target:longint;const Source:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
-       class function Exchange(var Target:longword;const Source:longword):longword; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Exchange(var Destination:longint;const Source:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Exchange(var Destination:longword;const Source:longword):longword; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$ifdef CPU64}
-       class function Exchange(var Target:int64;const Source:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
-       class function Exchange(var Target:TPasMPUInt64;const Source:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Exchange(var Destination:int64;const Source:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Exchange(var Destination:TPasMPUInt64;const Source:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$endif}
-       class function Exchange(var Target:pointer;const Source:pointer):pointer; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
-       class function Exchange(var Target:TObject;const Source:TObject):TObject; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
-       class function CompareExchange(var Target:longint;const NewValue,Comperand:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
-       class function CompareExchange(var Target:longword;const NewValue,Comperand:longword):longword; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Exchange(var Destination:pointer;const Source:pointer):pointer; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Exchange(var Destination:TObject;const Source:TObject):TObject; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function CompareExchange(var Destination:longint;const NewValue,Comperand:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function CompareExchange(var Destination:longword;const NewValue,Comperand:longword):longword; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
-       class function CompareExchange(var Target:int64;const NewValue,Comperand:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
-       class function CompareExchange(var Target:TPasMPInt64;const NewValue,Comperand:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
-       class function CompareExchange(var Target:TPasMPUInt64;const NewValue,Comperand:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function CompareExchange(var Destination:int64;const NewValue,Comperand:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function CompareExchange(var Destination:TPasMPInt64;const NewValue,Comperand:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function CompareExchange(var Destination:TPasMPUInt64;const NewValue,Comperand:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$ifend}
 {$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
-       class function CompareExchange(var Target:TPasMPInt128;const NewValue,Comperand:TPasMPInt128):TPasMPInt128; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(fpc)}inline;{$ifend}
+       class function CompareExchange(var Destination:TPasMPInt128;const NewValue,Comperand:TPasMPInt128):TPasMPInt128; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(fpc)}inline;{$ifend}
 {$ifend}
-       class function CompareExchange(var Target:pointer;const NewValue,Comperand:pointer):pointer; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
-       class function CompareExchange(var Target:TObject;const NewValue,Comperand:TObject):TObject; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function CompareExchange(var Destination:pointer;const NewValue,Comperand:pointer):pointer; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function CompareExchange(var Destination:TObject;const NewValue,Comperand:TObject):TObject; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Read(var Source:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
        class function Read(var Source:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
@@ -394,12 +394,12 @@ type TPasMPAvailableCPUCores=array of longint;
        class function Read(var Source:TPasMPInt128):TPasMPInt128; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(fpc)}inline;{$ifend}
 {$ifend}
 {$ifend}
-       class function Write(var Target:longint;const Source:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Write(var Destination:longint;const Source:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
-       class function Write(var Target:int64;const Source:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
-       class function Write(var Target:TPasMPInt64;const Source:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Write(var Destination:int64;const Source:int64):int64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Write(var Destination:TPasMPInt64;const Source:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
-       class function Write(var Target:TPasMPInt128;const Source:TPasMPInt128):TPasMPInt128; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(fpc)}inline;{$ifend}
+       class function Write(var Destination:TPasMPInt128;const Source:TPasMPInt128):TPasMPInt128; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(fpc)}inline;{$ifend}
 {$ifend}
 {$ifend}
      end;
@@ -629,7 +629,7 @@ type TPasMPAvailableCPUCores=array of longint;
 {$endif}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPMultiReaderSingleWriterLock=class
+     TPasMPMultipleReaderSingleWriterLock=class
 {$ifdef Windows}
       private
        fSRWLock:TPasMPSRWLock;
@@ -801,6 +801,67 @@ type TPasMPAvailableCPUCores=array of longint;
        function IsEmpty:boolean; {$ifdef CAN_INLINE}inline;{$endif}
        procedure Enqueue(const Item); {$ifdef CAN_INLINE}inline;{$endif}
        function Dequeue(out Item):boolean; {$ifdef CAN_INLINE}inline;{$endif}
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+     TPasMPInterlockedHashTableHash=longword;
+
+     PPasMPInterlockedHashTableItem=^TPasMPInterlockedHashTableItem;
+     TPasMPInterlockedHashTableItem=record
+      Lock:longint;
+      State:longint;
+      Hash:TPasMPInterlockedHashTableHash;
+      Data:record
+       // Empty
+      end;
+     end;
+
+     PPasMPInterlockedHashTableState=^TPasMPInterlockedHashTableState;
+     TPasMPInterlockedHashTableState=record
+      Previous:PPasMPInterlockedHashTableState;
+      Next:PPasMPInterlockedHashTableState;
+      ReferenceCounter:longint;
+      Size:longint;
+      Mask:longint;
+      LogSize:longint;
+      Count:longint;
+      Lock:longint;
+      Items:pointer;
+     end;
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPInterlockedHashTable=class // only for PasMP internal usage
+      private
+       fCriticalSection:TPasMPCriticalSection;
+       fLock:longint;
+       fItemSize:longint;
+       fInternalItemSize:longint;
+       fFirstState:PPasMPInterlockedHashTableState;
+       fLastState:PPasMPInterlockedHashTableState;
+       function CreateState:PPasMPInterlockedHashTableState;
+       procedure FreeState(const State:PPasMPInterlockedHashTableState);
+       function AcquireState:PPasMPInterlockedHashTableState; {$ifdef CAN_INLINE}inline;{$endif}
+       procedure ReleaseState(const State:PPasMPInterlockedHashTableState); {$ifdef CAN_INLINE}inline;{$endif}
+      protected
+       procedure InitializeItem(const Data:pointer); virtual;
+       procedure FinalizeItem(const Data:pointer); virtual;
+       procedure CopyItem(const Source,Destination:pointer); virtual;
+       procedure GetKey(const Data,Key:pointer); virtual;
+       procedure SetKey(const Data,Key:pointer); virtual;
+       procedure GetValue(const Data,Value:pointer); virtual;
+       procedure SetValue(const Data,Value:pointer); virtual;
+       function HashItemKey(const Data:pointer):TPasMPInterlockedHashTableHash; virtual;
+       function HashKey(const Key:pointer):TPasMPInterlockedHashTableHash; virtual;
+       function CompareKey(const Data,Key:pointer):boolean; virtual;
+       procedure Clear;
+       function GetKeyValue(const Key,Value:pointer):boolean;
+       function SetKeyValueOnState(const CurrentState:PPasMPInterlockedHashTableState;const Key,Value:pointer):boolean;
+       procedure Grow;
+       function SetKeyValue(const Key,Value:pointer):boolean;
+       function Delete(const Key:pointer):boolean;
+      public
+       constructor Create(const ItemSize:longint);
+       destructor Destroy; override;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -1094,8 +1155,8 @@ type TPasMPAvailableCPUCores=array of longint;
         Next:TPasMPInterlockedStackEntry;
        );
        2:(
-        // for 32-bit targets: use one whole cache line (1x 64 bytes = 16x 32-bit pointers/integers) to avoid false sharing (1 cache line => 64 bytes on the most CPUs) and also to have some free place for meta data
-        // for 64-bit targets: use two whole cache lines (2x 64 bytes = 16x 64-bit pointers/integers) to avoid false sharing (1 cache line => 64 bytes on the most CPUs) and also to have some free place for meta data
+        // for 32-bit Destinations: use one whole cache line (1x 64 bytes = 16x 32-bit pointers/integers) to avoid false sharing (1 cache line => 64 bytes on the most CPUs) and also to have some free place for meta data
+        // for 64-bit Destinations: use two whole cache lines (2x 64 bytes = 16x 64-bit pointers/integers) to avoid false sharing (1 cache line => 64 bytes on the most CPUs) and also to have some free place for meta data
         // and so on . . .
         FillUp:array[0..(PasMPCPUCacheLineSize*(SizeOf(TPasMPPtrUInt) div SizeOf(longword)))-1] of byte;
        );
@@ -1504,11 +1565,11 @@ function pthread_rwlock_unlock(__rwlock:Ppthread_rwlock_t):longint; cdecl; exter
 {$endif}
 
 {$ifdef CPUARM}
-function InterlockedCompareExchange64(var Target:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedCompareExchange64(var Destination:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
  // LDREXD and STREXD were introduced in ARM 11, so the LDREXD and STREXD instructions in ARM all v7 variants or above. In v6, only some variants support it.
  // Input:
- // r0 = pointer to Target
+ // r0 = pointer to Destination
  // r1 = NewValue.Lo
  // r2 = NewValue.Hi
  // r3 = Comperand.Lo
@@ -1522,10 +1583,10 @@ asm
  ldrd	r2,[sp,#20] // r2 = Comperand.Hi
  dmb sy
 .Loop:
- ldrexd	r6,[r0] // loads R6 and R7, so r6 = Target.Lo, r7 = Target.Hi
- cmp r6,r3 // if Target.Lo = Comperand.Lo
+ ldrexd	r6,[r0] // loads R6 and R7, so r6 = Destination.Lo, r7 = Destination.Hi
+ cmp r6,r3 // if Destination.Lo = Comperand.Lo
 //it eq
- cmpeq r7,r2 // if Target.Hi = Comperand.Hi
+ cmpeq r7,r2 // if Destination.Hi = Comperand.Hi
  strexdeq r1,r4,[r0]  // [r0]=r4 and [r0+4]=r5
  bne .Fail
  cmp r1,#1 // 1 for failure and 0 for success
@@ -1546,10 +1607,10 @@ asm
  ldrd	r2,[sp,#20] // r2 = Comperand.Hi
  dmb sy
 .Loop:
- ldrexd	r6,[r0] // loads R6 and R7, so r6 = Target.Lo, r7 = Target.Hi
- cmp r6,r3 // if Target.Lo = Comperand.Lo
+ ldrexd	r6,[r0] // loads R6 and R7, so r6 = Destination.Lo, r7 = Destination.Hi
+ cmp r6,r3 // if Destination.Lo = Comperand.Lo
  it	eq
- cmpeq r7,r2 // if Target.Hi = Comperand.Hi
+ cmpeq r7,r2 // if Destination.Hi = Comperand.Hi
  bne .Fail
  strexd r1,r4,[r0]  // [r0]=r4 and [r0+4]=r5
  cmp r1,#1 // 1 for failure and 0 for success
@@ -1567,7 +1628,7 @@ end;
 {$endif}
 
 {$ifdef CPU386}
-function InterlockedCompareExchange64(var Target:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedCompareExchange64(var Destination:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
  push ebx
  push edi
@@ -1583,7 +1644,7 @@ end;
 {$endif}
 
 {$ifdef CPUx86_64}
-function InterlockedCompareExchange128(var Target:TPasMPInt128;const NewValue,Comperand:TPasMPInt128):TPasMPInt128; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedCompareExchange128(var Destination:TPasMPInt128;const NewValue,Comperand:TPasMPInt128):TPasMPInt128; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
  push rbx
 {$ifdef Windows}
@@ -1610,7 +1671,7 @@ end;
 
 {$ifndef fpc}
 {$ifdef CPU386}
-function InterlockedDecrement(var Target:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedDecrement(var Destination:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
  mov edx,$ffffffff
  xchg eax,edx
@@ -1618,7 +1679,7 @@ asm
  dec eax
 end;
 
-function InterlockedIncrement(var Target:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedIncrement(var Destination:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
  mov edx,1
  xchg eax,edx
@@ -1626,32 +1687,32 @@ asm
  inc eax
 end;
 
-function InterlockedExchange(var Target:longint;Source:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedExchange(var Destination:longint;Source:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
  lock xchg dword ptr [eax],edx
  mov eax,edx
 end;
 
-function InterlockedExchangePointer(var Target:pointer;Source:pointer):pointer; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedExchangePointer(var Destination:pointer;Source:pointer):pointer; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
  lock xchg dword ptr [eax],edx
  mov eax,edx
 end;
 
-function InterlockedExchangeAdd(var Target:longint;Source:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedExchangeAdd(var Destination:longint;Source:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
  xchg edx,eax
  lock xadd dword ptr [edx],eax
 end;
 
-function InterlockedCompareExchange(var Target:longint;NewValue,Comperand:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedCompareExchange(var Destination:longint;NewValue,Comperand:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
  xchg ecx,eax
  lock cmpxchg dword ptr [ecx],edx
 end;
 {$else}
 {$ifdef CPUx86_64}
-function InterlockedDecrement(var Target:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedDecrement(var Destination:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
 {$ifdef Windows}
  mov rax,rcx
@@ -1664,7 +1725,7 @@ asm
  dec eax
 end;
 
-function InterlockedDecrement64(var Target:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedDecrement64(var Destination:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
 {$ifdef Windows}
  mov rax,rcx
@@ -1677,7 +1738,7 @@ asm
  dec rax
 end;
 
-function InterlockedIncrement(var Target:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedIncrement(var Destination:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
 {$ifdef Windows}
  mov rax,rcx
@@ -1690,7 +1751,7 @@ asm
  inc eax
 end;
 
-function InterlockedIncrement64(var Target:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedIncrement64(var Destination:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
 {$ifdef Windows}
  mov rax,rcx
@@ -1703,7 +1764,7 @@ asm
  inc rax
 end;
 
-function InterlockedExchange(var Target:longint;Source:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedExchange(var Destination:longint;Source:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
 {$ifdef Windows}
  lock xchg dword ptr [rcx],edx
@@ -1714,7 +1775,7 @@ asm
 {$endif}
 end;
 
-function InterlockedExchange64(var Target:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedExchange64(var Destination:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
 {$ifdef Windows}
  lock xchg rdx,qword ptr [rcx]
@@ -1725,7 +1786,7 @@ asm
 {$endif}
 end;
 
-function InterlockedExchangePointer(var Target:pointer;Source:pointer):pointer; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedExchangePointer(var Destination:pointer;Source:pointer):pointer; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
 {$ifdef Windows}
  lock xchg rdx,qword ptr [rcx]
@@ -1736,7 +1797,7 @@ asm
 {$endif}
 end;
 
-function InterlockedExchangeAdd(var Target:longint;Source:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedExchangeAdd(var Destination:longint;Source:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
 {$ifdef Windows}
  xchg rdx,rcx
@@ -1749,7 +1810,7 @@ asm
 {$endif}
 end;
 
-function InterlockedExchangeAdd64(var Target:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedExchangeAdd64(var Destination:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
 {$ifdef Windows}
  xchg rdx,rcx
@@ -1762,7 +1823,7 @@ asm
 {$endif}
 end;
 
-function InterlockedCompareExchange(var Target:longint;NewValue,Comperand:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedCompareExchange(var Destination:longint;NewValue,Comperand:longint):longint; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
 {$ifdef Windows}
  mov eax,r8d
@@ -1773,7 +1834,7 @@ asm
 {$endif}
 end;
 
-function InterlockedCompareExchange64(var Target:int64;NewValue,Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedCompareExchange64(var Destination:int64;NewValue,Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
 {$ifdef Windows}
  mov rax,r8
@@ -1784,39 +1845,39 @@ asm
 {$endif}
 end;
 {$else}
-function InterlockedDecrement(var Target:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function InterlockedDecrement(var Destination:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
 begin
- result:=Windows.InterlockedDecrement(Target);
+ result:=Windows.InterlockedDecrement(Destination);
 end;
 
-function InterlockedIncrement(var Target:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function InterlockedIncrement(var Destination:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
 begin
- result:=Windows.InterlockedIncrement(Target);
+ result:=Windows.InterlockedIncrement(Destination);
 end;
 
-function InterlockedExchange(var Target:longint;Source:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function InterlockedExchange(var Destination:longint;Source:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
 begin
- result:=Windows.InterlockedExchange(Target,Source);
+ result:=Windows.InterlockedExchange(Destination,Source);
 end;
 
-function InterlockedExchangePointer(var Target:pointer;Source:pointer):pointer; {$ifdef CAN_INLINE}inline;{$endif}
+function InterlockedExchangePointer(var Destination:pointer;Source:pointer):pointer; {$ifdef CAN_INLINE}inline;{$endif}
 begin
- result:=Windows.InterlockedExchangePointer(Target,Source);
+ result:=Windows.InterlockedExchangePointer(Destination,Source);
 end;
 
-function InterlockedExchangeAdd(var Target:longint;Source:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function InterlockedExchangeAdd(var Destination:longint;Source:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
 begin
- result:=Windows.InterlockedExchangeAdd(Target,Source);
+ result:=Windows.InterlockedExchangeAdd(Destination,Source);
 end;
 
-function InterlockedCompareExchange(var Target:longint;NewValue,Comperand:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function InterlockedCompareExchange(var Destination:longint;NewValue,Comperand:longint):longint; {$ifdef CAN_INLINE}inline;{$endif}
 begin
- result:=Windows.InterlockedCompareExchange(Target,NewValue,Comperand);
+ result:=Windows.InterlockedCompareExchange(Destination,NewValue,Comperand);
 end;
 
-function InterlockedCompareExchange64(var Target:int64;NewValue,Comperand:int64):int64; {$ifdef CAN_INLINE}inline;{$endif}
+function InterlockedCompareExchange64(var Destination:int64;NewValue,Comperand:int64):int64; {$ifdef CAN_INLINE}inline;{$endif}
 begin
- result:=Windows.InterlockedCompareExchange64(Target,NewValue,Comperand);
+ result:=Windows.InterlockedCompareExchange64(Destination,NewValue,Comperand);
 end;
 {$endif}
 {$endif}
@@ -2031,226 +2092,226 @@ end;
 {$endif}
 {$endif}
 
-class function TPasMPInterlocked.Increment(var Target:longint):longint;
+class function TPasMPInterlocked.Increment(var Destination:longint):longint;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicIncrement(Target);
+ result:=AtomicIncrement(Destination);
 {$else}
- result:=InterlockedIncrement(Target);
+ result:=InterlockedIncrement(Destination);
 {$endif}
 end;
 
 {$ifdef CPU64}
-class function TPasMPInterlocked.Increment(var Target:int64):int64;
+class function TPasMPInterlocked.Increment(var Destination:int64):int64;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicIncrement(Target);
+ result:=AtomicIncrement(Destination);
 {$else}
- result:=InterlockedIncrement64(Target);
+ result:=InterlockedIncrement64(Destination);
 {$endif}
 end;
 {$endif}
 
-class function TPasMPInterlocked.Decrement(var Target:longint):longint;
+class function TPasMPInterlocked.Decrement(var Destination:longint):longint;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicDecrement(Target);
+ result:=AtomicDecrement(Destination);
 {$else}
- result:=InterlockedDecrement(Target);
-{$endif}
-end;
-
-{$ifdef CPU64}
-class function TPasMPInterlocked.Decrement(var Target:int64):int64;
-begin
-{$ifdef HAS_ATOMICS}
- result:=AtomicDecrement(Target);
-{$else}
- result:=InterlockedDecrement64(Target);
-{$endif}
-end;
-{$endif}
-
-class function TPasMPInterlocked.Add(var Target:longint;const Value:longint):longint;
-begin
-{$ifdef HAS_ATOMICS}
- result:=AtomicIncrement(Target,Value);
-{$else}
- result:=InterlockedExchangeAdd(Target,Value);
+ result:=InterlockedDecrement(Destination);
 {$endif}
 end;
 
 {$ifdef CPU64}
-class function TPasMPInterlocked.Add(var Target:int64;const Value:int64):int64;
+class function TPasMPInterlocked.Decrement(var Destination:int64):int64;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicIncrement(Target,Value);
+ result:=AtomicDecrement(Destination);
 {$else}
- result:=InterlockedExchangeAdd64(Target,Value);
+ result:=InterlockedDecrement64(Destination);
 {$endif}
 end;
 {$endif}
 
-class function TPasMPInterlocked.Sub(var Target:longint;const Value:longint):longint;
+class function TPasMPInterlocked.Add(var Destination:longint;const Value:longint):longint;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicIncrement(Target,-Value);
+ result:=AtomicIncrement(Destination,Value);
 {$else}
- result:=InterlockedExchangeAdd(Target,-Value);
-{$endif}
-end;
-
-{$ifdef CPU64}
-class function TPasMPInterlocked.Sub(var Target:int64;const Value:int64):int64;
-begin
-{$ifdef HAS_ATOMICS}
- result:=AtomicIncrement(Target,-Value);
-{$else}
- result:=InterlockedExchangeAdd64(Target,-Value);
-{$endif}
-end;
-{$endif}
-
-class function TPasMPInterlocked.Exchange(var Target:longint;const Source:longint):longint;
-begin
-{$ifdef HAS_ATOMICS}
- result:=AtomicExchange(Target,Source);
-{$else}
- result:=InterlockedExchange(Target,Source);
-{$endif}
-end;
-
-class function TPasMPInterlocked.Exchange(var Target:longword;const Source:longword):longword;
-begin
-{$ifdef HAS_ATOMICS}
- result:=AtomicExchange(Target,Source);
-{$else}
- result:=longword(InterlockedExchange(longint(Target),longint(Source)));
+ result:=InterlockedExchangeAdd(Destination,Value);
 {$endif}
 end;
 
 {$ifdef CPU64}
-class function TPasMPInterlocked.Exchange(var Target:int64;const Source:int64):int64;
+class function TPasMPInterlocked.Add(var Destination:int64;const Value:int64):int64;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicExchange(Target,Source);
+ result:=AtomicIncrement(Destination,Value);
 {$else}
- result:=InterlockedExchange64(Target,Source);
-{$endif}
-end;
-
-class function TPasMPInterlocked.Exchange(var Target:TPasMPUInt64;const Source:TPasMPUInt64):TPasMPUInt64;
-begin
-{$ifdef HAS_ATOMICS}
- result:=AtomicExchange(Target,Source);
-{$else}
- result:=TPasMPUInt64(InterlockedExchange64(int64(Target),int64(Source)));
+ result:=InterlockedExchangeAdd64(Destination,Value);
 {$endif}
 end;
 {$endif}
 
-class function TPasMPInterlocked.Exchange(var Target:pointer;const Source:pointer):pointer;
+class function TPasMPInterlocked.Sub(var Destination:longint;const Value:longint):longint;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicExchange(Target,Source);
+ result:=AtomicIncrement(Destination,-Value);
+{$else}
+ result:=InterlockedExchangeAdd(Destination,-Value);
+{$endif}
+end;
+
+{$ifdef CPU64}
+class function TPasMPInterlocked.Sub(var Destination:int64;const Value:int64):int64;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicIncrement(Destination,-Value);
+{$else}
+ result:=InterlockedExchangeAdd64(Destination,-Value);
+{$endif}
+end;
+{$endif}
+
+class function TPasMPInterlocked.Exchange(var Destination:longint;const Source:longint):longint;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicExchange(Destination,Source);
+{$else}
+ result:=InterlockedExchange(Destination,Source);
+{$endif}
+end;
+
+class function TPasMPInterlocked.Exchange(var Destination:longword;const Source:longword):longword;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicExchange(Destination,Source);
+{$else}
+ result:=longword(InterlockedExchange(longint(Destination),longint(Source)));
+{$endif}
+end;
+
+{$ifdef CPU64}
+class function TPasMPInterlocked.Exchange(var Destination:int64;const Source:int64):int64;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicExchange(Destination,Source);
+{$else}
+ result:=InterlockedExchange64(Destination,Source);
+{$endif}
+end;
+
+class function TPasMPInterlocked.Exchange(var Destination:TPasMPUInt64;const Source:TPasMPUInt64):TPasMPUInt64;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicExchange(Destination,Source);
+{$else}
+ result:=TPasMPUInt64(InterlockedExchange64(int64(Destination),int64(Source)));
+{$endif}
+end;
+{$endif}
+
+class function TPasMPInterlocked.Exchange(var Destination:pointer;const Source:pointer):pointer;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicExchange(Destination,Source);
 {$else}
 {$ifdef CPU64}
- result:=pointer(TPasMPPtrInt(InterlockedExchange64(int64(TPasMPPtrInt(Target)),int64(TPasMPPtrInt(Source)))));
+ result:=pointer(TPasMPPtrInt(InterlockedExchange64(int64(TPasMPPtrInt(Destination)),int64(TPasMPPtrInt(Source)))));
 {$else}
- result:=pointer(TPasMPPtrInt(InterlockedExchange(longint(TPasMPPtrInt(Target)),longint(TPasMPPtrInt(Source)))));
+ result:=pointer(TPasMPPtrInt(InterlockedExchange(longint(TPasMPPtrInt(Destination)),longint(TPasMPPtrInt(Source)))));
 {$endif}
 {$endif}
 end;
 
-class function TPasMPInterlocked.Exchange(var Target:TObject;const Source:TObject):TObject;
+class function TPasMPInterlocked.Exchange(var Destination:TObject;const Source:TObject):TObject;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicExchange(pointer(Target),pointer(Source));
+ result:=AtomicExchange(pointer(Destination),pointer(Source));
 {$else}
 {$ifdef CPU64}
- result:=pointer(TPasMPPtrInt(InterlockedExchange64(int64(TPasMPPtrInt(Target)),int64(TPasMPPtrInt(Source)))));
+ result:=pointer(TPasMPPtrInt(InterlockedExchange64(int64(TPasMPPtrInt(Destination)),int64(TPasMPPtrInt(Source)))));
 {$else}
- result:=pointer(TPasMPPtrInt(InterlockedExchange(longint(TPasMPPtrInt(Target)),longint(TPasMPPtrInt(Source)))));
+ result:=pointer(TPasMPPtrInt(InterlockedExchange(longint(TPasMPPtrInt(Destination)),longint(TPasMPPtrInt(Source)))));
 {$endif}
 {$endif}
 end;
 
-class function TPasMPInterlocked.CompareExchange(var Target:longint;const NewValue,Comperand:longint):longint;
+class function TPasMPInterlocked.CompareExchange(var Destination:longint;const NewValue,Comperand:longint):longint;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicCmpExchange(Target,NewValue,Comperand);
+ result:=AtomicCmpExchange(Destination,NewValue,Comperand);
 {$else}
- result:=InterlockedCompareExchange(Target,NewValue,Comperand);
+ result:=InterlockedCompareExchange(Destination,NewValue,Comperand);
 {$endif}
 end;
 
-class function TPasMPInterlocked.CompareExchange(var Target:longword;const NewValue,Comperand:longword):longword;
+class function TPasMPInterlocked.CompareExchange(var Destination:longword;const NewValue,Comperand:longword):longword;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicCmpExchange(Target,NewValue,Comperand);
+ result:=AtomicCmpExchange(Destination,NewValue,Comperand);
 {$else}
- result:=longword(InterlockedCompareExchange(longint(Target),longint(NewValue),longint(Comperand)));
+ result:=longword(InterlockedCompareExchange(longint(Destination),longint(NewValue),longint(Comperand)));
 {$endif}
 end;
 
 {$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
-class function TPasMPInterlocked.CompareExchange(var Target:int64;const NewValue,Comperand:int64):int64;
+class function TPasMPInterlocked.CompareExchange(var Destination:int64;const NewValue,Comperand:int64):int64;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicCmpExchange(Target,NewValue,Comperand);
+ result:=AtomicCmpExchange(Destination,NewValue,Comperand);
 {$else}
- result:=InterlockedCompareExchange64(Target,NewValue,Comperand);
+ result:=InterlockedCompareExchange64(Destination,NewValue,Comperand);
 {$endif}
 end;
 
-class function TPasMPInterlocked.CompareExchange(var Target:TPasMPInt64;const NewValue,Comperand:TPasMPInt64):TPasMPInt64;
+class function TPasMPInterlocked.CompareExchange(var Destination:TPasMPInt64;const NewValue,Comperand:TPasMPInt64):TPasMPInt64;
 begin
 {$ifdef HAS_ATOMICS}
- result.Value:=AtomicCmpExchange(Target.Value,NewValue.Value,Comperand.Value);
+ result.Value:=AtomicCmpExchange(Destination.Value,NewValue.Value,Comperand.Value);
 {$else}
- result.Value:=InterlockedCompareExchange64(Target.Value,NewValue.Value,Comperand.Value);
+ result.Value:=InterlockedCompareExchange64(Destination.Value,NewValue.Value,Comperand.Value);
 {$endif}
 end;
 
-class function TPasMPInterlocked.CompareExchange(var Target:TPasMPUInt64;const NewValue,Comperand:TPasMPUInt64):TPasMPUInt64;
+class function TPasMPInterlocked.CompareExchange(var Destination:TPasMPUInt64;const NewValue,Comperand:TPasMPUInt64):TPasMPUInt64;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicCmpExchange(Target,NewValue,Comperand);
+ result:=AtomicCmpExchange(Destination,NewValue,Comperand);
 {$else}
- result:=TPasMPUInt64(InterlockedCompareExchange64(int64(Target),int64(NewValue),int64(Comperand)));
+ result:=TPasMPUInt64(InterlockedCompareExchange64(int64(Destination),int64(NewValue),int64(Comperand)));
 {$endif}
 end;
 {$ifend}
 
 {$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
-class function TPasMPInterlocked.CompareExchange(var Target:TPasMPInt128;const NewValue,Comperand:TPasMPInt128):TPasMPInt128;
+class function TPasMPInterlocked.CompareExchange(var Destination:TPasMPInt128;const NewValue,Comperand:TPasMPInt128):TPasMPInt128;
 begin
- result:=InterlockedCompareExchange128(Target,NewValue,Comperand);
+ result:=InterlockedCompareExchange128(Destination,NewValue,Comperand);
 end;
 {$ifend}
 
-class function TPasMPInterlocked.CompareExchange(var Target:pointer;const NewValue,Comperand:pointer):pointer;
+class function TPasMPInterlocked.CompareExchange(var Destination:pointer;const NewValue,Comperand:pointer):pointer;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicCmpExchange(Target,NewValue,Comperand);
+ result:=AtomicCmpExchange(Destination,NewValue,Comperand);
 {$else}
 {$ifdef CPU64}
- result:=pointer(TPasMPPtrInt(InterlockedCompareExchange64(int64(TPasMPPtrInt(Target)),int64(TPasMPPtrInt(NewValue)),int64(TPasMPPtrInt(Comperand)))));
+ result:=pointer(TPasMPPtrInt(InterlockedCompareExchange64(int64(TPasMPPtrInt(Destination)),int64(TPasMPPtrInt(NewValue)),int64(TPasMPPtrInt(Comperand)))));
 {$else}
- result:=pointer(TPasMPPtrInt(InterlockedCompareExchange(longint(TPasMPPtrInt(Target)),longint(TPasMPPtrInt(NewValue)),longint(TPasMPPtrInt(Comperand)))));
+ result:=pointer(TPasMPPtrInt(InterlockedCompareExchange(longint(TPasMPPtrInt(Destination)),longint(TPasMPPtrInt(NewValue)),longint(TPasMPPtrInt(Comperand)))));
 {$endif}
 {$endif}
 end;
 
-class function TPasMPInterlocked.CompareExchange(var Target:TObject;const NewValue,Comperand:TObject):TObject;
+class function TPasMPInterlocked.CompareExchange(var Destination:TObject;const NewValue,Comperand:TObject):TObject;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicCmpExchange(pointer(Target),pointer(NewValue),pointer(Comperand));
+ result:=AtomicCmpExchange(pointer(Destination),pointer(NewValue),pointer(Comperand));
 {$else}
 {$ifdef CPU64}
- result:=pointer(TPasMPPtrInt(InterlockedCompareExchange64(int64(TPasMPPtrInt(Target)),int64(TPasMPPtrInt(NewValue)),int64(TPasMPPtrInt(Comperand)))));
+ result:=pointer(TPasMPPtrInt(InterlockedCompareExchange64(int64(TPasMPPtrInt(Destination)),int64(TPasMPPtrInt(NewValue)),int64(TPasMPPtrInt(Comperand)))));
 {$else}
- result:=pointer(TPasMPPtrInt(InterlockedCompareExchange(longint(TPasMPPtrInt(Target)),longint(TPasMPPtrInt(NewValue)),longint(TPasMPPtrInt(Comperand)))));
+ result:=pointer(TPasMPPtrInt(InterlockedCompareExchange(longint(TPasMPPtrInt(Destination)),longint(TPasMPPtrInt(NewValue)),longint(TPasMPPtrInt(Comperand)))));
 {$endif}
 {$endif}
 end;
@@ -2294,25 +2355,25 @@ end;
 {$ifend}
 {$ifend}
 
-class function TPasMPInterlocked.Write(var Target:longint;const Source:longint):longint;
+class function TPasMPInterlocked.Write(var Destination:longint;const Source:longint):longint;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicExchange(Target,Source);
+ result:=AtomicExchange(Destination,Source);
 {$else}
- result:=InterlockedExchange(Target,Source);
+ result:=InterlockedExchange(Destination,Source);
 {$endif}
 end;
 
 {$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
-class function TPasMPInterlocked.Write(var Target:int64;const Source:int64):int64;
+class function TPasMPInterlocked.Write(var Destination:int64;const Source:int64):int64;
 {$ifdef CPU64}
 {$ifdef HAS_ATOMICS}
 begin
- result:=AtomicExchange(Target,Source);
+ result:=AtomicExchange(Destination,Source);
 end;
 {$else}
 begin
- result:=InterlockedExchange64(Target,Source);
+ result:=InterlockedExchange64(Destination,Source);
 end;
 {$endif}
 {$else}
@@ -2320,30 +2381,30 @@ end;
 var Old:int64;
 begin
  repeat
-  Old:=Target;
-  result:=AtomicCmpExchange(Target,Source,Old);
+  Old:=Destination;
+  result:=AtomicCmpExchange(Destination,Source,Old);
  until result=Old;
 end;
 {$else}
 var Old:int64;
 begin
  repeat
-  Old:=Target;
-  result:=InterlockedCompareExchange64(Target,Source,Old);
+  Old:=Destination;
+  result:=InterlockedCompareExchange64(Destination,Source,Old);
  until result=Old;
 end;
 {$endif}
 {$endif}
 
-class function TPasMPInterlocked.Write(var Target:TPasMPInt64;const Source:TPasMPInt64):TPasMPInt64;
+class function TPasMPInterlocked.Write(var Destination:TPasMPInt64;const Source:TPasMPInt64):TPasMPInt64;
 {$ifdef CPU64}
 {$ifdef HAS_ATOMICS}
 begin
- result.Value:=AtomicExchange(Target.Value,Source.Value);
+ result.Value:=AtomicExchange(Destination.Value,Source.Value);
 end;
 {$else}
 begin
- result.Value:=InterlockedExchange64(Target.Value,Source.Value);
+ result.Value:=InterlockedExchange64(Destination.Value,Source.Value);
 end;
 {$endif}
 {$else}
@@ -2351,28 +2412,28 @@ end;
 var Old:int64;
 begin
  repeat
-  Old:=Target.Value;
-  result.Value:=AtomicCmpExchange(Target.Value,Source.Value,Old);
+  Old:=Destination.Value;
+  result.Value:=AtomicCmpExchange(Destination.Value,Source.Value,Old);
  until result.Value=Old;
 end;
 {$else}
 var Old:int64;
 begin
  repeat
-  Old:=Target.Value;
-  result.Value:=InterlockedCompareExchange64(Target.Value,Source.Value,Old);
+  Old:=Destination.Value;
+  result.Value:=InterlockedCompareExchange64(Destination.Value,Source.Value,Old);
  until result.Value=Old;
 end;
 {$endif}
 {$endif}
 
 {$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
-class function TPasMPInterlocked.Write(var Target:TPasMPInt128;const Source:TPasMPInt128):TPasMPInt128;
+class function TPasMPInterlocked.Write(var Destination:TPasMPInt128;const Source:TPasMPInt128):TPasMPInt128;
 var Old:TPasMPInt128;
 begin
  repeat
-  Old:=Target;
-  result:=InterlockedCompareExchange128(Target,Source,Old);
+  Old:=Destination;
+  result:=InterlockedCompareExchange128(Destination,Source,Old);
  until (result.Lo=Old.Lo) and (result.Hi=Old.Hi);
 end;
 {$ifend}
@@ -3187,7 +3248,7 @@ begin
  end;
 end;
 
-constructor TPasMPMultiReaderSingleWriterLock.Create;
+constructor TPasMPMultipleReaderSingleWriterLock.Create;
 begin
  inherited Create;
 {$ifdef Windows}
@@ -3204,7 +3265,7 @@ begin
 {$endif}
 end;
 
-destructor TPasMPMultiReaderSingleWriterLock.Destroy;
+destructor TPasMPMultipleReaderSingleWriterLock.Destroy;
 begin
 {$ifdef Windows}
 {$else}
@@ -3218,7 +3279,7 @@ begin
  inherited Destroy;
 end;
 
-procedure TPasMPMultiReaderSingleWriterLock.AcquireRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMultipleReaderSingleWriterLock.AcquireRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef Windows}
 begin
  AcquireSRWLockShared(@fSRWLock);
@@ -3244,7 +3305,7 @@ end;
 {$endif}
 {$endif}
 
-function TPasMPMultiReaderSingleWriterLock.TryAcquireRead:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+function TPasMPMultipleReaderSingleWriterLock.TryAcquireRead:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef Windows}
 begin
  result:=TryAcquireSRWLockShared(@fSRWLock);
@@ -3270,7 +3331,7 @@ end;
 {$endif}
 {$endif}
 
-procedure TPasMPMultiReaderSingleWriterLock.ReleaseRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMultipleReaderSingleWriterLock.ReleaseRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef Windows}
 begin
  ReleaseSRWLockShared(@fSRWLock);
@@ -3295,7 +3356,7 @@ end;
 {$endif}
 {$endif}
 
-procedure TPasMPMultiReaderSingleWriterLock.AcquireWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMultipleReaderSingleWriterLock.AcquireWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef Windows}
 begin
  AcquireSRWLockExclusive(@fSRWLock);
@@ -3320,7 +3381,7 @@ end;
 {$endif}
 {$endif}
 
-function TPasMPMultiReaderSingleWriterLock.TryAcquireWrite:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+function TPasMPMultipleReaderSingleWriterLock.TryAcquireWrite:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef Windows}
 begin
  result:=TryAcquireSRWLockExclusive(@fSRWLock);
@@ -3345,7 +3406,7 @@ end;
 {$endif}
 {$endif}
 
-procedure TPasMPMultiReaderSingleWriterLock.ReleaseWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMultipleReaderSingleWriterLock.ReleaseWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef Windows}
 begin
  ReleaseSRWLockExclusive(@fSRWLock);
@@ -3370,7 +3431,7 @@ end;
 {$endif}
 {$endif}
 
-procedure TPasMPMultiReaderSingleWriterLock.ReadToWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMultipleReaderSingleWriterLock.ReadToWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef Windows}
 begin
  ReleaseSRWLockShared(@fSRWLock);
@@ -3398,7 +3459,7 @@ end;
 {$endif}
 {$endif}
 
-procedure TPasMPMultiReaderSingleWriterLock.WriteToRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMultipleReaderSingleWriterLock.WriteToRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef Windows}
 begin
  ReleaseSRWLockExclusive(@fSRWLock);
@@ -4119,6 +4180,474 @@ begin
  end;
 end;
 {$endif}
+
+const PasMPInterlockedHashTableItemStateDeleted=-1;
+      PasMPInterlockedHashTableItemStateEmpty=0;
+      PasMPInterlockedHashTableItemStateUsed=1;
+
+constructor TPasMPInterlockedHashTable.Create(const ItemSize:longint);
+begin
+ inherited Create;
+ fCriticalSection:=TPasMPCriticalSection.Create;
+ fLock:=0;
+ fItemSize:=ItemSize;
+ fInternalItemSize:=TPasMP.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPInterlockedHashTableItem)+fItemSize,PasMPCPUCacheLineSize));
+ TPasMPMemory.AllocateAlignedMemory(fFirstState,SizeOf(TPasMPInterlockedHashTableState),PasMPCPUCacheLineSize);
+ FillChar(fFirstState^,SizeOf(TPasMPInterlockedHashTableState),#0);
+ Initialize(fFirstState^);
+ fFirstState^.Previous:=nil;
+ fFirstState^.Next:=nil;
+ fFirstState^.ReferenceCounter:=1;
+ fFirstState^.Size:=TPasMP.RoundUpToPowerOfTwo(Max(16,4096 div fInternalItemSize));
+ fFirstState^.Mask:=fFirstState^.Size-1;
+ fFirstState^.LogSize:=IntLog2(fFirstState^.Size);
+ fFirstState^.Count:=0;
+ TPasMPMemory.AllocateAlignedMemory(fFirstState^.Items,fFirstState^.Size*fInternalItemSize,PasMPCPUCacheLineSize);
+ FillChar(fFirstState^.Items^,fFirstState^.Size*fInternalItemSize,#0);
+ fLastState:=fFirstState;
+end;
+
+destructor TPasMPInterlockedHashTable.Destroy;
+begin
+ while assigned(fFirstState) do begin
+  FreeState(fFirstState);
+ end;
+ fCriticalSection.Free;
+ inherited Destroy;
+end;
+
+function TPasMPInterlockedHashTable.CreateState:PPasMPInterlockedHashTableState;
+begin
+ TPasMPMemory.AllocateAlignedMemory(result,SizeOf(TPasMPInterlockedHashTableState),PasMPCPUCacheLineSize);
+ FillChar(result^,SizeOf(TPasMPInterlockedHashTableState),#0);
+ Initialize(result^);
+ result^.Previous:=nil;
+ result^.Next:=nil;
+ result^.ReferenceCounter:=1;
+end;
+
+procedure TPasMPInterlockedHashTable.FreeState(const State:PPasMPInterlockedHashTableState);
+var Index:longint;
+    Item:PPasMPInterlockedHashTableItem;
+begin
+ if assigned(State^.Previous) then begin
+  State^.Previous^.Next:=State^.Next;
+ end else if fFirstState=State then begin
+  fFirstState:=State^.Next;
+ end;
+ if assigned(State^.Next) then begin
+  State^.Next^.Previous:=State^.Previous;
+ end else if fLastState=State then begin
+  fLastState:=State^.Previous;
+ end;
+ Item:=State^.Items;
+ for Index:=0 to State^.Size-1 do begin
+  FinalizeItem(@Item^.Data);
+  Finalize(Item^);
+  inc(TPasMPPtrUInt(Item),fInternalItemSize);
+ end;
+ TPasMPMemory.FreeAlignedMemory(State^.Items);
+ Finalize(State^);
+ TPasMPMemory.FreeAlignedMemory(State);
+end;
+
+function TPasMPInterlockedHashTable.AcquireState:PPasMPInterlockedHashTableState;
+var Lock:longint;
+begin
+ repeat
+  Lock:=fLock and longint(longword($fffffffe));
+ until TPasMPInterlocked.CompareExchange(fLock,Lock+2,Lock)=Lock;
+ result:=fLastState;
+ TPasMPInterlocked.Increment(result^.ReferenceCounter);
+ TPasMPInterlocked.Sub(fLock,2);
+end;
+
+procedure TPasMPInterlockedHashTable.ReleaseState(const State:PPasMPInterlockedHashTableState);
+var Lock:longint;
+begin
+ if TPasMPInterlocked.Decrement(State^.ReferenceCounter)=0 then begin
+  repeat
+   Lock:=fLock and longint(longword($fffffffe));
+  until TPasMPInterlocked.CompareExchange(fLock,Lock or 1,Lock)=Lock;
+  repeat
+  until fLock=1;
+  try
+   if State^.ReferenceCounter=0 then begin
+    FreeState(State);
+   end;
+  finally
+   TPasMPInterlocked.Write(fLock,0);
+  end;
+ end;
+end;
+
+procedure TPasMPInterlockedHashTable.InitializeItem(const Data:pointer);
+begin
+end;
+
+procedure TPasMPInterlockedHashTable.FinalizeItem(const Data:pointer);
+begin
+end;
+
+procedure TPasMPInterlockedHashTable.CopyItem(const Source,Destination:pointer);
+begin
+end;
+
+procedure TPasMPInterlockedHashTable.GetKey(const Data,Key:pointer);
+begin
+end;
+
+procedure TPasMPInterlockedHashTable.SetKey(const Data,Key:pointer);
+begin
+end;
+
+procedure TPasMPInterlockedHashTable.GetValue(const Data,Value:pointer);
+begin
+end;
+
+procedure TPasMPInterlockedHashTable.SetValue(const Data,Value:pointer);
+begin
+end;
+
+function TPasMPInterlockedHashTable.HashItemKey(const Data:pointer):TPasMPInterlockedHashTableHash;
+begin
+ result:=0;
+end;
+
+function TPasMPInterlockedHashTable.HashKey(const Key:pointer):TPasMPInterlockedHashTableHash;
+begin
+ result:=0;
+end;
+
+function TPasMPInterlockedHashTable.CompareKey(const Data,Key:pointer):boolean;
+begin
+ result:=false;
+end;
+
+procedure TPasMPInterlockedHashTable.Clear;
+begin
+end;
+
+function TPasMPInterlockedHashTable.GetKeyValue(const Key,Value:pointer):boolean;
+var CurrentState:PPasMPInterlockedHashTableState;
+    Hash:TPasMPInterlockedHashTableHash;
+    StartIndex,Index,Step,ItemLock:longint;
+    Item:PPasMPInterlockedHashTableItem;
+begin
+ CurrentState:=AcquireState;
+ Hash:=HashKey(Key);
+ StartIndex:=(Hash shr (32-CurrentState^.LogSize)) and CurrentState^.Mask;
+ Step:=((Hash shl 1) or 1) and CurrentState^.Mask;
+ Index:=StartIndex;
+ repeat
+  Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
+  case Item^.State of
+   PasMPInterlockedHashTableItemStateDeleted:begin
+    // Found deleted item slot => ignore it
+   end;
+   PasMPInterlockedHashTableItemStateEmpty:begin
+    // Found empty item slot => abort search
+    break;
+   end;
+   PasMPInterlockedHashTableItemStateUsed:begin
+    // Found used item slot => try to read it
+    if Item^.Hash=Hash then begin
+     repeat
+      ItemLock:=Item^.Lock and longint(longword($fffffffe));
+     until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
+     if (Item^.State=PasMPInterlockedHashTableItemStateUsed) and (Item^.Hash=Hash) and CompareKey(@Item^.Data,Key) then begin
+      GetValue(@Item^.Data,Value);
+      TPasMPInterlocked.Sub(Item^.Lock,2);
+      ReleaseState(CurrentState);
+      result:=true;
+      exit;
+     end;
+     TPasMPInterlocked.Sub(Item^.Lock,2);
+    end;
+   end;
+  end;
+  Index:=(Index+Step) and CurrentState^.Mask;
+ until Index=StartIndex;
+ ReleaseState(CurrentState);
+ result:=false;
+end;
+
+function TPasMPInterlockedHashTable.SetKeyValueOnState(const CurrentState:PPasMPInterlockedHashTableState;const Key,Value:pointer):boolean;
+var Hash:TPasMPInterlockedHashTableHash;
+    StartIndex,Index,Step,FoundDeletedItemSlotIndex,ItemLock:longint;
+    Item:PPasMPInterlockedHashTableItem;
+    FoundDeletedItemSlot:boolean;
+begin
+
+ Hash:=HashKey(Key);
+
+ StartIndex:=(Hash shr (32-CurrentState^.LogSize)) and CurrentState^.Mask;
+ Step:=((Hash shl 1) or 1) and CurrentState^.Mask;
+
+ FoundDeletedItemSlotIndex:=-1;
+
+ // First try to set a existent or empty slot item
+ Index:=StartIndex;
+ repeat
+  Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
+  case Item^.State of
+   PasMPInterlockedHashTableItemStateDeleted:begin
+    // Found deleted item slot => remember it for the next try iteration
+    FoundDeletedItemSlotIndex:=Index;
+   end;
+   PasMPInterlockedHashTableItemStateEmpty:begin
+    // Found empty item slot => try to use it
+    repeat
+     ItemLock:=Item^.Lock and longint(longword($fffffffe));
+    until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
+    if Item^.State=PasMPInterlockedHashTableItemStateEmpty then begin
+     repeat
+      ItemLock:=Item^.Lock and longint(longword($fffffffe));
+     until TPasMPInterlocked.CompareExchange(Item^.Lock,(ItemLock-2) or 1,ItemLock)=ItemLock;
+     repeat
+     until Item^.Lock=1;
+     Item^.Hash:=Hash;
+     InitializeItem(@Item^.Data);
+     SetKey(@Item^.Data,Key);
+     SetValue(@Item^.Data,Value);
+     TPasMPInterlocked.Write(Item^.State,PasMPInterlockedHashTableItemStateUsed);
+     TPasMPInterlocked.Write(Item^.Lock,0);
+     TPasMPInterlocked.Increment(CurrentState^.Count);
+     result:=true;
+     exit;
+    end;
+    TPasMPInterlocked.Sub(Item^.Lock,2);
+   end;
+   PasMPInterlockedHashTableItemStateUsed:begin
+    // Found used item slot => try to overwrite it
+    if Item^.Hash=Hash then begin
+     repeat
+      ItemLock:=Item^.Lock and longint(longword($fffffffe));
+     until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
+     if (Item^.State=PasMPInterlockedHashTableItemStateUsed) and (Item^.Hash=Hash) and CompareKey(@Item^.Data,Key) then begin
+      repeat
+       ItemLock:=Item^.Lock and longint(longword($fffffffe));
+      until TPasMPInterlocked.CompareExchange(Item^.Lock,(ItemLock-2) or 1,ItemLock)=ItemLock;
+      repeat
+      until Item^.Lock=1;
+      SetValue(@Item^.Data,Value);
+      TPasMPInterlocked.Write(Item^.Lock,0);
+      result:=true;
+      exit;
+     end;
+     TPasMPInterlocked.Sub(Item^.Lock,2);
+    end;
+   end;
+  end;
+  Index:=(Index+Step) and CurrentState^.Mask;
+ until Index=StartIndex;
+
+ // Otherwise try to set the last found deleted slot item
+ if FoundDeletedItemSlotIndex>=0 then begin
+  Index:=FoundDeletedItemSlotIndex;
+  Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
+  repeat
+   ItemLock:=Item^.Lock and longint(longword($fffffffe));
+  until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
+  if Item^.State=PasMPInterlockedHashTableItemStateDeleted then begin
+   repeat
+    ItemLock:=Item^.Lock and longint(longword($fffffffe));
+   until TPasMPInterlocked.CompareExchange(Item^.Lock,(ItemLock-2) or 1,ItemLock)=ItemLock;
+   repeat
+   until Item^.Lock=1;
+   InitializeItem(@Item^.Data);
+   Item^.Hash:=Hash;
+   SetKey(@Item^.Data,Key);
+   SetValue(@Item^.Data,Value);
+   TPasMPInterlocked.Write(Item^.State,PasMPInterlockedHashTableItemStateUsed);
+   TPasMPInterlocked.Write(Item^.Lock,0);
+   TPasMPInterlocked.Increment(CurrentState^.Count);
+   result:=true;
+   exit;
+  end;
+  TPasMPInterlocked.Sub(Item^.Lock,2);
+ end;
+
+ // Otherwise try to find and set a deleted slot item
+ Index:=StartIndex;
+ repeat
+  Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
+  case Item^.State of
+   PasMPInterlockedHashTableItemStateDeleted:begin
+    repeat
+     ItemLock:=Item^.Lock and longint(longword($fffffffe));
+    until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
+    if Item^.State=PasMPInterlockedHashTableItemStateDeleted then begin
+     repeat
+      ItemLock:=Item^.Lock and longint(longword($fffffffe));
+     until TPasMPInterlocked.CompareExchange(Item^.Lock,(ItemLock-2) or 1,ItemLock)=ItemLock;
+     repeat
+     until Item^.Lock=1;
+     Item^.Hash:=Hash;
+     InitializeItem(@Item^.Data);
+     SetKey(@Item^.Data,Key);
+     SetValue(@Item^.Data,Value);
+     TPasMPInterlocked.Write(Item^.State,PasMPInterlockedHashTableItemStateUsed);
+     TPasMPInterlocked.Write(Item^.Lock,0);
+     TPasMPInterlocked.Increment(CurrentState^.Count);
+     result:=true;
+     exit;
+    end;
+    TPasMPInterlocked.Sub(Item^.Lock,2);
+   end;
+  end;
+  Index:=(Index+Step) and CurrentState^.Mask;
+ until Index=StartIndex;
+
+ result:=false;
+
+end;
+
+procedure TPasMPInterlockedHashTable.Grow;
+var CurrentState,NewState:PPasMPInterlockedHashTableState;
+    StartIndex,Index,Step,OtherIndex,OtherStep:longint;
+    Item,OtherItem:PPasMPInterlockedHashTableItem;
+    GlobalLock,ItemLock:longint;
+    FoundDeletedItemSlot:boolean;
+begin
+ // Otherwise as last solution, grow the hash table
+ CurrentState:=fLastState;
+ if CurrentState^.Count>=CurrentState^.Size then begin
+  NewState:=CreateState;
+  NewState^.Size:=CurrentState^.Size shl 1;
+  NewState^.Mask:=NewState^.Size-1;
+  NewState^.LogSize:=CurrentState^.LogSize+1;
+  NewState^.Count:=CurrentState^.Count;
+  TPasMPMemory.AllocateAlignedMemory(NewState^.Items,NewState^.Size*fInternalItemSize,PasMPCPUCacheLineSize);
+  FillChar(NewState^.Items^,NewState^.Size*fInternalItemSize,#0);
+  OtherIndex:=0;
+  while OtherIndex<CurrentState^.Size do begin
+   OtherItem:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(OtherIndex)*TPasMPPtrUInt(fInternalItemSize))));
+   if OtherItem^.State=PasMPInterlockedHashTableItemStateUsed then begin
+    repeat
+     ItemLock:=OtherItem^.Lock and longint(longword($fffffffe));
+    until TPasMPInterlocked.CompareExchange(OtherItem^.Lock,ItemLock+2,ItemLock)=ItemLock;
+    if OtherItem^.State=PasMPInterlockedHashTableItemStateUsed then begin
+     StartIndex:=(OtherItem^.Hash shr (32-NewState^.LogSize)) and NewState^.Mask;
+     Step:=((OtherItem^.Hash shl 1) or 1) and NewState^.Mask;
+     Index:=StartIndex;
+     repeat
+      Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(NewState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
+      if Item^.State=PasMPInterlockedHashTableItemStateEmpty then begin
+       Item^.Hash:=OtherItem^.Hash;
+       InitializeItem(@Item^.Data);
+       CopyItem(@OtherItem^.Data,@Item^.Data);
+       Item^.State:=PasMPInterlockedHashTableItemStateUsed;
+       break;
+      end;
+     until Index=StartIndex;
+    end;
+    TPasMPInterlocked.Sub(OtherItem^.Lock,2);
+   end;
+   inc(Index);
+  end;
+  if assigned(fLastState) then begin
+   fLastState^.Next:=NewState;
+   NewState^.Previous:=fLastState;
+  end else begin
+   NewState^.Previous:=nil;
+   fFirstState:=NewState;
+  end;
+  NewState^.Next:=nil;
+  fLastState:=NewState;
+  TPasMPInterlocked.Decrement(CurrentState^.ReferenceCounter);
+ end;
+end;
+
+function TPasMPInterlockedHashTable.SetKeyValue(const Key,Value:pointer):boolean;
+var CurrentState:PPasMPInterlockedHashTableState;
+    StateLock,GlobalLock:longint;
+begin
+ result:=false;
+ repeat
+  CurrentState:=AcquireState;
+  try
+   repeat
+    StateLock:=CurrentState^.Lock and longint(longword($fffffffe));
+   until TPasMPInterlocked.CompareExchange(CurrentState^.Lock,StateLock+2,StateLock)=StateLock;
+   if SetKeyValueOnState(CurrentState,Key,Value) then begin
+    TPasMPInterlocked.Sub(CurrentState^.Lock,2);
+    result:=true;
+   end else begin
+    repeat
+     GlobalLock:=fLock and longint(longword($fffffffe));
+    until TPasMPInterlocked.CompareExchange(fLock,GlobalLock or 1,GlobalLock)=GlobalLock;
+    repeat
+    until fLock=1;
+    try
+     repeat
+      StateLock:=CurrentState^.Lock and longint(longword($fffffffe));
+     until TPasMPInterlocked.CompareExchange(CurrentState^.Lock,(StateLock-2) or 1,StateLock)=StateLock;
+     repeat
+     until CurrentState^.Lock=1;
+     try
+      Grow;
+     finally
+      TPasMPInterlocked.Write(CurrentState^.Lock,0);
+     end;
+    finally
+     TPasMPInterlocked.Write(fLock,0);
+    end;
+   end;
+  finally
+   ReleaseState(CurrentState);
+  end;
+ until result;
+end;
+
+function TPasMPInterlockedHashTable.Delete(const Key:pointer):boolean;
+var CurrentState:PPasMPInterlockedHashTableState;
+    Hash:TPasMPInterlockedHashTableHash;
+    StartIndex,Index,Step,ItemLock:longint;
+    Item:PPasMPInterlockedHashTableItem;
+begin
+ CurrentState:=AcquireState;
+ Hash:=HashKey(Key);
+ StartIndex:=(Hash shr (32-CurrentState^.LogSize)) and CurrentState^.Mask;
+ Step:=((Hash shl 1) or 1) and CurrentState^.Mask;
+ Index:=StartIndex;
+ repeat
+  Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
+  case Item^.State of
+   PasMPInterlockedHashTableItemStateDeleted:begin
+    // Found deleted item slot => ignore it
+   end;
+   PasMPInterlockedHashTableItemStateEmpty:begin
+    // Found empty item slot => abort search
+    break;
+   end;
+   PasMPInterlockedHashTableItemStateUsed:begin
+    // Found used item slot => try to read it
+    if Item^.Hash=Hash then begin
+     repeat
+      ItemLock:=Item^.Lock and longint(longword($fffffffe));
+     until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
+     if (Item^.State=PasMPInterlockedHashTableItemStateUsed) and (Item^.Hash=Hash) and CompareKey(@Item^.Data,Key) then begin
+      repeat
+       ItemLock:=Item^.Lock and longint(longword($fffffffe));
+      until TPasMPInterlocked.CompareExchange(Item^.Lock,(ItemLock-2) or 1,ItemLock)=ItemLock;
+      FinalizeItem(@Item^.Data);
+      TPasMPInterlocked.Write(Item^.State,PasMPInterlockedHashTableItemStateDeleted);
+      TPasMPInterlocked.Write(Item^.Lock,0);
+      TPasMPInterlocked.Decrement(CurrentState^.Count);
+      ReleaseState(CurrentState);
+      result:=true;
+      exit;
+     end;
+     TPasMPInterlocked.Sub(Item^.Lock,2);
+    end;
+   end;
+  end;
+  Index:=(Index+Step) and CurrentState^.Mask;
+ until Index=StartIndex;
+ ReleaseState(CurrentState);
+ result:=false;
+end;
 
 constructor TPasMPSingleProducerSingleConsumerRingBuffer.Create(const Size:longint);
 begin
