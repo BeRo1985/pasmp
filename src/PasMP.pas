@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-17-19-36-0000                       *
+ *                        Version 2016-02-17-20-01-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1156,6 +1156,31 @@ type TPasMPAvailableCPUCores=array of longint;
        function GetKeyValue(const Key;out Value):boolean;
        function SetKeyValue(const Key,Value):boolean;
        function DeleteKey(const Key):boolean;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPStringHashTable=class(TPasMPInterlockedHashTable)
+      private
+       fKeySize:longint;
+       fValueSize:longint;
+       fItemSize:longint;
+      protected
+       procedure InitializeItem(const Data:pointer); override;
+       procedure FinalizeItem(const Data:pointer); override;
+       procedure CopyItem(const Source,Destination:pointer); override;
+       procedure GetKey(const Data,Key:pointer); override;
+       procedure SetKey(const Data,Key:pointer); override;
+       procedure GetValue(const Data,Value:pointer); override;
+       procedure SetValue(const Data,Value:pointer); override;
+       function HashKey(const Key:pointer):TPasMPInterlockedHashTableHash; override;
+       function CompareKey(const Data,Key:pointer):boolean; override;
+      public
+       constructor Create(const ValueSize:longint);
+       destructor Destroy; override;
+       function GetKeyValue(const Key:string;out Value):boolean;
+       function SetKeyValue(const Key:string;const Value):boolean;
+       function DeleteKey(const Key:string):boolean;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -5821,7 +5846,7 @@ end;
 
 function TPasMPHashTable.HashKey(const Key:pointer):TPasMPInterlockedHashTableHash;
 {$ifdef CPUARM}
-var b:pansichar;
+var b:pbyte;
     len,h,i:longword;
 begin
  result:=2166136261;
@@ -5973,6 +5998,84 @@ begin
 end;
 
 function TPasMPHashTable.DeleteKey(const Key):boolean;
+begin
+ result:=inherited DeleteKey(@Key);
+end;
+
+constructor TPasMPStringHashTable.Create(const ValueSize:longint);
+begin
+ fKeySize:=SizeOf(string);
+ fValueSize:=ValueSize;
+ fItemSize:=fKeySize+fValueSize;
+ inherited Create(fItemSize);
+end;
+
+destructor TPasMPStringHashTable.Destroy;
+begin
+ inherited Destroy;
+end;
+
+procedure TPasMPStringHashTable.InitializeItem(const Data:pointer);
+begin
+ FillChar(Data^,fItemSize,#0);
+end;
+
+procedure TPasMPStringHashTable.FinalizeItem(const Data:pointer);
+begin
+ string(Data^):='';
+end;
+
+procedure TPasMPStringHashTable.CopyItem(const Source,Destination:pointer);
+begin
+ string(Destination^):=string(Source^);
+ Move(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Source)+TPasMPPtrUInt(fKeySize)))^,pointer(TPasMPPtrUInt(TPasMPPtrUInt(Destination)+TPasMPPtrUInt(fKeySize)))^,fValueSize);
+end;
+
+procedure TPasMPStringHashTable.GetKey(const Data,Key:pointer);
+begin
+ string(Key^):=string(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)))^);
+end;
+
+procedure TPasMPStringHashTable.SetKey(const Data,Key:pointer);
+begin
+ string(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)))^):=string(Key^);
+end;
+
+procedure TPasMPStringHashTable.GetValue(const Data,Value:pointer);
+begin
+ Move(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)+TPasMPPtrUInt(fKeySize)))^,Value^,fValueSize);
+end;
+
+procedure TPasMPStringHashTable.SetValue(const Data,Value:pointer);
+begin
+ Move(Value^,pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)+TPasMPPtrUInt(fKeySize)))^,fValueSize);
+end;
+
+function TPasMPStringHashTable.HashKey(const Key:pointer):TPasMPInterlockedHashTableHash;
+var Index:longint;
+begin
+ result:=length(string(Key^));
+ for Index:=1 to length(string(Key^)) do begin
+  result:=((result shl 27) or (result shl 5))+ord(string(Key^)[Index]);
+ end;
+end;
+
+function TPasMPStringHashTable.CompareKey(const Data,Key:pointer):boolean;
+begin
+ result:=string(Data^)=string(Key^);
+end;
+
+function TPasMPStringHashTable.GetKeyValue(const Key:string;out Value):boolean;
+begin
+ result:=inherited GetKeyValue(@Key,@Value);
+end;
+
+function TPasMPStringHashTable.SetKeyValue(const Key:string;const Value):boolean;
+begin
+ result:=inherited SetKeyValue(@Key,@Value);
+end;
+
+function TPasMPStringHashTable.DeleteKey(const Key:string):boolean;
 begin
  result:=inherited DeleteKey(@Key);
 end;
