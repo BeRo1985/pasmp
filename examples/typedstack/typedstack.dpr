@@ -35,7 +35,7 @@ type TProducerThread=class(TPasMPThread)
        procedure Execute; override;
      end;
 
-var IntegerStack:TPasMPBoundedTypedStack<LongInt>;
+var IntegerStack:TPasMPBoundedStack<LongInt>;
 
 procedure TProducerThread.Execute;
 var Value:longint;
@@ -89,7 +89,7 @@ begin
 
  TPasMP.CreateGlobalInstance;
 
- IntegerStack:=TPasMPBoundedTypedStack<LongInt>.Create(65536);
+ IntegerStack:=TPasMPBoundedStack<LongInt>.Create(65536);
  try
 
   ProducerThread:=TProducerThread.Create(false);

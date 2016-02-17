@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-17-21-28-0000                       *
+ *                        Version 2016-02-17-21-41-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -358,6 +358,14 @@ type TPasMPAvailableCPUCores=array of longint;
         Value:{$ifdef CPU64}TPasMPInt128{$else}TPasMPInt64{$endif};
        );
      end;
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPMath=class
+      public
+       class function RoundUpToPowerOfTwo(x:TPasMPPtrUInt):TPasMPPtrUInt; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
+       class function RoundUpToMask(x,m:TPasMPPtrUInt):TPasMPPtrUInt; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPInterlocked=class
@@ -942,7 +950,7 @@ type TPasMPAvailableCPUCores=array of longint;
 
 {$ifdef HAS_GENERICS}
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>=class
+     TPasMPSingleProducerSingleConsumerBoundedQueue<T>=class
       protected
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fReadIndex:longint;
        fCacheLineFillUp0:array[0..(PasMPCPUCacheLineSize-SizeOf(longint))-1] of byte; // for to force fReadIndex and fWriteIndex to different CPU cache lines
@@ -991,7 +999,7 @@ type TPasMPAvailableCPUCores=array of longint;
 
 {$ifdef HAS_GENERICS}
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPBoundedTypedStack<T>=class
+     TPasMPBoundedStack<T>=class
       private
        type PPasMPBoundedTypedStackItem=^TPasMPBoundedTypedStackItem;
             TPasMPBoundedTypedStackItem=record
@@ -1039,7 +1047,7 @@ type TPasMPAvailableCPUCores=array of longint;
 
 {$ifdef HAS_GENERICS}
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPUnboundedTypedStack<T>=class
+     TPasMPUnboundedStack<T>=class
       private
        type PPasMPUnboundedTypedStackItem=^TPasMPUnboundedTypedStackItem;
             TPasMPUnboundedTypedStackItem=record
@@ -1088,7 +1096,7 @@ type TPasMPAvailableCPUCores=array of longint;
 
 {$ifdef HAS_GENERICS}
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPBoundedTypedQueue<T>=class
+     TPasMPBoundedQueue<T>=class
       private
        type PPasMPBoundedTypedQueueItem=^TPasMPBoundedTypedQueueItem;
             TPasMPBoundedTypedQueueItem=record
@@ -1128,7 +1136,7 @@ type TPasMPAvailableCPUCores=array of longint;
 
 {$ifdef HAS_GENERICS}
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPUnboundedTypedQueue<T>=class
+     TPasMPUnboundedQueue<T>=class
       private
        type PPasMPUnboundedTypedQueueItem=^TPasMPUnboundedTypedQueueItem;
             TPasMPUnboundedTypedQueueItem=record
@@ -1461,8 +1469,6 @@ type TPasMPAvailableCPUCores=array of longint;
 {$endif}
        class procedure DestroyGlobalInstance;
        class function GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}longword{$endif}):longword; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
-       class function RoundUpToPowerOfTwo(x:TPasMPPtrUInt):TPasMPPtrUInt; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
-       class function RoundUpToMask(x,m:TPasMPPtrUInt):TPasMPPtrUInt; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        function GetJobWorkerThread:TPasMPJobWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
        procedure WaitForWakeUp;
        procedure WakeUpAll;
@@ -2169,12 +2175,7 @@ begin
  end;
 end;
 
-class function TPasMP.GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}longword{$endif}):longword;
-begin
- result:=(ThreadID*83492791) xor ((ThreadID shr 24)*19349669) xor ((ThreadID shr 16)*73856093) xor ((ThreadID shr 8)*50331653);
-end;
-
-class function TPasMP.RoundUpToPowerOfTwo(x:TPasMPPtrUInt):TPasMPPtrUInt;
+class function TPasMPMath.RoundUpToPowerOfTwo(x:TPasMPPtrUInt):TPasMPPtrUInt;
 begin
  dec(x);
  x:=x or (x shr 1);
@@ -2188,13 +2189,18 @@ begin
  result:=x+1;
 end;
 
-class function TPasMP.RoundUpToMask(x,m:TPasMPPtrUInt):TPasMPPtrUInt;
+class function TPasMPMath.RoundUpToMask(x,m:TPasMPPtrUInt):TPasMPPtrUInt;
 begin
  if (x and (m-1))<>0 then begin
   result:=(x+m) and not (m-1);
  end else begin
   result:=x;
  end;
+end;
+
+class function TPasMP.GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}longword{$endif}):longword;
+begin
+ result:=(ThreadID*83492791) xor ((ThreadID shr 24)*19349669) xor ((ThreadID shr 16)*73856093) xor ((ThreadID shr 8)*50331653);
 end;
 
 class procedure TPasMP.Yield; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
@@ -2634,7 +2640,7 @@ var Original,Aligned:pointer;
     Mask:ptruint;
 begin
  if (Align and (Align-1))<>0 then begin
-  Align:=TPasMP.RoundUpToPowerOfTwo(Align);
+  Align:=TPasMPMath.RoundUpToPowerOfTwo(Align);
  end;
  Mask:=Align-1;
  inc(Size,((Align shl 1)+SizeOf(pointer)));
@@ -4082,7 +4088,7 @@ var Node:PPasMPInterlockedQueueNode;
 begin
  inherited Create;
  fItemSize:=ItemSize;
- fInternalNodeSize:=TPasMP.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPInterlockedQueueNode)+fItemSize,PasMPCPUCacheLineSize));
+ fInternalNodeSize:=TPasMPMath.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPInterlockedQueueNode)+fItemSize,PasMPCPUCacheLineSize));
  fHead:=nil;
  fTail:=nil;
  TPasMPMemory.AllocateAlignedMemory(fHead,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
@@ -4323,7 +4329,7 @@ begin
  fCriticalSection:=TPasMPCriticalSection.Create;
  fLock:=0;
  fItemSize:=ItemSize;
- fInternalItemSize:=TPasMP.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPInterlockedHashTableItem)+fItemSize,PasMPCPUCacheLineSize));
+ fInternalItemSize:=TPasMPMath.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPInterlockedHashTableItem)+fItemSize,PasMPCPUCacheLineSize));
  TPasMPMemory.AllocateAlignedMemory(fFirstState,SizeOf(TPasMPInterlockedHashTableState),PasMPCPUCacheLineSize);
  FillChar(fFirstState^,SizeOf(TPasMPInterlockedHashTableState),#0);
  Initialize(fFirstState^);
@@ -4331,7 +4337,7 @@ begin
  fFirstState^.Next:=nil;
  fFirstState^.ReferenceCounter:=1;
  fFirstState^.Version:=0;
- fFirstState^.Size:=TPasMP.RoundUpToPowerOfTwo(Max(16,4096 div fInternalItemSize));
+ fFirstState^.Size:=TPasMPMath.RoundUpToPowerOfTwo(Max(16,4096 div fInternalItemSize));
  fFirstState^.Mask:=fFirstState^.Size-1;
  fFirstState^.LogSize:=IntLog2(fFirstState^.Size);
  fFirstState^.Count:=0;
@@ -5285,7 +5291,7 @@ begin
 end;
 
 {$ifdef HAS_GENERICS}
-constructor TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Create(const MaximalCount:longint);
+constructor TPasMPSingleProducerSingleConsumerBoundedQueue<T>.Create(const MaximalCount:longint);
 begin
  inherited Create;
  fMaximalCount:=MaximalCount;
@@ -5295,13 +5301,13 @@ begin
  SetLength(fData,fMaximalCount);
 end;
 
-destructor TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Destroy;
+destructor TPasMPSingleProducerSingleConsumerBoundedQueue<T>.Destroy;
 begin
  SetLength(fData,0);
  inherited Destroy;
 end;
 
-function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Enqueue(const Item:T):boolean;
+function TPasMPSingleProducerSingleConsumerBoundedQueue<T>.Enqueue(const Item:T):boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -5331,7 +5337,7 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.Dequeue(out Item:T):boolean;
+function TPasMPSingleProducerSingleConsumerBoundedQueue<T>.Dequeue(out Item:T):boolean;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -5361,7 +5367,7 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.AvailableForEnqueue:longint;
+function TPasMPSingleProducerSingleConsumerBoundedQueue<T>.AvailableForEnqueue:longint;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -5381,7 +5387,7 @@ begin
  end;
 end;
 
-function TPasMPSingleProducerSingleConsumerBoundedTypedQueue<T>.AvailableForDequeue:longint;
+function TPasMPSingleProducerSingleConsumerBoundedQueue<T>.AvailableForDequeue:longint;
 var LocalReadIndex,LocalWriteIndex:longint;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -5412,7 +5418,7 @@ begin
  fFree:=TPasMPInterlockedStack.Create;
  fMaximalCount:=MaximalCount;
  fItemSize:=ItemSize;
- fInternalItemSize:=TPasMP.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPBoundedStackItem)+fItemSize,PasMPCPUCacheLineSize));
+ fInternalItemSize:=TPasMPMath.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPBoundedStackItem)+fItemSize,PasMPCPUCacheLineSize));
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
  for i:=0 to fMaximalCount-1 do begin
@@ -5467,7 +5473,7 @@ begin
 end;
 
 {$ifdef HAS_GENERICS}
-constructor TPasMPBoundedTypedStack<T>.Create(const MaximalCount:longint);
+constructor TPasMPBoundedStack<T>.Create(const MaximalCount:longint);
 var i:longint;
     p:PByte;
     StackItem:PPasMPBoundedTypedStackItem;
@@ -5476,7 +5482,7 @@ begin
  fStack:=TPasMPInterlockedStack.Create;
  fFree:=TPasMPInterlockedStack.Create;
  fMaximalCount:=MaximalCount;
- fInternalItemSize:=Max(TPasMP.RoundUpToPowerOfTwo(SizeOf(TPasMPBoundedTypedStackItem)),PasMPCPUCacheLineSize);
+ fInternalItemSize:=Max(TPasMPMath.RoundUpToPowerOfTwo(SizeOf(TPasMPBoundedTypedStackItem)),PasMPCPUCacheLineSize);
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
  for i:=0 to fMaximalCount-1 do begin
@@ -5487,7 +5493,7 @@ begin
  end;
 end;
 
-destructor TPasMPBoundedTypedStack<T>.Destroy;
+destructor TPasMPBoundedStack<T>.Destroy;
 var i:longint;
     p:PByte;
     StackItem:PPasMPBoundedTypedStackItem;
@@ -5504,17 +5510,17 @@ begin
  inherited Destroy;
 end;
 
-function TPasMPBoundedTypedStack<T>.IsEmpty:boolean;
+function TPasMPBoundedStack<T>.IsEmpty:boolean;
 begin
  result:=fStack.IsEmpty;
 end;
 
-function TPasMPBoundedTypedStack<T>.IsFull:boolean;
+function TPasMPBoundedStack<T>.IsFull:boolean;
 begin
  result:=fFree.IsEmpty;
 end;
 
-function TPasMPBoundedTypedStack<T>.Push(const Item:T):boolean;
+function TPasMPBoundedStack<T>.Push(const Item:T):boolean;
 var StackItem:PPasMPBoundedTypedStackItem;
 begin
  StackItem:=fFree.Pop;
@@ -5527,7 +5533,7 @@ begin
  end;
 end;
 
-function TPasMPBoundedTypedStack<T>.Pop(out Item:T):boolean;
+function TPasMPBoundedStack<T>.Pop(out Item:T):boolean;
 var StackItem:PPasMPBoundedTypedStackItem;
 begin
  StackItem:=fStack.Pop;
@@ -5592,14 +5598,14 @@ begin
 end;
 
 {$ifdef HAS_GENERICS}
-constructor TPasMPUnboundedTypedStack<T>.Create;
+constructor TPasMPUnboundedStack<T>.Create;
 begin
  inherited Create;
  fStack:=TPasMPInterlockedStack.Create;
  fItemSize:=SizeOf(T);
 end;
 
-destructor TPasMPUnboundedTypedStack<T>.Destroy;
+destructor TPasMPUnboundedStack<T>.Destroy;
 var StackItem:PPasMPUnboundedTypedStackItem;
 begin
  repeat
@@ -5615,12 +5621,12 @@ begin
  inherited Destroy;
 end;
 
-function TPasMPUnboundedTypedStack<T>.IsEmpty:boolean;
+function TPasMPUnboundedStack<T>.IsEmpty:boolean;
 begin
  result:=fStack.IsEmpty;
 end;
 
-function TPasMPUnboundedTypedStack<T>.Push(const Item:T):boolean;
+function TPasMPUnboundedStack<T>.Push(const Item:T):boolean;
 var StackItem:PPasMPUnboundedTypedStackItem;
 begin
  TPasMPMemory.AllocateAlignedMemory(StackItem,SizeOf(TPasMPUnboundedTypedStackItem)+fItemSize,PasMPCPUCacheLineSize);
@@ -5630,7 +5636,7 @@ begin
  result:=true;
 end;
 
-function TPasMPUnboundedTypedStack<T>.Pop(out Item:T):boolean;
+function TPasMPUnboundedStack<T>.Pop(out Item:T):boolean;
 var StackItem:PPasMPUnboundedTypedStackItem;
 begin
  StackItem:=fStack.Pop;
@@ -5655,7 +5661,7 @@ begin
  fFree:=TPasMPInterlockedStack.Create;
  fMaximalCount:=MaximalCount;
  fItemSize:=ItemSize;
- fInternalItemSize:=TPasMP.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPBoundedQueueItem)+fItemSize,PasMPCPUCacheLineSize));
+ fInternalItemSize:=TPasMPMath.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPBoundedQueueItem)+fItemSize,PasMPCPUCacheLineSize));
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
  for i:=0 to fMaximalCount-1 do begin
@@ -5707,7 +5713,7 @@ begin
 end;
 
 {$ifdef HAS_GENERICS}
-constructor TPasMPBoundedTypedQueue<T>.Create(const MaximalCount:longint);
+constructor TPasMPBoundedQueue<T>.Create(const MaximalCount:longint);
 var i:longint;
     p:PByte;
     QueueItem:PPasMPBoundedTypedQueueItem;
@@ -5716,7 +5722,7 @@ begin
  fQueue:=TPasMPInterlockedQueue.Create(SizeOf(PPasMPBoundedQueueItem));
  fFree:=TPasMPInterlockedStack.Create;
  fMaximalCount:=MaximalCount;
- fInternalItemSize:=Max(TPasMP.RoundUpToPowerOfTwo(SizeOf(TPasMPBoundedTypedQueueItem)),PasMPCPUCacheLineSize);
+ fInternalItemSize:=Max(TPasMPMath.RoundUpToPowerOfTwo(SizeOf(TPasMPBoundedTypedQueueItem)),PasMPCPUCacheLineSize);
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
  for i:=0 to fMaximalCount-1 do begin
@@ -5727,7 +5733,7 @@ begin
  end;
 end;
 
-destructor TPasMPBoundedTypedQueue<T>.Destroy;
+destructor TPasMPBoundedQueue<T>.Destroy;
 var i:longint;
     p:PByte;
     QueueItem:PPasMPBoundedTypedQueueItem;
@@ -5744,17 +5750,17 @@ begin
  inherited Destroy;
 end;
 
-function TPasMPBoundedTypedQueue<T>.IsEmpty:boolean;
+function TPasMPBoundedQueue<T>.IsEmpty:boolean;
 begin
  result:=fQueue.IsEmpty;
 end;
 
-function TPasMPBoundedTypedQueue<T>.IsFull:boolean;
+function TPasMPBoundedQueue<T>.IsFull:boolean;
 begin
  result:=fFree.IsEmpty;
 end;
 
-function TPasMPBoundedTypedQueue<T>.Enqueue(const Item:T):boolean;
+function TPasMPBoundedQueue<T>.Enqueue(const Item:T):boolean;
 var QueueItem:PPasMPBoundedTypedQueueItem;
 begin
  QueueItem:=fFree.Pop;
@@ -5768,7 +5774,7 @@ begin
  end;
 end;
 
-function TPasMPBoundedTypedQueue<T>.Dequeue(out Item:T):boolean;
+function TPasMPBoundedQueue<T>.Dequeue(out Item:T):boolean;
 var QueueItem:PPasMPBoundedTypedQueueItem;
 begin
  result:=fQueue.Dequeue(QueueItem);
@@ -5812,13 +5818,13 @@ begin
 end;
 
 {$ifdef HAS_GENERICS}
-constructor TPasMPUnboundedTypedQueue<T>.Create;
+constructor TPasMPUnboundedQueue<T>.Create;
 begin
  inherited Create;
  fQueue:=TPasMPInterlockedQueue.Create(SizeOf(PPasMPUnboundedTypedQueueItem));
 end;
 
-destructor TPasMPUnboundedTypedQueue<T>.Destroy;
+destructor TPasMPUnboundedQueue<T>.Destroy;
 var QueueItem:PPasMPUnboundedTypedQueueItem;
 begin
  while fQueue.Dequeue(QueueItem) do begin
@@ -5831,12 +5837,12 @@ begin
  inherited Destroy;
 end;
 
-function TPasMPUnboundedTypedQueue<T>.IsEmpty:boolean;
+function TPasMPUnboundedQueue<T>.IsEmpty:boolean;
 begin
  result:=fQueue.IsEmpty;
 end;
 
-procedure TPasMPUnboundedTypedQueue<T>.Enqueue(const Item:T);
+procedure TPasMPUnboundedQueue<T>.Enqueue(const Item:T);
 var QueueItem:PPasMPUnboundedTypedQueueItem;
 begin
  TPasMPMemory.AllocateAlignedMemory(QueueItem,SizeOf(TPasMPUnboundedTypedQueueItem),PasMPCPUCacheLineSize);
@@ -5845,7 +5851,7 @@ begin
  fQueue.Enqueue(QueueItem);
 end;
 
-function TPasMPUnboundedTypedQueue<T>.Dequeue(out Item:T):boolean;
+function TPasMPUnboundedQueue<T>.Dequeue(out Item:T):boolean;
 var QueueItem:PPasMPUnboundedTypedQueueItem;
 begin
  result:=fQueue.Dequeue(QueueItem);
@@ -6370,7 +6376,7 @@ procedure TPasMPJobAllocator.AllocateNewBuckets(const NewCountMemoryPoolBuckets:
 var OldCountMemoryPoolBuckets,MemoryPoolBucketIndex:longint;
 begin
  OldCountMemoryPoolBuckets:=fCountMemoryPoolBuckets;
- fCountMemoryPoolBuckets:=TPasMP.RoundUpToPowerOfTwo(NewCountMemoryPoolBuckets);
+ fCountMemoryPoolBuckets:=TPasMPMath.RoundUpToPowerOfTwo(NewCountMemoryPoolBuckets);
  if OldCountMemoryPoolBuckets<fCountMemoryPoolBuckets then begin
   SetLength(fMemoryPoolBuckets,fCountMemoryPoolBuckets);
   for MemoryPoolBucketIndex:=OldCountMemoryPoolBuckets to fCountMemoryPoolBuckets-1 do begin
@@ -6431,7 +6437,7 @@ begin
  inherited Create;
  fPasMPInstance:=APasMPInstance;
  fQueueLockState:=0;
- fQueueSize:=TPasMP.RoundUpToPowerOfTwo(PasMPJobQueueStartSize);
+ fQueueSize:=TPasMPMath.RoundUpToPowerOfTwo(PasMPJobQueueStartSize);
  fQueueMask:=fQueueSize-1;
  SetLength(fQueueJobs,fQueueSize);
  fQueueBottom:=0;

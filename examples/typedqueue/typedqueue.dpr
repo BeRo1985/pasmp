@@ -35,7 +35,7 @@ type TProducerThread=class(TPasMPThread)
        procedure Execute; override;
      end;
 
-var IntegerQueue:TPasMPBoundedTypedQueue<longint>;
+var IntegerQueue:TPasMPBoundedQueue<longint>;
 
 procedure TProducerThread.Execute;
 var Value:longint;
@@ -89,7 +89,7 @@ begin
 
  TPasMP.CreateGlobalInstance;
 
- IntegerQueue:=TPasMPBoundedTypedQueue<longint>.Create(65536);
+ IntegerQueue:=TPasMPBoundedQueue<longint>.Create(65536);
  try
 
   ProducerThread:=TProducerThread.Create(false);
