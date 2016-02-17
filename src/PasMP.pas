@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-17-22-57-0000                       *
+ *                        Version 2016-02-17-23-05-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -863,7 +863,7 @@ type TPasMPAvailableCPUCores=array of longint;
      end;
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     // A thread-safe hash table with open addressing and double hashing
+     // A thread-safe hash table with open addressing and double-hashing-like probing (two values from one single hash value)
      // The read operation is almost lock-free until the read-acquisition of the multiple-reader-single-writer-lock of a hash item,
      // since a item value can larger than one and two native maschine words
      // The write operations are almost multiple-reader-single-writer-lock-based
