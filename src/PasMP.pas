@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-17-21-41-0000                       *
+ *                        Version 2016-02-17-21-52-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1767,7 +1767,7 @@ end;
 {$endif}
 
 {$ifdef CPU386}
-function InterlockedCompareExchange64(var Destination:int64;NewValue:int64;Comperand:int64):int64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+function InterlockedCompareExchange64(var Destination:int64;NewValue:int64;Comperand:int64):int64; assembler;
 asm
  push ebx
  push edi
