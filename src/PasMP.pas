@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-17-17-09-0000                       *
+ *                        Version 2016-02-17-18-19-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -821,6 +821,7 @@ type TPasMPAvailableCPUCores=array of longint;
       Previous:PPasMPInterlockedHashTableState;
       Next:PPasMPInterlockedHashTableState;
       ReferenceCounter:longint;
+      Version:longint;
       Size:longint;
       Mask:longint;
       LogSize:longint;
@@ -830,6 +831,12 @@ type TPasMPAvailableCPUCores=array of longint;
      end;
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     // A thread-safe hash table with open addressing and double hashing
+     // The read operation is almost lock-free until the read-acquisition of the multiple-reader-single-writer-lock of a hash item,
+     // since a item value can larger than one and two native maschine words
+     // The write operations are almost multiple-reader-single-writer-lock-based
+     // Why not complete lock-free? => Because TPasMPInterlockedHashTable should be universal usable independently by the key and
+     // value data types and also key-and-value-object-reference-counting-free as much as possble.
      TPasMPInterlockedHashTable=class // only for PasMP internal usage
       private
        fCriticalSection:TPasMPCriticalSection;
@@ -4198,6 +4205,7 @@ begin
  fFirstState^.Previous:=nil;
  fFirstState^.Next:=nil;
  fFirstState^.ReferenceCounter:=1;
+ fFirstState^.Version:=0;
  fFirstState^.Size:=TPasMP.RoundUpToPowerOfTwo(Max(16,4096 div fInternalItemSize));
  fFirstState^.Mask:=fFirstState^.Size-1;
  fFirstState^.LogSize:=IntLog2(fFirstState^.Size);
@@ -4510,10 +4518,10 @@ var CurrentState,NewState:PPasMPInterlockedHashTableState;
     GlobalLock,ItemLock:longint;
     FoundDeletedItemSlot:boolean;
 begin
- // Otherwise as last solution, grow the hash table
  CurrentState:=fLastState;
  if CurrentState^.Count>=CurrentState^.Size then begin
   NewState:=CreateState;
+  NewState^.Version:=CurrentState^.Version+1;
   NewState^.Size:=CurrentState^.Size shl 1;
   NewState^.Mask:=NewState^.Size-1;
   NewState^.LogSize:=CurrentState^.LogSize+1;
@@ -4561,19 +4569,21 @@ end;
 
 function TPasMPInterlockedHashTable.SetKeyValue(const Key,Value:pointer):boolean;
 var CurrentState:PPasMPInterlockedHashTableState;
-    StateLock,GlobalLock:longint;
+    Version,StateLock,GlobalLock:longint;
 begin
- result:=false;
  repeat
+  result:=false;
   CurrentState:=AcquireState;
+  Version:=CurrentState^.Version;
   try
    repeat
     StateLock:=CurrentState^.Lock and longint(longword($fffffffe));
    until TPasMPInterlocked.CompareExchange(CurrentState^.Lock,StateLock+2,StateLock)=StateLock;
    if SetKeyValueOnState(CurrentState,Key,Value) then begin
     TPasMPInterlocked.Sub(CurrentState^.Lock,2);
-    result:=true;
+    result:=Version=fLastState^.Version;
    end else begin
+    // Otherwise as last solution, grow the hash table
     repeat
      GlobalLock:=fLock and longint(longword($fffffffe));
     until TPasMPInterlocked.CompareExchange(fLock,GlobalLock or 1,GlobalLock)=GlobalLock;
@@ -4597,55 +4607,62 @@ begin
   finally
    ReleaseState(CurrentState);
   end;
- until result;
+ until result and (Version=fLastState^.Version); // Check if we're done or when we do need to restart after a grow race condition case
 end;
 
 function TPasMPInterlockedHashTable.Delete(const Key:pointer):boolean;
 var CurrentState:PPasMPInterlockedHashTableState;
     Hash:TPasMPInterlockedHashTableHash;
-    StartIndex,Index,Step,ItemLock:longint;
+    StartIndex,Index,Step,ItemLock,Version:longint;
     Item:PPasMPInterlockedHashTableItem;
 begin
- CurrentState:=AcquireState;
- Hash:=HashKey(Key);
- StartIndex:=(Hash shr (32-CurrentState^.LogSize)) and CurrentState^.Mask;
- Step:=((Hash shl 1) or 1) and CurrentState^.Mask;
- Index:=StartIndex;
  repeat
-  Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
-  case Item^.State of
-   PasMPInterlockedHashTableItemStateDeleted:begin
-    // Found deleted item slot => ignore it
-   end;
-   PasMPInterlockedHashTableItemStateEmpty:begin
-    // Found empty item slot => abort search
-    break;
-   end;
-   PasMPInterlockedHashTableItemStateUsed:begin
-    // Found used item slot => try to read it
-    if Item^.Hash=Hash then begin
-     repeat
-      ItemLock:=Item^.Lock and longint(longword($fffffffe));
-     until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
-     if (Item^.State=PasMPInterlockedHashTableItemStateUsed) and (Item^.Hash=Hash) and CompareKey(@Item^.Data,Key) then begin
+  CurrentState:=AcquireState;
+  Version:=CurrentState^.Version;
+  Hash:=HashKey(Key);
+  StartIndex:=(Hash shr (32-CurrentState^.LogSize)) and CurrentState^.Mask;
+  Step:=((Hash shl 1) or 1) and CurrentState^.Mask;
+  Index:=StartIndex;
+  repeat
+   Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
+   case Item^.State of
+    PasMPInterlockedHashTableItemStateDeleted:begin
+     // Found deleted item slot => ignore it
+    end;
+    PasMPInterlockedHashTableItemStateEmpty:begin
+     // Found empty item slot => abort search
+     break;
+    end;
+    PasMPInterlockedHashTableItemStateUsed:begin
+     // Found used item slot => try to read it
+     if Item^.Hash=Hash then begin
       repeat
        ItemLock:=Item^.Lock and longint(longword($fffffffe));
-      until TPasMPInterlocked.CompareExchange(Item^.Lock,(ItemLock-2) or 1,ItemLock)=ItemLock;
-      FinalizeItem(@Item^.Data);
-      TPasMPInterlocked.Write(Item^.State,PasMPInterlockedHashTableItemStateDeleted);
-      TPasMPInterlocked.Write(Item^.Lock,0);
-      TPasMPInterlocked.Decrement(CurrentState^.Count);
-      ReleaseState(CurrentState);
-      result:=true;
-      exit;
+      until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
+      if (Item^.State=PasMPInterlockedHashTableItemStateUsed) and (Item^.Hash=Hash) and CompareKey(@Item^.Data,Key) then begin
+       repeat
+        ItemLock:=Item^.Lock and longint(longword($fffffffe));
+       until TPasMPInterlocked.CompareExchange(Item^.Lock,(ItemLock-2) or 1,ItemLock)=ItemLock;
+       FinalizeItem(@Item^.Data);
+       TPasMPInterlocked.Write(Item^.State,PasMPInterlockedHashTableItemStateDeleted);
+       TPasMPInterlocked.Write(Item^.Lock,0);
+       TPasMPInterlocked.Decrement(CurrentState^.Count);
+       ReleaseState(CurrentState);
+       if Version=fLastState^.Version then begin
+        result:=true;
+        exit;
+       end else begin
+        continue;
+       end;
+      end;
+      TPasMPInterlocked.Sub(Item^.Lock,2);
      end;
-     TPasMPInterlocked.Sub(Item^.Lock,2);
     end;
    end;
-  end;
-  Index:=(Index+Step) and CurrentState^.Mask;
- until Index=StartIndex;
- ReleaseState(CurrentState);
+   Index:=(Index+Step) and CurrentState^.Mask;
+  until Index=StartIndex;
+  ReleaseState(CurrentState);
+ until Version=fLastState^.Version; // Check when we do need to restart after a grow race condition case
  result:=false;
 end;
 
