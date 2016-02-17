@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-17-20-50-0000                       *
+ *                        Version 2016-02-17-20-56-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1203,8 +1203,8 @@ type TPasMPAvailableCPUCores=array of longint;
       public
        constructor Create;
        destructor Destroy; override;
-       function GetKeyValue(const Key:string;out Value):boolean;
-       function SetKeyValue(const Key:string;const Value):boolean;
+       function GetKeyValue(const Key:string;out Value:string):boolean;
+       function SetKeyValue(const Key,Value:string):boolean;
        function DeleteKey(const Key:string):boolean;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
@@ -6176,12 +6176,12 @@ begin
  result:=string(Data^)=string(Key^);
 end;
 
-function TPasMPStringStringHashTable.GetKeyValue(const Key:string;out Value):boolean;
+function TPasMPStringStringHashTable.GetKeyValue(const Key:string;out Value:string):boolean;
 begin
  result:=inherited GetKeyValue(@Key,@Value);
 end;
 
-function TPasMPStringStringHashTable.SetKeyValue(const Key:string;const Value):boolean;
+function TPasMPStringStringHashTable.SetKeyValue(const Key,Value:string):boolean;
 begin
  result:=inherited SetKeyValue(@Key,@Value);
 end;
