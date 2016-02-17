@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-17-18-19-0000                       *
+ *                        Version 2016-02-17-19-18-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -808,26 +808,38 @@ type TPasMPAvailableCPUCores=array of longint;
 
      PPasMPInterlockedHashTableItem=^TPasMPInterlockedHashTableItem;
      TPasMPInterlockedHashTableItem=record
-      Lock:longint;
-      State:longint;
-      Hash:TPasMPInterlockedHashTableHash;
-      Data:record
-       // Empty
-      end;
+      case longint of
+       0:(
+        Lock:longint;
+        State:longint;
+        Hash:TPasMPInterlockedHashTableHash;
+        Data:record
+         // Empty
+        end;
+       );
+       1:(
+        LockState:TPasMPInt64;
+       );
      end;
 
      PPasMPInterlockedHashTableState=^TPasMPInterlockedHashTableState;
      TPasMPInterlockedHashTableState=record
-      Previous:PPasMPInterlockedHashTableState;
-      Next:PPasMPInterlockedHashTableState;
-      ReferenceCounter:longint;
-      Version:longint;
-      Size:longint;
-      Mask:longint;
-      LogSize:longint;
-      Count:longint;
-      Lock:longint;
-      Items:pointer;
+      case longint of
+       0:(
+        Previous:PPasMPInterlockedHashTableState;
+        Next:PPasMPInterlockedHashTableState;
+        ReferenceCounter:longint;
+        Version:longint;
+        Size:longint;
+        Mask:longint;
+        LogSize:longint;
+        Count:longint;
+        Lock:longint;
+        Items:pointer;
+       );
+       1:(
+        FillUp:array[0..(PasMPCPUCacheLineSize*(SizeOf(TPasMPPtrUInt) div SizeOf(longword)))-1] of byte;
+       );
      end;
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
@@ -849,6 +861,12 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure FreeState(const State:PPasMPInterlockedHashTableState);
        function AcquireState:PPasMPInterlockedHashTableState; {$ifdef CAN_INLINE}inline;{$endif}
        procedure ReleaseState(const State:PPasMPInterlockedHashTableState); {$ifdef CAN_INLINE}inline;{$endif}
+       procedure Clear;
+       function GetKeyValue(const Key,Value:pointer):boolean;
+       function SetKeyValueOnState(const CurrentState:PPasMPInterlockedHashTableState;const Key,Value:pointer):boolean;
+       procedure Grow;
+       function SetKeyValue(const Key,Value:pointer):boolean;
+       function DeleteKey(const Key:pointer):boolean;
       protected
        procedure InitializeItem(const Data:pointer); virtual;
        procedure FinalizeItem(const Data:pointer); virtual;
@@ -857,15 +875,8 @@ type TPasMPAvailableCPUCores=array of longint;
        procedure SetKey(const Data,Key:pointer); virtual;
        procedure GetValue(const Data,Value:pointer); virtual;
        procedure SetValue(const Data,Value:pointer); virtual;
-       function HashItemKey(const Data:pointer):TPasMPInterlockedHashTableHash; virtual;
        function HashKey(const Key:pointer):TPasMPInterlockedHashTableHash; virtual;
        function CompareKey(const Data,Key:pointer):boolean; virtual;
-       procedure Clear;
-       function GetKeyValue(const Key,Value:pointer):boolean;
-       function SetKeyValueOnState(const CurrentState:PPasMPInterlockedHashTableState;const Key,Value:pointer):boolean;
-       procedure Grow;
-       function SetKeyValue(const Key,Value:pointer):boolean;
-       function Delete(const Key:pointer):boolean;
       public
        constructor Create(const ItemSize:longint);
        destructor Destroy; override;
@@ -1122,6 +1133,31 @@ type TPasMPAvailableCPUCores=array of longint;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 {$endif}
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPHashTable=class(TPasMPInterlockedHashTable)
+      private
+       fKeySize:longint;
+       fValueSize:longint;
+       fItemSize:longint;
+      protected
+       procedure InitializeItem(const Data:pointer); override;
+       procedure FinalizeItem(const Data:pointer); override;
+       procedure CopyItem(const Source,Destination:pointer); override;
+       procedure GetKey(const Data,Key:pointer); override;
+       procedure SetKey(const Data,Key:pointer); override;
+       procedure GetValue(const Data,Value:pointer); override;
+       procedure SetValue(const Data,Value:pointer); override;
+       function HashKey(const Key:pointer):TPasMPInterlockedHashTableHash; override;
+       function CompareKey(const Data,Key:pointer):boolean; override;
+      public
+       constructor Create(const KeySize,ValueSize:longint);
+       destructor Destroy; override;
+       function GetKeyValue(const Key;out Value):boolean;
+       function SetKeyValue(const Key,Value):boolean;
+       function DeleteKey(const Key):boolean;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPThread=class(TThread);
@@ -4317,11 +4353,6 @@ procedure TPasMPInterlockedHashTable.SetValue(const Data,Value:pointer);
 begin
 end;
 
-function TPasMPInterlockedHashTable.HashItemKey(const Data:pointer):TPasMPInterlockedHashTableHash;
-begin
- result:=0;
-end;
-
 function TPasMPInterlockedHashTable.HashKey(const Key:pointer):TPasMPInterlockedHashTableHash;
 begin
  result:=0;
@@ -4610,7 +4641,7 @@ begin
  until result and (Version=fLastState^.Version); // Check if we're done or when we do need to restart after a grow race condition case
 end;
 
-function TPasMPInterlockedHashTable.Delete(const Key:pointer):boolean;
+function TPasMPInterlockedHashTable.DeleteKey(const Key:pointer):boolean;
 var CurrentState:PPasMPInterlockedHashTableState;
     Hash:TPasMPInterlockedHashTableHash;
     StartIndex,Index,Step,ItemLock,Version:longint;
@@ -5740,6 +5771,188 @@ begin
  end;
 end;
 {$endif}
+
+constructor TPasMPHashTable.Create(const KeySize,ValueSize:longint);
+begin
+ fKeySize:=KeySize;
+ fValueSize:=ValueSize;
+ fItemSize:=fKeySize+fValueSize;
+ inherited Create(fItemSize);
+end;
+
+destructor TPasMPHashTable.Destroy;
+begin
+ inherited Destroy;
+end;
+
+procedure TPasMPHashTable.InitializeItem(const Data:pointer);
+begin
+ FillChar(Data^,fItemSize,#0);
+end;
+
+procedure TPasMPHashTable.FinalizeItem(const Data:pointer);
+begin
+end;
+
+procedure TPasMPHashTable.CopyItem(const Source,Destination:pointer);
+begin
+ Move(Source^,Destination^,fItemSize);
+end;
+
+procedure TPasMPHashTable.GetKey(const Data,Key:pointer);
+begin
+ Move(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)))^,Key^,fKeySize);
+end;
+
+procedure TPasMPHashTable.SetKey(const Data,Key:pointer);
+begin
+ Move(Key^,pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)))^,fKeySize);
+end;
+
+procedure TPasMPHashTable.GetValue(const Data,Value:pointer);
+begin
+ Move(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)+TPasMPPtrUInt(fKeySize)))^,Value^,fValueSize);
+end;
+
+procedure TPasMPHashTable.SetValue(const Data,Value:pointer);
+begin
+ Move(Value^,pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)+TPasMPPtrUInt(fKeySize)))^,fValueSize);
+end;
+
+function TPasMPHashTable.HashKey(const Key:pointer):TPasMPInterlockedHashTableHash;
+{$ifdef CPUARM}
+var b:pansichar;
+    len,h,i:longword;
+begin
+ result:=2166136261;
+ len:=fKeySize;
+ h:=len;
+ if len>0 then begin
+  b:=Key;
+  while len>3 do begin
+   i:=longword(pointer(b)^);
+   h:=(h xor i) xor $2e63823a;
+   inc(h,(h shl 15) or (h shr (32-15)));
+   dec(h,(h shl 9) or (h shr (32-9)));
+   inc(h,(h shl 4) or (h shr (32-4)));
+   dec(h,(h shl 1) or (h shr (32-1)));
+   h:=h xor (h shl 2) or (h shr (32-2));
+   result:=result xor i;
+   inc(result,(result shl 1)+(result shl 4)+(result shl 7)+(result shl 8)+(result shl 24));
+   inc(b,4);
+   dec(len,4);
+  end;
+  if len>1 then begin
+   i:=word(pointer(b)^);
+   h:=(h xor i) xor $2e63823a;
+   inc(h,(h shl 15) or (h shr (32-15)));
+   dec(h,(h shl 9) or (h shr (32-9)));
+   inc(h,(h shl 4) or (h shr (32-4)));
+   dec(h,(h shl 1) or (h shr (32-1)));
+   h:=h xor (h shl 2) or (h shr (32-2));
+   result:=result xor i;
+   inc(result,(result shl 1)+(result shl 4)+(result shl 7)+(result shl 8)+(result shl 24));
+   inc(b,2);
+   dec(len,2);
+  end;
+  if len>0 then begin
+   i:=byte(b^);
+   h:=(h xor i) xor $2e63823a;
+   inc(h,(h shl 15) or (h shr (32-15)));
+   dec(h,(h shl 9) or (h shr (32-9)));
+   inc(h,(h shl 4) or (h shr (32-4)));
+   dec(h,(h shl 1) or (h shr (32-1)));
+   h:=h xor (h shl 2) or (h shr (32-2));
+   result:=result xor i;
+   inc(result,(result shl 1)+(result shl 4)+(result shl 7)+(result shl 8)+(result shl 24));
+  end;
+ end;
+ result:=result xor h;
+ if result=0 then begin
+  result:=$ffffffff;
+ end;
+end;
+{$else}
+const m=longword($57559429);
+      n=longword($5052acdb);
+var b:pbyte;
+    h,k,len:longword;
+    p:{$ifdef fpc}qword{$else}int64{$endif};
+begin
+ len:=fKeySize;
+ h:=len;
+ k:=h+n+1;
+ if len>0 then begin
+  b:=Key;
+  while len>7 do begin
+   begin
+    p:=longword(pointer(b)^)*{$ifdef fpc}qword{$else}int64{$endif}(n);
+    h:=h xor longword(p and $ffffffff);
+    k:=k xor longword(p shr 32);
+    inc(b,4);
+   end;
+   begin
+    p:=longword(pointer(b)^)*{$ifdef fpc}qword{$else}int64{$endif}(m);
+    k:=k xor longword(p and $ffffffff);
+    h:=h xor longword(p shr 32);
+    inc(b,4);
+   end;
+   dec(len,8);
+  end;
+  if len>3 then begin
+   p:=longword(pointer(b)^)*{$ifdef fpc}qword{$else}int64{$endif}(n);
+   h:=h xor longword(p and $ffffffff);
+   k:=k xor longword(p shr 32);
+   inc(b,4);
+   dec(len,4);
+  end;
+  if len>0 then begin
+   if len>1 then begin
+    p:=word(pointer(b)^);
+    inc(b,2);
+    dec(len,2);
+   end else begin
+    p:=0;
+   end;
+   if len>0 then begin
+    p:=p or (byte(b^) shl 16);
+   end;
+   p:=p*{$ifdef fpc}qword{$else}int64{$endif}(m);
+   k:=k xor longword(p and $ffffffff);
+   h:=h xor longword(p shr 32);
+  end;
+ end;
+ begin
+  p:=(h xor (k+n))*{$ifdef fpc}qword{$else}int64{$endif}(n);
+  h:=h xor longword(p and $ffffffff);
+  k:=k xor longword(p shr 32);
+ end;
+ result:=k xor h;
+ if result=0 then begin
+  result:=$ffffffff;
+ end;
+end;
+{$endif}
+
+function TPasMPHashTable.CompareKey(const Data,Key:pointer):boolean;
+begin
+ result:=CompareMem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data))),@Key,fKeySize);
+end;
+
+function TPasMPHashTable.GetKeyValue(const Key;out Value):boolean;
+begin
+ result:=inherited GetKeyValue(@Key,@Value);
+end;
+
+function TPasMPHashTable.SetKeyValue(const Key,Value):boolean;
+begin
+ result:=inherited SetKeyValue(@Key,@Value);
+end;
+
+function TPasMPHashTable.DeleteKey(const Key):boolean;
+begin
+ result:=inherited DeleteKey(@Key);
+end;
 
 constructor TPasMPJobTask.Create;
 begin
