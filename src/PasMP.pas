@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-17-20-56-0000                       *
+ *                        Version 2016-02-17-21-28-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -228,7 +228,19 @@ uses {$ifdef Windows}
        {$endif}
       {$endif}
      {$endif}
-     SysUtils,Classes,Math,SyncObjs;
+     SysUtils,Classes,
+     {$ifdef HAS_GENERICS}
+      {$ifdef fpc}
+       {$ifdef FreePascalGenericsCollectionsLibrary}
+     Generics.Defaults,
+       {$define HasGenericsCollections}
+      {$endif}
+     {$else}
+     System.Generics.Defaults,
+      {$define HasGenericsCollections}
+     {$endif}
+    {$endif}
+     Math,SyncObjs;
 
 const PasMPAllocatorPoolBucketBits=12;
       PasMPAllocatorPoolBucketSize=1 shl PasMPAllocatorPoolBucketBits;
@@ -1208,6 +1220,34 @@ type TPasMPAvailableCPUCores=array of longint;
        function DeleteKey(const Key:string):boolean;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+{$ifdef HasGenericsCollections}
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPTypedHashTable<KeyType,ValueType>=class(TPasMPInterlockedHashTable)
+      private
+       fKeySize:longint;
+       fValueSize:longint;
+       fItemSize:longint;
+       fComparer:IEqualityComparer<KeyType>;
+      protected
+       procedure InitializeItem(const Data:pointer); override;
+       procedure FinalizeItem(const Data:pointer); override;
+       procedure CopyItem(const Source,Destination:pointer); override;
+       procedure GetKey(const Data,Key:pointer); override;
+       procedure SetKey(const Data,Key:pointer); override;
+       procedure GetValue(const Data,Value:pointer); override;
+       procedure SetValue(const Data,Value:pointer); override;
+       function HashKey(const Key:pointer):TPasMPInterlockedHashTableHash; override;
+       function CompareKey(const Data,Key:pointer):boolean; override;
+      public
+       constructor Create;
+       destructor Destroy; override;
+       function GetKeyValue(const Key:KeyType;out Value:ValueType):boolean;
+       function SetKeyValue(const Key:KeyType;const Value:ValueType):boolean;
+       function DeleteKey(const Key:KeyType):boolean;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+{$endif}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPThread=class(TThread);
@@ -4073,8 +4113,7 @@ end;
 
 destructor TPasMPInterlockedQueue.Destroy;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-var CurrentNode,NextNode:PPasMPInterlockedQueueNode;
-    Item:pointer;
+var Item:pointer;
 begin
  GetMem(Item,fItemSize);
  try
@@ -4465,7 +4504,6 @@ function TPasMPInterlockedHashTable.SetKeyValueOnState(const CurrentState:PPasMP
 var Hash:TPasMPInterlockedHashTableHash;
     StartIndex,Index,Step,FoundDeletedItemSlotIndex,ItemLock:longint;
     Item:PPasMPInterlockedHashTableItem;
-    FoundDeletedItemSlot:boolean;
 begin
 
  Hash:=HashKey(Key);
@@ -4594,10 +4632,9 @@ end;
 
 procedure TPasMPInterlockedHashTable.Grow;
 var CurrentState,NewState:PPasMPInterlockedHashTableState;
-    StartIndex,Index,Step,OtherIndex,OtherStep:longint;
+    StartIndex,Index,Step,OtherIndex:longint;
     Item,OtherItem:PPasMPInterlockedHashTableItem;
-    GlobalLock,ItemLock:longint;
-    FoundDeletedItemSlot:boolean;
+    ItemLock:longint;
 begin
  CurrentState:=fLastState;
  if CurrentState^.Count>=CurrentState^.Size then begin
@@ -4629,11 +4666,12 @@ begin
        Item^.State:=PasMPInterlockedHashTableItemStateUsed;
        break;
       end;
+      Index:=(Index+Step) and NewState^.Mask;
      until Index=StartIndex;
     end;
     TPasMPInterlocked.Sub(OtherItem^.Lock,2);
    end;
-   inc(Index);
+   inc(OtherIndex);
   end;
   if assigned(fLastState) then begin
    fLastState^.Next:=NewState;
@@ -6190,6 +6228,88 @@ function TPasMPStringStringHashTable.DeleteKey(const Key:string):boolean;
 begin
  result:=inherited DeleteKey(@Key);
 end;
+
+{$ifdef HasGenericsCollections}
+constructor TPasMPTypedHashTable<KeyType,ValueType>.Create;
+begin
+ fKeySize:=SizeOf(KeyType);
+ fValueSize:=SizeOf(ValueType);
+ fItemSize:=fKeySize+fValueSize;
+ fComparer:=TEqualityComparer<KeyType>.Default;
+ inherited Create(fItemSize);
+end;
+
+destructor TPasMPTypedHashTable<KeyType,ValueType>.Destroy;
+begin
+ inherited Destroy;
+end;
+
+procedure TPasMPTypedHashTable<KeyType,ValueType>.InitializeItem(const Data:pointer);
+begin
+ Initialize(KeyType(Data^));
+ Initialize(ValueType(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)+TPasMPPtrUInt(fKeySize)))^));
+end;
+
+procedure TPasMPTypedHashTable<KeyType,ValueType>.FinalizeItem(const Data:pointer);
+begin
+ Finalize(KeyType(Data^));
+ Finalize(ValueType(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)+TPasMPPtrUInt(fKeySize)))^));
+end;
+
+procedure TPasMPTypedHashTable<KeyType,ValueType>.CopyItem(const Source,Destination:pointer);
+begin
+ KeyType(Destination^):=KeyType(Source^);
+ ValueType(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Destination)+TPasMPPtrUInt(fKeySize)))^):=ValueType(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Source)+TPasMPPtrUInt(fKeySize)))^);
+end;
+
+procedure TPasMPTypedHashTable<KeyType,ValueType>.GetKey(const Data,Key:pointer);
+begin
+ KeyType(Key^):=KeyType(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)))^);
+end;
+
+procedure TPasMPTypedHashTable<KeyType,ValueType>.SetKey(const Data,Key:pointer);
+begin
+ KeyType(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)))^):=KeyType(Key^);
+end;
+
+procedure TPasMPTypedHashTable<KeyType,ValueType>.GetValue(const Data,Value:pointer);
+begin
+ ValueType(Value^):=ValueType(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)+TPasMPPtrUInt(fKeySize)))^);
+end;
+
+procedure TPasMPTypedHashTable<KeyType,ValueType>.SetValue(const Data,Value:pointer);
+begin
+ ValueType(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)+TPasMPPtrUInt(fKeySize)))^):=ValueType(Value^);
+end;
+
+function TPasMPTypedHashTable<KeyType,ValueType>.HashKey(const Key:pointer):TPasMPInterlockedHashTableHash;
+begin
+ result:=fComparer.GetHashCode(KeyType(Key^));
+ if result=0 then begin
+  result:=$ffffffff;
+ end;
+end;
+
+function TPasMPTypedHashTable<KeyType,ValueType>.CompareKey(const Data,Key:pointer):boolean;
+begin
+ result:=fComparer.Equals(KeyType(Data^),KeyType(Key^));
+end;
+
+function TPasMPTypedHashTable<KeyType,ValueType>.GetKeyValue(const Key:KeyType;out Value:ValueType):boolean;
+begin
+ result:=inherited GetKeyValue(@Key,@Value);
+end;
+
+function TPasMPTypedHashTable<KeyType,ValueType>.SetKeyValue(const Key:KeyType;const Value:ValueType):boolean;
+begin
+ result:=inherited SetKeyValue(@Key,@Value);
+end;
+
+function TPasMPTypedHashTable<KeyType,ValueType>.DeleteKey(const Key:KeyType):boolean;
+begin
+ result:=inherited DeleteKey(@Key);
+end;
+{$endif}
 
 constructor TPasMPJobTask.Create;
 begin
