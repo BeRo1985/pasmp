@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-17-19-18-0000                       *
+ *                        Version 2016-02-17-19-36-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -5935,9 +5935,32 @@ end;
 {$endif}
 
 function TPasMPHashTable.CompareKey(const Data,Key:pointer):boolean;
+{$ifdef OldDelphi}
+type PLongwords=^TLongwords;
+     TLongwords=array[0..$ffff] of longword;
+     PBytes=^TBytes;
+     TBytes=array[0..$ffff] of byte;
+var Index:longint;
 begin
- result:=CompareMem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data))),@Key,fKeySize);
+ for Index:=0 to (fKeySize div SizeOf(longword))-1 do begin
+  if PLongwords(pointer(Data))^[Index]<>PLongwords(pointer(Key))^[Index] then begin
+   result:=false;
+   exit;
+  end;
+ end;
+ for Index:=(fKeySize and not (SizeOf(longword)-1)) to fKeySize-1 do begin
+  if PBytes(pointer(Data))^[Index]<>PBytes(pointer(Key))^[Index] then begin
+   result:=false;
+   exit;
+  end;
+ end;
+ result:=true;
 end;
+{$else}
+begin
+ result:=CompareMem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data))),Key,fKeySize);
+end;
+{$endif}
 
 function TPasMPHashTable.GetKeyValue(const Key;out Value):boolean;
 begin
