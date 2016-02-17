@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-17-21-52-0000                       *
+ *                        Version 2016-02-17-22-57-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -233,13 +233,13 @@ uses {$ifdef Windows}
       {$ifdef fpc}
        {$ifdef FreePascalGenericsCollectionsLibrary}
      Generics.Defaults,
+        {$define HasGenericsCollections}
+       {$endif}
+      {$else}
+     System.Generics.Defaults,
        {$define HasGenericsCollections}
       {$endif}
-     {$else}
-     System.Generics.Defaults,
-      {$define HasGenericsCollections}
      {$endif}
-    {$endif}
      Math,SyncObjs;
 
 const PasMPAllocatorPoolBucketBits=12;
@@ -875,8 +875,11 @@ type TPasMPAvailableCPUCores=array of longint;
        fLock:longint;
        fItemSize:longint;
        fInternalItemSize:longint;
+       fGrowLoadFactor:longint; // 24.7 bit fixed point
        fFirstState:PPasMPInterlockedHashTableState;
        fLastState:PPasMPInterlockedHashTableState;
+       function GetGrowLoadFactor:single;
+       procedure SetGrowLoadFactor(const NewGrowLoadFactor:single);
        function CreateState:PPasMPInterlockedHashTableState;
        procedure FreeState(const State:PPasMPInterlockedHashTableState);
        function AcquireState:PPasMPInterlockedHashTableState; {$ifdef CAN_INLINE}inline;{$endif}
@@ -900,6 +903,7 @@ type TPasMPAvailableCPUCores=array of longint;
       public
        constructor Create(const ItemSize:longint);
        destructor Destroy; override;
+       property GrowLoadFactor:single read GetGrowLoadFactor write SetGrowLoadFactor;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -4330,6 +4334,7 @@ begin
  fLock:=0;
  fItemSize:=ItemSize;
  fInternalItemSize:=TPasMPMath.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPInterlockedHashTableItem)+fItemSize,PasMPCPUCacheLineSize));
+ fGrowLoadFactor:=((75 shl 7)+128) div 100; // 0.75
  TPasMPMemory.AllocateAlignedMemory(fFirstState,SizeOf(TPasMPInterlockedHashTableState),PasMPCPUCacheLineSize);
  FillChar(fFirstState^,SizeOf(TPasMPInterlockedHashTableState),#0);
  Initialize(fFirstState^);
@@ -4353,6 +4358,16 @@ begin
  end;
  fCriticalSection.Free;
  inherited Destroy;
+end;
+
+function TPasMPInterlockedHashTable.GetGrowLoadFactor:single;
+begin
+ result:=fGrowLoadFactor/128.0;
+end;
+
+procedure TPasMPInterlockedHashTable.SetGrowLoadFactor(const NewGrowLoadFactor:single);
+begin
+ fGrowLoadFactor:=Min(Max(round(fGrowLoadFactor*128.0),0),128);
 end;
 
 function TPasMPInterlockedHashTable.CreateState:PPasMPInterlockedHashTableState;
@@ -4695,20 +4710,26 @@ end;
 function TPasMPInterlockedHashTable.SetKeyValue(const Key,Value:pointer):boolean;
 var CurrentState:PPasMPInterlockedHashTableState;
     Version,StateLock,GlobalLock:longint;
+    UnderGrowLoadFactor:boolean;
 begin
  repeat
   result:=false;
   CurrentState:=AcquireState;
-  Version:=CurrentState^.Version;
   try
+   Version:=CurrentState^.Version;
    repeat
     StateLock:=CurrentState^.Lock and longint(longword($fffffffe));
    until TPasMPInterlocked.CompareExchange(CurrentState^.Lock,StateLock+2,StateLock)=StateLock;
-   if SetKeyValueOnState(CurrentState,Key,Value) then begin
+   if CurrentState^.Count<=$7fffff then begin
+    UnderGrowLoadFactor:=CurrentState^.Count<((CurrentState^.Size*fGrowLoadFactor) shr 7);
+   end else begin
+    UnderGrowLoadFactor:=CurrentState^.Count<((int64(CurrentState^.Size)*fGrowLoadFactor) shr 7);
+   end;
+   if UnderGrowLoadFactor and SetKeyValueOnState(CurrentState,Key,Value) then begin
     TPasMPInterlocked.Sub(CurrentState^.Lock,2);
     result:=Version=fLastState^.Version;
    end else begin
-    // Otherwise as last solution, grow the hash table
+    // Grow
     repeat
      GlobalLock:=fLock and longint(longword($fffffffe));
     until TPasMPInterlocked.CompareExchange(fLock,GlobalLock or 1,GlobalLock)=GlobalLock;
