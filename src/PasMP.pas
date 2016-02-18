@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-18-13-03-0000                       *
+ *                        Version 2016-02-18-13-58-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -696,14 +696,22 @@ type TPasMPAvailableCPUCores=array of longint;
       public
        constructor Create;
        destructor Destroy; override;
-       procedure AcquireRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       function TryAcquireRead:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       procedure ReleaseRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       procedure AcquireWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       function TryAcquireWrite:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       procedure ReleaseWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       procedure ReadToWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       procedure WriteToRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure AcquireRead; overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       function TryAcquireRead:boolean; overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure ReleaseRead; overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure AcquireWrite; overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       function TryAcquireWrite:boolean; overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure ReleaseWrite; overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure ReadToWrite; overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure WriteToRead; overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       class procedure AcquireRead(var LockState:longint); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function TryAcquireRead(var LockState:longint):boolean; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class procedure ReleaseRead(var LockState:longint); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class procedure AcquireWrite(var LockState:longint); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function TryAcquireWrite(var LockState:longint):boolean; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class procedure ReleaseWrite(var LockState:longint); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class procedure ReadToWrite(var LockState:longint); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class procedure WriteToRead(var LockState:longint); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -900,6 +908,7 @@ type TPasMPAvailableCPUCores=array of longint;
        fGrowLoadFactor:longint; // 24.7 bit fixed point
        fFirstState:PPasMPInterlockedHashTableState;
        fLastState:PPasMPInterlockedHashTableState;
+       fVersion:longint;
        function GetGrowLoadFactor:single;
        procedure SetGrowLoadFactor(const NewGrowLoadFactor:single);
        function CreateState:PPasMPInterlockedHashTableState;
@@ -3707,11 +3716,14 @@ end;
 procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 var State:longint;
 begin
- State:=fState and longint(longword($fffffffe));
- while TPasMPInterlocked.CompareExchange(fState,State+2,State)<>State do begin
-  TPasMP.Relax;
+ repeat
   State:=fState and longint(longword($fffffffe));
- end;
+  if TPasMPInterlocked.CompareExchange(fState,State+2,State)=State then begin
+   break;
+  end else begin
+   TPasMP.Relax;
+  end;
+ until false;
 end;
 
 function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireRead:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
@@ -3729,11 +3741,14 @@ end;
 procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireWrite;
 var State:longint;
 begin
- State:=fState and longint(longword($fffffffe));
- while TPasMPInterlocked.CompareExchange(fState,State or 1,State)<>State do begin
-  TPasMP.Relax;
+ repeat
   State:=fState and longint(longword($fffffffe));
- end;
+  if TPasMPInterlocked.CompareExchange(fState,State or 1,State)=State then begin
+   break;
+  end else begin
+   TPasMP.Relax;
+  end;
+ until false;
  while fState<>1 do begin
   TPasMP.Relax;
  end;
@@ -3754,11 +3769,15 @@ end;
 procedure TPasMPMultipleReaderSingleWriterSpinLock.ReadToWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 var State:longint;
 begin
- State:=fState and longint(longword($fffffffe));
- while TPasMPInterlocked.CompareExchange(fState,(State-2) or 1,State)<>State do begin
-  TPasMP.Relax;
+ TPasMPInterlocked.Sub(fState,2);
+ repeat
   State:=fState and longint(longword($fffffffe));
- end;
+  if TPasMPInterlocked.CompareExchange(fState,State or 1,State)=State then begin
+   break;
+  end else begin
+   TPasMP.Relax;
+  end;
+ until false;
  while fState<>1 do begin
   TPasMP.Relax;
  end;
@@ -3767,6 +3786,81 @@ end;
 procedure TPasMPMultipleReaderSingleWriterSpinLock.WriteToRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 begin
  TPasMPInterlocked.Write(fState,2);
+end;
+
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(var LockState:longint); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+var State:longint;
+begin
+ repeat
+  State:=LockState and longint(longword($fffffffe));
+  if TPasMPInterlocked.CompareExchange(LockState,State+2,State)=State then begin
+   break;
+  end else begin
+   TPasMP.Relax;
+  end;
+ until false;
+end;
+
+class function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireRead(var LockState:longint):boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+var State:longint;
+begin
+ State:=LockState and longint(longword($fffffffe));
+ result:=TPasMPInterlocked.CompareExchange(LockState,State+2,State)=State;
+end;
+
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(var LockState:longint); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+ TPasMPInterlocked.Sub(LockState,2);
+end;
+
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireWrite(var LockState:longint); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+var State:longint;
+begin
+ repeat
+  State:=LockState and longint(longword($fffffffe));
+  if TPasMPInterlocked.CompareExchange(LockState,State or 1,State)=State then begin
+   break;
+  end else begin
+   TPasMP.Relax;
+  end;
+ until false;
+ while LockState<>1 do begin
+  TPasMP.Relax;
+ end;
+end;
+
+class function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireWrite(var LockState:longint):boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+var State:longint;
+begin
+ State:=LockState and longint(longword($fffffffe));
+ result:=TPasMPInterlocked.CompareExchange(LockState,1,State)=State;
+end;
+
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseWrite(var LockState:longint); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+ TPasMPInterlocked.Write(LockState,0);
+end;
+
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.ReadToWrite(var LockState:longint); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+var State:longint;
+begin
+ TPasMPInterlocked.Sub(LockState,2);
+ repeat
+  State:=LockState and longint(longword($fffffffe));
+  if TPasMPInterlocked.CompareExchange(LockState,State or 1,State)=State then begin
+   break;
+  end else begin
+   TPasMP.Relax;
+  end;
+ until false;
+ while LockState<>1 do begin
+  TPasMP.Relax;
+ end;
+end;
+
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.WriteToRead(var LockState:longint); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+ TPasMPInterlocked.Write(LockState,2);
 end;
 
 constructor TPasMPSlimReaderWriterLock.Create;
@@ -4489,6 +4583,7 @@ begin
  TPasMPMemory.AllocateAlignedMemory(fFirstState^.Items,fFirstState^.Size*fInternalItemSize,PasMPCPUCacheLineSize);
  FillChar(fFirstState^.Items^,fFirstState^.Size*fInternalItemSize,#0);
  fLastState:=fFirstState;
+ fVersion:=fFirstState^.Version;
 end;
 
 destructor TPasMPInterlockedHashTable.Destroy;
@@ -4610,7 +4705,7 @@ end;
 function TPasMPInterlockedHashTable.GetKeyValue(const Key,Value:pointer):boolean;
 var CurrentState:PPasMPInterlockedHashTableState;
     Hash:TPasMPInterlockedHashTableHash;
-    StartIndex,Index,Step,ItemLock:longint;
+    StartIndex,Index,Step:longint;
     Item:PPasMPInterlockedHashTableItem;
 begin
  result:=false;
@@ -4633,16 +4728,18 @@ begin
     PasMPInterlockedHashTableItemStateUsed:begin
      // Found used item slot => try to read it
      if Item^.Hash=Hash then begin
-      repeat
-       ItemLock:=Item^.Lock and longint(longword($fffffffe));
-      until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
-      if (Item^.State=PasMPInterlockedHashTableItemStateUsed) and (Item^.Hash=Hash) and CompareKey(@Item^.Data,Key) then begin
-       GetValue(@Item^.Data,Value);
-       TPasMPInterlocked.Sub(Item^.Lock,2);
-       result:=true;
+      TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(Item^.Lock);
+      try
+       if (Item^.State=PasMPInterlockedHashTableItemStateUsed) and (Item^.Hash=Hash) and CompareKey(@Item^.Data,Key) then begin
+        GetValue(@Item^.Data,Value);
+        result:=true;
+       end;
+      finally
+       TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(Item^.Lock);
+      end;
+      if result then begin
        break;
       end;
-      TPasMPInterlocked.Sub(Item^.Lock,2);
      end;
     end;
    end;
@@ -4655,7 +4752,7 @@ end;
 
 function TPasMPInterlockedHashTable.SetKeyValueOnState(const CurrentState:PPasMPInterlockedHashTableState;const Key,Value:pointer):boolean;
 var Hash:TPasMPInterlockedHashTableHash;
-    StartIndex,Index,Step,FoundDeletedItemSlotIndex,ItemLock:longint;
+    StartIndex,Index,Step,FoundDeletedItemSlotIndex:longint;
     Item:PPasMPInterlockedHashTableItem;
 begin
 
@@ -4677,45 +4774,49 @@ begin
    end;
    PasMPInterlockedHashTableItemStateEmpty:begin
     // Found empty item slot => try to use it
-    repeat
-     ItemLock:=Item^.Lock and longint(longword($fffffffe));
-    until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
-    if Item^.State=PasMPInterlockedHashTableItemStateEmpty then begin
-     repeat
-      ItemLock:=Item^.Lock and longint(longword($fffffffe));
-     until TPasMPInterlocked.CompareExchange(Item^.Lock,(ItemLock-2) or 1,ItemLock)=ItemLock;
-     repeat
-     until Item^.Lock=1;
-     Item^.Hash:=Hash;
-     InitializeItem(@Item^.Data);
-     SetKey(@Item^.Data,Key);
-     SetValue(@Item^.Data,Value);
-     TPasMPInterlocked.Write(Item^.State,PasMPInterlockedHashTableItemStateUsed);
-     TPasMPInterlocked.Write(Item^.Lock,0);
-     TPasMPInterlocked.Increment(CurrentState^.Count);
-     result:=true;
+    TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(Item^.Lock);
+    try
+     if Item^.State=PasMPInterlockedHashTableItemStateEmpty then begin
+      TPasMPMultipleReaderSingleWriterSpinLock.ReadToWrite(Item^.Lock);
+      try
+       Item^.Hash:=Hash;
+       InitializeItem(@Item^.Data);
+       SetKey(@Item^.Data,Key);
+       SetValue(@Item^.Data,Value);
+       TPasMPInterlocked.Write(Item^.State,PasMPInterlockedHashTableItemStateUsed);
+       TPasMPInterlocked.Increment(CurrentState^.Count);
+       result:=true;
+      finally
+       TPasMPMultipleReaderSingleWriterSpinLock.WriteToRead(Item^.Lock);
+      end;
+     end;
+    finally
+     TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(Item^.Lock);
+    end;
+    if result then begin
      exit;
     end;
-    TPasMPInterlocked.Sub(Item^.Lock,2);
    end;
    PasMPInterlockedHashTableItemStateUsed:begin
     // Found used item slot => try to overwrite it
     if Item^.Hash=Hash then begin
-     repeat
-      ItemLock:=Item^.Lock and longint(longword($fffffffe));
-     until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
-     if (Item^.State=PasMPInterlockedHashTableItemStateUsed) and (Item^.Hash=Hash) and CompareKey(@Item^.Data,Key) then begin
-      repeat
-       ItemLock:=Item^.Lock and longint(longword($fffffffe));
-      until TPasMPInterlocked.CompareExchange(Item^.Lock,(ItemLock-2) or 1,ItemLock)=ItemLock;
-      repeat
-      until Item^.Lock=1;
-      SetValue(@Item^.Data,Value);
-      TPasMPInterlocked.Write(Item^.Lock,0);
-      result:=true;
+     TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(Item^.Lock);
+     try
+      if (Item^.State=PasMPInterlockedHashTableItemStateUsed) and (Item^.Hash=Hash) and CompareKey(@Item^.Data,Key) then begin
+       TPasMPMultipleReaderSingleWriterSpinLock.ReadToWrite(Item^.Lock);
+       try
+        SetValue(@Item^.Data,Value);
+       finally
+        TPasMPMultipleReaderSingleWriterSpinLock.WriteToRead(Item^.Lock);
+       end;
+       result:=true;
+      end;
+     finally
+      TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(Item^.Lock);
+     end;
+     if result then begin
       exit;
      end;
-     TPasMPInterlocked.Sub(Item^.Lock,2);
     end;
    end;
   end;
@@ -4726,26 +4827,28 @@ begin
  if FoundDeletedItemSlotIndex>=0 then begin
   Index:=FoundDeletedItemSlotIndex;
   Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
-  repeat
-   ItemLock:=Item^.Lock and longint(longword($fffffffe));
-  until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
-  if Item^.State=PasMPInterlockedHashTableItemStateDeleted then begin
-   repeat
-    ItemLock:=Item^.Lock and longint(longword($fffffffe));
-   until TPasMPInterlocked.CompareExchange(Item^.Lock,(ItemLock-2) or 1,ItemLock)=ItemLock;
-   repeat
-   until Item^.Lock=1;
-   InitializeItem(@Item^.Data);
-   Item^.Hash:=Hash;
-   SetKey(@Item^.Data,Key);
-   SetValue(@Item^.Data,Value);
-   TPasMPInterlocked.Write(Item^.State,PasMPInterlockedHashTableItemStateUsed);
-   TPasMPInterlocked.Write(Item^.Lock,0);
-   TPasMPInterlocked.Increment(CurrentState^.Count);
-   result:=true;
+  TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(Item^.Lock);
+  try
+   if Item^.State=PasMPInterlockedHashTableItemStateDeleted then begin
+    TPasMPMultipleReaderSingleWriterSpinLock.ReadToWrite(Item^.Lock);
+    try
+     InitializeItem(@Item^.Data);
+     Item^.Hash:=Hash;
+     SetKey(@Item^.Data,Key);
+     SetValue(@Item^.Data,Value);
+     TPasMPInterlocked.Write(Item^.State,PasMPInterlockedHashTableItemStateUsed);
+     TPasMPInterlocked.Increment(CurrentState^.Count);
+     result:=true;
+    finally
+     TPasMPMultipleReaderSingleWriterSpinLock.WriteToRead(Item^.Lock);
+    end;
+   end;
+  finally
+   TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(Item^.Lock);
+  end;
+  if result then begin
    exit;
   end;
-  TPasMPInterlocked.Sub(Item^.Lock,2);
  end;
 
  // Otherwise try to find and set a deleted slot item
@@ -4754,28 +4857,28 @@ begin
   Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
   case Item^.State of
    PasMPInterlockedHashTableItemStateDeleted:begin
-    ItemLock:=Item^.Lock and longint(longword($fffffffe));
-    while TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)<>ItemLock do begin
-     TPasMP.Relax;
-     ItemLock:=Item^.Lock and longint(longword($fffffffe));
+    TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(Item^.Lock);
+    try
+     if Item^.State=PasMPInterlockedHashTableItemStateDeleted then begin
+      TPasMPMultipleReaderSingleWriterSpinLock.ReadToWrite(Item^.Lock);
+      try
+       Item^.Hash:=Hash;
+       InitializeItem(@Item^.Data);
+       SetKey(@Item^.Data,Key);
+       SetValue(@Item^.Data,Value);
+       TPasMPInterlocked.Write(Item^.State,PasMPInterlockedHashTableItemStateUsed);
+       TPasMPInterlocked.Increment(CurrentState^.Count);
+       result:=true;
+      finally
+       TPasMPMultipleReaderSingleWriterSpinLock.WriteToRead(Item^.Lock);
+      end;
+     end;
+    finally
+     TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(Item^.Lock);
     end;
-    if Item^.State=PasMPInterlockedHashTableItemStateDeleted then begin
-     repeat
-      ItemLock:=Item^.Lock and longint(longword($fffffffe));
-     until TPasMPInterlocked.CompareExchange(Item^.Lock,(ItemLock-2) or 1,ItemLock)=ItemLock;
-     repeat
-     until Item^.Lock=1;
-     Item^.Hash:=Hash;
-     InitializeItem(@Item^.Data);
-     SetKey(@Item^.Data,Key);
-     SetValue(@Item^.Data,Value);
-     TPasMPInterlocked.Write(Item^.State,PasMPInterlockedHashTableItemStateUsed);
-     TPasMPInterlocked.Write(Item^.Lock,0);
-     TPasMPInterlocked.Increment(CurrentState^.Count);
-     result:=true;
+    if result then begin
      exit;
     end;
-    TPasMPInterlocked.Sub(Item^.Lock,2);
    end;
   end;
   Index:=(Index+Step) and CurrentState^.Mask;
@@ -4789,22 +4892,21 @@ procedure TPasMPInterlockedHashTable.Grow;
 var CurrentState,NewState,OldLastState:PPasMPInterlockedHashTableState;
     StartIndex,Index,Step,OtherIndex:longint;
     Item,OtherItem:PPasMPInterlockedHashTableItem;
-    ItemLock:longint;
 begin
  CurrentState:=fLastState;
 
  fResizeLock.AcquireWrite;
-
  try
 
   if CurrentState^.Count>=CurrentState^.Size then begin
 
-   fLock.AcquireWrite;
+   TPasMPInterlocked.Write(fVersion,CurrentState^.Version+1);
 
+   fLock.AcquireWrite;
    try
 
     NewState:=CreateState;
-    NewState^.Version:=CurrentState^.Version+1;
+    NewState^.Version:=fVersion;
     NewState^.Size:=CurrentState^.Size shl 1;
     NewState^.Mask:=NewState^.Size-1;
     NewState^.LogSize:=CurrentState^.LogSize+1;
@@ -4820,10 +4922,7 @@ begin
 
      if OtherItem^.State=PasMPInterlockedHashTableItemStateUsed then begin
 
-      repeat
-       ItemLock:=OtherItem^.Lock and longint(longword($fffffffe));
-      until TPasMPInterlocked.CompareExchange(OtherItem^.Lock,ItemLock+2,ItemLock)=ItemLock;
-
+      TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(OtherItem^.Lock);
       try
 
        if OtherItem^.State=PasMPInterlockedHashTableItemStateUsed then begin
@@ -4852,7 +4951,7 @@ begin
        end;
 
       finally
-       TPasMPInterlocked.Sub(OtherItem^.Lock,2);
+       TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(OtherItem^.Lock);
       end;
 
      end;
@@ -4875,17 +4974,13 @@ begin
     TPasMPInterlocked.Decrement(CurrentState^.ReferenceCounter);
 
    finally
-
     fLock.ReleaseWrite;
-
    end;
 
   end;
 
  finally
-
   fResizeLock.ReleaseWrite;
-
  end;
 
 end;
@@ -4914,17 +5009,20 @@ begin
   finally
    ReleaseState(CurrentState);
   end;
- until result and (Version=fLastState^.Version); // Check if we're done or when we do need to restart after a grow race condition case
+  while (fResizeLock.fState and 1)<>0 do begin
+   TPasMP.Relax;
+  end;
+ until result and (Version=fLastState^.Version) and (Version=fVersion); // Check if we're done or when we do need to restart after a grow race condition case
 end;
 
 function TPasMPInterlockedHashTable.DeleteKey(const Key:pointer):boolean;
 var CurrentState:PPasMPInterlockedHashTableState;
     Hash:TPasMPInterlockedHashTableHash;
-    StartIndex,Index,Step,ItemLock,Version:longint;
+    StartIndex,Index,Step,Version:longint;
     Item:PPasMPInterlockedHashTableItem;
 begin
- result:=false;
  repeat
+  result:=false;
   CurrentState:=AcquireState;
   try
    Version:=CurrentState^.Version;
@@ -4945,25 +5043,30 @@ begin
      PasMPInterlockedHashTableItemStateUsed:begin
       // Found used item slot => try to read it
       if Item^.Hash=Hash then begin
-       repeat
-        ItemLock:=Item^.Lock and longint(longword($fffffffe));
-       until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
-       if (Item^.State=PasMPInterlockedHashTableItemStateUsed) and (Item^.Hash=Hash) and CompareKey(@Item^.Data,Key) then begin
-        repeat
-         ItemLock:=Item^.Lock and longint(longword($fffffffe));
-        until TPasMPInterlocked.CompareExchange(Item^.Lock,(ItemLock-2) or 1,ItemLock)=ItemLock;
-        FinalizeItem(@Item^.Data);
-        TPasMPInterlocked.Write(Item^.State,PasMPInterlockedHashTableItemStateDeleted);
-        TPasMPInterlocked.Write(Item^.Lock,0);
-        TPasMPInterlocked.Decrement(CurrentState^.Count);
-        if Version=fLastState^.Version then begin
-         result:=true;
+       TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(Item^.Lock);
+       try
+        if (Item^.State=PasMPInterlockedHashTableItemStateUsed) and (Item^.Hash=Hash) and CompareKey(@Item^.Data,Key) then begin
+         TPasMPMultipleReaderSingleWriterSpinLock.ReadToWrite(Item^.Lock);
+         try
+          FinalizeItem(@Item^.Data);
+          TPasMPInterlocked.Write(Item^.State,PasMPInterlockedHashTableItemStateDeleted);
+          TPasMPInterlocked.Write(Item^.Lock,0);
+          TPasMPInterlocked.Decrement(CurrentState^.Count);
+          result:=true;
+         finally
+          TPasMPMultipleReaderSingleWriterSpinLock.WriteToRead(Item^.Lock);
+         end;
+        end;
+       finally
+        TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(Item^.Lock);
+       end;
+       if result then begin
+        if (Version=fLastState^.Version) and (Version=fVersion) then begin
          break;
         end else begin
          continue;
         end;
        end;
-       TPasMPInterlocked.Sub(Item^.Lock,2);
       end;
      end;
     end;
@@ -4972,7 +5075,10 @@ begin
   finally
    ReleaseState(CurrentState);
   end;
- until result and (Version=fLastState^.Version); // Check when we do need to restart after a grow race condition case
+  while (fResizeLock.fState and 1)<>0 do begin
+   TPasMP.Relax;
+  end;
+ until result and (Version=fLastState^.Version) and (Version=fVersion); // Check when we do need to restart after a grow race condition case
 end;
 
 constructor TPasMPSingleProducerSingleConsumerRingBuffer.Create(const Size:longint);
@@ -6656,7 +6762,7 @@ begin
    if TPasMPInterlocked.CompareExchange(fQueueLockState,QueueLockState or 1,QueueLockState)=QueueLockState then begin
     break;
    end else begin
-    TPasMP.Yield;
+    TPasMP.Relax;
    end;
   until false;
 {$if defined(CPU386) or defined(CPUx86_64)}
