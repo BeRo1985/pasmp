@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-17-23-05-0000                       *
+ *                        Version 2016-02-18-13-03-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -413,6 +413,7 @@ type TPasMPAvailableCPUCores=array of longint;
 {$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
        class function Read(var Source:TPasMPInt128):TPasMPInt128; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(fpc)}inline;{$ifend}
 {$ifend}
+       class function Read(var Source:pointer):pointer; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$ifend}
        class function Write(var Destination:longint;const Source:longint):longint; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
@@ -422,6 +423,7 @@ type TPasMPAvailableCPUCores=array of longint;
        class function Write(var Destination:TPasMPInt128;const Source:TPasMPInt128):TPasMPInt128; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(fpc)}inline;{$ifend}
 {$ifend}
 {$ifend}
+       class function Write(var Destination:pointer;const Source:pointer):pointer; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -686,6 +688,26 @@ type TPasMPAvailableCPUCores=array of longint;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPMultipleReaderSingleWriterSpinLock=class
+      private
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fState:longint;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(longint)*2)+SizeOf(TPasMPConditionVariableLock)+SizeOf(TPasMPConditionVariable)))-1] of byte;
+      public
+       constructor Create;
+       destructor Destroy; override;
+       procedure AcquireRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       function TryAcquireRead:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure ReleaseRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure AcquireWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       function TryAcquireWrite:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure ReleaseWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure ReadToWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure WriteToRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPSlimReaderWriterLock=class(TSynchroObject)
 {$ifdef Windows}
       private
@@ -854,7 +876,6 @@ type TPasMPAvailableCPUCores=array of longint;
         Mask:longint;
         LogSize:longint;
         Count:longint;
-        Lock:longint;
         Items:pointer;
        );
        1:(
@@ -872,7 +893,8 @@ type TPasMPAvailableCPUCores=array of longint;
      TPasMPInterlockedHashTable=class // only for PasMP internal usage
       private
        fCriticalSection:TPasMPCriticalSection;
-       fLock:longint;
+       fLock:TPasMPMultipleReaderSingleWriterSpinLock;
+       fResizeLock:TPasMPMultipleReaderSingleWriterSpinLock;
        fItemSize:longint;
        fInternalItemSize:longint;
        fGrowLoadFactor:longint; // 24.7 bit fixed point
@@ -1505,6 +1527,7 @@ type TPasMPAvailableCPUCores=array of longint;
        class function CreateGlobalInstance:TPasMP;
        class function GetGlobalInstance:TPasMP; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        class function GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):longint; {$ifdef HAS_STATIC}static;{$endif}
+       class procedure Relax;
        class procedure Yield; {$ifdef HAS_STATIC}static;{$endif}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        class function Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean; {$ifdef Linux}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
        class function IsJobCompleted(const Job:PPasMPJob):boolean; {$ifdef CAN_INLINE}inline;{$endif}
@@ -2207,6 +2230,20 @@ begin
  result:=(ThreadID*83492791) xor ((ThreadID shr 24)*19349669) xor ((ThreadID shr 16)*73856093) xor ((ThreadID shr 8)*50331653);
 end;
 
+class procedure TPasMP.Relax;{$if defined(CPU386)}assembler;
+asm
+ rep nop // pause
+end;
+{$elseif defined(CPUx86_64)}assembler;
+asm
+ pause
+end;
+{$else}
+begin
+ Yield;
+end;
+{$ifend}
+
 class procedure TPasMP.Yield; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef Windows}
 begin
@@ -2498,6 +2535,19 @@ end;
 {$ifend}
 {$ifend}
 
+class function TPasMPInterlocked.Read(var Source:pointer):pointer;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicCmpExchange(Source,nil,nil);
+{$else}
+{$ifdef CPU64}
+ result:=pointer(TPasMPPtrInt(InterlockedCompareExchange64(int64(TPasMPPtrInt(Source)),int64(TPasMPPtrInt(0)),int64(TPasMPPtrInt(0)))));
+{$else}
+ result:=pointer(TPasMPPtrInt(InterlockedCompareExchange(longint(TPasMPPtrInt(Source)),longint(TPasMPPtrInt(0)),longint(TPasMPPtrInt(0)))));
+{$endif}
+{$endif}
+end;
+
 class function TPasMPInterlocked.Write(var Destination:longint;const Source:longint):longint;
 begin
 {$ifdef HAS_ATOMICS}
@@ -2581,6 +2631,19 @@ begin
 end;
 {$ifend}
 {$ifend}
+
+class function TPasMPInterlocked.Write(var Destination:pointer;const Source:pointer):pointer;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicExchange(Destination,Source);
+{$else}
+{$ifdef CPU64}
+ result:=pointer(TPasMPPtrInt(InterlockedExchange64(int64(TPasMPPtrInt(Destination)),int64(TPasMPPtrInt(Source)))));
+{$else}
+ result:=pointer(TPasMPPtrInt(InterlockedExchange(longint(TPasMPPtrInt(Destination)),longint(TPasMPPtrInt(Source)))));
+{$endif}
+{$endif}
+end;
 
 class procedure TPasMPMemoryBarrier.Read;
 begin
@@ -3630,6 +3693,82 @@ end;
 {$endif}
 {$endif}
 
+constructor TPasMPMultipleReaderSingleWriterSpinLock.Create;
+begin
+ inherited Create;
+ fState:=0;
+end;
+
+destructor TPasMPMultipleReaderSingleWriterSpinLock.Destroy;
+begin
+ inherited Destroy;
+end;
+
+procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+var State:longint;
+begin
+ State:=fState and longint(longword($fffffffe));
+ while TPasMPInterlocked.CompareExchange(fState,State+2,State)<>State do begin
+  TPasMP.Relax;
+  State:=fState and longint(longword($fffffffe));
+ end;
+end;
+
+function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireRead:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+var State:longint;
+begin
+ State:=fState and longint(longword($fffffffe));
+ result:=TPasMPInterlocked.CompareExchange(fState,State+2,State)=State;
+end;
+
+procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+ TPasMPInterlocked.Sub(fState,2);
+end;
+
+procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireWrite;
+var State:longint;
+begin
+ State:=fState and longint(longword($fffffffe));
+ while TPasMPInterlocked.CompareExchange(fState,State or 1,State)<>State do begin
+  TPasMP.Relax;
+  State:=fState and longint(longword($fffffffe));
+ end;
+ while fState<>1 do begin
+  TPasMP.Relax;
+ end;
+end;
+
+function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireWrite:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+var State:longint;
+begin
+ State:=fState and longint(longword($fffffffe));
+ result:=TPasMPInterlocked.CompareExchange(fState,1,State)=State;
+end;
+
+procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+ TPasMPInterlocked.Write(fState,0);
+end;
+
+procedure TPasMPMultipleReaderSingleWriterSpinLock.ReadToWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+var State:longint;
+begin
+ State:=fState and longint(longword($fffffffe));
+ while TPasMPInterlocked.CompareExchange(fState,(State-2) or 1,State)<>State do begin
+  TPasMP.Relax;
+  State:=fState and longint(longword($fffffffe));
+ end;
+ while fState<>1 do begin
+  TPasMP.Relax;
+ end;
+end;
+
+procedure TPasMPMultipleReaderSingleWriterSpinLock.WriteToRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+ TPasMPInterlocked.Write(fState,2);
+end;
+
 constructor TPasMPSlimReaderWriterLock.Create;
 begin
  inherited Create;
@@ -4331,7 +4470,8 @@ constructor TPasMPInterlockedHashTable.Create(const ItemSize:longint);
 begin
  inherited Create;
  fCriticalSection:=TPasMPCriticalSection.Create;
- fLock:=0;
+ fLock:=TPasMPMultipleReaderSingleWriterSpinLock.Create;
+ fResizeLock:=TPasMPMultipleReaderSingleWriterSpinLock.Create;
  fItemSize:=ItemSize;
  fInternalItemSize:=TPasMPMath.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPInterlockedHashTableItem)+fItemSize,PasMPCPUCacheLineSize));
  fGrowLoadFactor:=((75 shl 7)+128) div 100; // 0.75
@@ -4357,6 +4497,8 @@ begin
   FreeState(fFirstState);
  end;
  fCriticalSection.Free;
+ fLock.Free;
+ fResizeLock.Free;
  inherited Destroy;
 end;
 
@@ -4384,54 +4526,42 @@ procedure TPasMPInterlockedHashTable.FreeState(const State:PPasMPInterlockedHash
 var Index:longint;
     Item:PPasMPInterlockedHashTableItem;
 begin
- if assigned(State^.Previous) then begin
-  State^.Previous^.Next:=State^.Next;
- end else if fFirstState=State then begin
-  fFirstState:=State^.Next;
+ fLock.AcquireWrite;
+ try
+  if assigned(State^.Previous) then begin
+   State^.Previous^.Next:=State^.Next;
+  end else if fFirstState=State then begin
+   fFirstState:=State^.Next;
+  end;
+  if assigned(State^.Next) then begin
+   State^.Next^.Previous:=State^.Previous;
+  end else if fLastState=State then begin
+   fLastState:=State^.Previous;
+  end;
+  Item:=State^.Items;
+  for Index:=0 to State^.Size-1 do begin
+   FinalizeItem(@Item^.Data);
+   Finalize(Item^);
+   inc(TPasMPPtrUInt(Item),fInternalItemSize);
+  end;
+  TPasMPMemory.FreeAlignedMemory(State^.Items);
+  Finalize(State^);
+  TPasMPMemory.FreeAlignedMemory(State);
+ finally
+  fLock.ReleaseWrite;
  end;
- if assigned(State^.Next) then begin
-  State^.Next^.Previous:=State^.Previous;
- end else if fLastState=State then begin
-  fLastState:=State^.Previous;
- end;
- Item:=State^.Items;
- for Index:=0 to State^.Size-1 do begin
-  FinalizeItem(@Item^.Data);
-  Finalize(Item^);
-  inc(TPasMPPtrUInt(Item),fInternalItemSize);
- end;
- TPasMPMemory.FreeAlignedMemory(State^.Items);
- Finalize(State^);
- TPasMPMemory.FreeAlignedMemory(State);
 end;
 
 function TPasMPInterlockedHashTable.AcquireState:PPasMPInterlockedHashTableState;
-var Lock:longint;
 begin
- repeat
-  Lock:=fLock and longint(longword($fffffffe));
- until TPasMPInterlocked.CompareExchange(fLock,Lock+2,Lock)=Lock;
  result:=fLastState;
  TPasMPInterlocked.Increment(result^.ReferenceCounter);
- TPasMPInterlocked.Sub(fLock,2);
 end;
 
 procedure TPasMPInterlockedHashTable.ReleaseState(const State:PPasMPInterlockedHashTableState);
-var Lock:longint;
 begin
  if TPasMPInterlocked.Decrement(State^.ReferenceCounter)=0 then begin
-  repeat
-   Lock:=fLock and longint(longword($fffffffe));
-  until TPasMPInterlocked.CompareExchange(fLock,Lock or 1,Lock)=Lock;
-  repeat
-  until fLock=1;
-  try
-   if State^.ReferenceCounter=0 then begin
-    FreeState(State);
-   end;
-  finally
-   TPasMPInterlocked.Write(fLock,0);
-  end;
+  FreeState(State);
  end;
 end;
 
@@ -4483,42 +4613,44 @@ var CurrentState:PPasMPInterlockedHashTableState;
     StartIndex,Index,Step,ItemLock:longint;
     Item:PPasMPInterlockedHashTableItem;
 begin
+ result:=false;
  CurrentState:=AcquireState;
- Hash:=HashKey(Key);
- StartIndex:=(Hash shr (32-CurrentState^.LogSize)) and CurrentState^.Mask;
- Step:=((Hash shl 1) or 1) and CurrentState^.Mask;
- Index:=StartIndex;
- repeat
-  Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
-  case Item^.State of
-   PasMPInterlockedHashTableItemStateDeleted:begin
-    // Found deleted item slot => ignore it
-   end;
-   PasMPInterlockedHashTableItemStateEmpty:begin
-    // Found empty item slot => abort search
-    break;
-   end;
-   PasMPInterlockedHashTableItemStateUsed:begin
-    // Found used item slot => try to read it
-    if Item^.Hash=Hash then begin
-     repeat
-      ItemLock:=Item^.Lock and longint(longword($fffffffe));
-     until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
-     if (Item^.State=PasMPInterlockedHashTableItemStateUsed) and (Item^.Hash=Hash) and CompareKey(@Item^.Data,Key) then begin
-      GetValue(@Item^.Data,Value);
+ try
+  Hash:=HashKey(Key);
+  StartIndex:=(Hash shr (32-CurrentState^.LogSize)) and CurrentState^.Mask;
+  Step:=((Hash shl 1) or 1) and CurrentState^.Mask;
+  Index:=StartIndex;
+  repeat
+   Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
+   case Item^.State of
+    PasMPInterlockedHashTableItemStateDeleted:begin
+     // Found deleted item slot => ignore it
+    end;
+    PasMPInterlockedHashTableItemStateEmpty:begin
+     // Found empty item slot => abort search
+     break;
+    end;
+    PasMPInterlockedHashTableItemStateUsed:begin
+     // Found used item slot => try to read it
+     if Item^.Hash=Hash then begin
+      repeat
+       ItemLock:=Item^.Lock and longint(longword($fffffffe));
+      until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
+      if (Item^.State=PasMPInterlockedHashTableItemStateUsed) and (Item^.Hash=Hash) and CompareKey(@Item^.Data,Key) then begin
+       GetValue(@Item^.Data,Value);
+       TPasMPInterlocked.Sub(Item^.Lock,2);
+       result:=true;
+       break;
+      end;
       TPasMPInterlocked.Sub(Item^.Lock,2);
-      ReleaseState(CurrentState);
-      result:=true;
-      exit;
      end;
-     TPasMPInterlocked.Sub(Item^.Lock,2);
     end;
    end;
-  end;
-  Index:=(Index+Step) and CurrentState^.Mask;
- until Index=StartIndex;
- ReleaseState(CurrentState);
- result:=false;
+   Index:=(Index+Step) and CurrentState^.Mask;
+  until Index=StartIndex;
+ finally
+  ReleaseState(CurrentState);
+ end;
 end;
 
 function TPasMPInterlockedHashTable.SetKeyValueOnState(const CurrentState:PPasMPInterlockedHashTableState;const Key,Value:pointer):boolean;
@@ -4622,9 +4754,11 @@ begin
   Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
   case Item^.State of
    PasMPInterlockedHashTableItemStateDeleted:begin
-    repeat
+    ItemLock:=Item^.Lock and longint(longword($fffffffe));
+    while TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)<>ItemLock do begin
+     TPasMP.Relax;
      ItemLock:=Item^.Lock and longint(longword($fffffffe));
-    until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
+    end;
     if Item^.State=PasMPInterlockedHashTableItemStateDeleted then begin
      repeat
       ItemLock:=Item^.Lock and longint(longword($fffffffe));
@@ -4652,64 +4786,113 @@ begin
 end;
 
 procedure TPasMPInterlockedHashTable.Grow;
-var CurrentState,NewState:PPasMPInterlockedHashTableState;
+var CurrentState,NewState,OldLastState:PPasMPInterlockedHashTableState;
     StartIndex,Index,Step,OtherIndex:longint;
     Item,OtherItem:PPasMPInterlockedHashTableItem;
     ItemLock:longint;
 begin
  CurrentState:=fLastState;
- if CurrentState^.Count>=CurrentState^.Size then begin
-  NewState:=CreateState;
-  NewState^.Version:=CurrentState^.Version+1;
-  NewState^.Size:=CurrentState^.Size shl 1;
-  NewState^.Mask:=NewState^.Size-1;
-  NewState^.LogSize:=CurrentState^.LogSize+1;
-  NewState^.Count:=CurrentState^.Count;
-  TPasMPMemory.AllocateAlignedMemory(NewState^.Items,NewState^.Size*fInternalItemSize,PasMPCPUCacheLineSize);
-  FillChar(NewState^.Items^,NewState^.Size*fInternalItemSize,#0);
-  OtherIndex:=0;
-  while OtherIndex<CurrentState^.Size do begin
-   OtherItem:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(OtherIndex)*TPasMPPtrUInt(fInternalItemSize))));
-   if OtherItem^.State=PasMPInterlockedHashTableItemStateUsed then begin
-    repeat
-     ItemLock:=OtherItem^.Lock and longint(longword($fffffffe));
-    until TPasMPInterlocked.CompareExchange(OtherItem^.Lock,ItemLock+2,ItemLock)=ItemLock;
-    if OtherItem^.State=PasMPInterlockedHashTableItemStateUsed then begin
-     StartIndex:=(OtherItem^.Hash shr (32-NewState^.LogSize)) and NewState^.Mask;
-     Step:=((OtherItem^.Hash shl 1) or 1) and NewState^.Mask;
-     Index:=StartIndex;
-     repeat
-      Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(NewState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
-      if Item^.State=PasMPInterlockedHashTableItemStateEmpty then begin
-       Item^.Hash:=OtherItem^.Hash;
-       InitializeItem(@Item^.Data);
-       CopyItem(@OtherItem^.Data,@Item^.Data);
-       Item^.State:=PasMPInterlockedHashTableItemStateUsed;
-       break;
+
+ fResizeLock.AcquireWrite;
+
+ try
+
+  if CurrentState^.Count>=CurrentState^.Size then begin
+
+   fLock.AcquireWrite;
+
+   try
+
+    NewState:=CreateState;
+    NewState^.Version:=CurrentState^.Version+1;
+    NewState^.Size:=CurrentState^.Size shl 1;
+    NewState^.Mask:=NewState^.Size-1;
+    NewState^.LogSize:=CurrentState^.LogSize+1;
+    NewState^.Count:=CurrentState^.Count;
+
+    TPasMPMemory.AllocateAlignedMemory(NewState^.Items,NewState^.Size*fInternalItemSize,PasMPCPUCacheLineSize);
+    FillChar(NewState^.Items^,NewState^.Size*fInternalItemSize,#0);
+
+    OtherIndex:=0;
+    while OtherIndex<CurrentState^.Size do begin
+
+     OtherItem:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(OtherIndex)*TPasMPPtrUInt(fInternalItemSize))));
+
+     if OtherItem^.State=PasMPInterlockedHashTableItemStateUsed then begin
+
+      repeat
+       ItemLock:=OtherItem^.Lock and longint(longword($fffffffe));
+      until TPasMPInterlocked.CompareExchange(OtherItem^.Lock,ItemLock+2,ItemLock)=ItemLock;
+
+      try
+
+       if OtherItem^.State=PasMPInterlockedHashTableItemStateUsed then begin
+
+        StartIndex:=(OtherItem^.Hash shr (32-NewState^.LogSize)) and NewState^.Mask;
+        Step:=((OtherItem^.Hash shl 1) or 1) and NewState^.Mask;
+
+        Index:=StartIndex;
+
+        repeat
+
+         Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(NewState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
+
+         if Item^.State=PasMPInterlockedHashTableItemStateEmpty then begin
+          Item^.Hash:=OtherItem^.Hash;
+          InitializeItem(@Item^.Data);
+          CopyItem(@OtherItem^.Data,@Item^.Data);
+          Item^.State:=PasMPInterlockedHashTableItemStateUsed;
+          break;
+         end;
+
+         Index:=(Index+Step) and NewState^.Mask;
+
+        until Index=StartIndex;
+
+       end;
+
+      finally
+       TPasMPInterlocked.Sub(OtherItem^.Lock,2);
       end;
-      Index:=(Index+Step) and NewState^.Mask;
-     until Index=StartIndex;
+
+     end;
+
+     inc(OtherIndex);
+
     end;
-    TPasMPInterlocked.Sub(OtherItem^.Lock,2);
+
+    OldLastState:=fLastState;
+    if assigned(OldLastState) then begin
+     OldLastState^.Next:=NewState;
+     NewState^.Previous:=OldLastState;
+    end else begin
+     NewState^.Previous:=nil;
+     OldLastState:=NewState;
+    end;
+    NewState^.Next:=nil;
+    TPasMPInterlocked.Write(pointer(fLastState),pointer(NewState));
+
+    TPasMPInterlocked.Decrement(CurrentState^.ReferenceCounter);
+
+   finally
+
+    fLock.ReleaseWrite;
+
    end;
-   inc(OtherIndex);
+
   end;
-  if assigned(fLastState) then begin
-   fLastState^.Next:=NewState;
-   NewState^.Previous:=fLastState;
-  end else begin
-   NewState^.Previous:=nil;
-   fFirstState:=NewState;
-  end;
-  NewState^.Next:=nil;
-  fLastState:=NewState;
-  TPasMPInterlocked.Decrement(CurrentState^.ReferenceCounter);
+
+ finally
+
+  fResizeLock.ReleaseWrite;
+
  end;
+
 end;
 
 function TPasMPInterlockedHashTable.SetKeyValue(const Key,Value:pointer):boolean;
 var CurrentState:PPasMPInterlockedHashTableState;
-    Version,StateLock,GlobalLock:longint;
+    Version:longint;
     UnderGrowLoadFactor:boolean;
 begin
  repeat
@@ -4717,38 +4900,16 @@ begin
   CurrentState:=AcquireState;
   try
    Version:=CurrentState^.Version;
-   repeat
-    StateLock:=CurrentState^.Lock and longint(longword($fffffffe));
-   until TPasMPInterlocked.CompareExchange(CurrentState^.Lock,StateLock+2,StateLock)=StateLock;
    if CurrentState^.Count<=$7fffff then begin
     UnderGrowLoadFactor:=CurrentState^.Count<((CurrentState^.Size*fGrowLoadFactor) shr 7);
    end else begin
     UnderGrowLoadFactor:=CurrentState^.Count<((int64(CurrentState^.Size)*fGrowLoadFactor) shr 7);
    end;
    if UnderGrowLoadFactor and SetKeyValueOnState(CurrentState,Key,Value) then begin
-    TPasMPInterlocked.Sub(CurrentState^.Lock,2);
     result:=Version=fLastState^.Version;
    end else begin
     // Grow
-    repeat
-     GlobalLock:=fLock and longint(longword($fffffffe));
-    until TPasMPInterlocked.CompareExchange(fLock,GlobalLock or 1,GlobalLock)=GlobalLock;
-    repeat
-    until fLock=1;
-    try
-     repeat
-      StateLock:=CurrentState^.Lock and longint(longword($fffffffe));
-     until TPasMPInterlocked.CompareExchange(CurrentState^.Lock,(StateLock-2) or 1,StateLock)=StateLock;
-     repeat
-     until CurrentState^.Lock=1;
-     try
-      Grow;
-     finally
-      TPasMPInterlocked.Write(CurrentState^.Lock,0);
-     end;
-    finally
-     TPasMPInterlocked.Write(fLock,0);
-    end;
+    Grow;
    end;
   finally
    ReleaseState(CurrentState);
@@ -4762,54 +4923,56 @@ var CurrentState:PPasMPInterlockedHashTableState;
     StartIndex,Index,Step,ItemLock,Version:longint;
     Item:PPasMPInterlockedHashTableItem;
 begin
+ result:=false;
  repeat
   CurrentState:=AcquireState;
-  Version:=CurrentState^.Version;
-  Hash:=HashKey(Key);
-  StartIndex:=(Hash shr (32-CurrentState^.LogSize)) and CurrentState^.Mask;
-  Step:=((Hash shl 1) or 1) and CurrentState^.Mask;
-  Index:=StartIndex;
-  repeat
-   Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
-   case Item^.State of
-    PasMPInterlockedHashTableItemStateDeleted:begin
-     // Found deleted item slot => ignore it
-    end;
-    PasMPInterlockedHashTableItemStateEmpty:begin
-     // Found empty item slot => abort search
-     break;
-    end;
-    PasMPInterlockedHashTableItemStateUsed:begin
-     // Found used item slot => try to read it
-     if Item^.Hash=Hash then begin
-      repeat
-       ItemLock:=Item^.Lock and longint(longword($fffffffe));
-      until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
-      if (Item^.State=PasMPInterlockedHashTableItemStateUsed) and (Item^.Hash=Hash) and CompareKey(@Item^.Data,Key) then begin
+  try
+   Version:=CurrentState^.Version;
+   Hash:=HashKey(Key);
+   StartIndex:=(Hash shr (32-CurrentState^.LogSize)) and CurrentState^.Mask;
+   Step:=((Hash shl 1) or 1) and CurrentState^.Mask;
+   Index:=StartIndex;
+   repeat
+    Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
+    case Item^.State of
+     PasMPInterlockedHashTableItemStateDeleted:begin
+      // Found deleted item slot => ignore it
+     end;
+     PasMPInterlockedHashTableItemStateEmpty:begin
+      // Found empty item slot => abort search
+      break;
+     end;
+     PasMPInterlockedHashTableItemStateUsed:begin
+      // Found used item slot => try to read it
+      if Item^.Hash=Hash then begin
        repeat
         ItemLock:=Item^.Lock and longint(longword($fffffffe));
-       until TPasMPInterlocked.CompareExchange(Item^.Lock,(ItemLock-2) or 1,ItemLock)=ItemLock;
-       FinalizeItem(@Item^.Data);
-       TPasMPInterlocked.Write(Item^.State,PasMPInterlockedHashTableItemStateDeleted);
-       TPasMPInterlocked.Write(Item^.Lock,0);
-       TPasMPInterlocked.Decrement(CurrentState^.Count);
-       ReleaseState(CurrentState);
-       if Version=fLastState^.Version then begin
-        result:=true;
-        exit;
-       end else begin
-        continue;
+       until TPasMPInterlocked.CompareExchange(Item^.Lock,ItemLock+2,ItemLock)=ItemLock;
+       if (Item^.State=PasMPInterlockedHashTableItemStateUsed) and (Item^.Hash=Hash) and CompareKey(@Item^.Data,Key) then begin
+        repeat
+         ItemLock:=Item^.Lock and longint(longword($fffffffe));
+        until TPasMPInterlocked.CompareExchange(Item^.Lock,(ItemLock-2) or 1,ItemLock)=ItemLock;
+        FinalizeItem(@Item^.Data);
+        TPasMPInterlocked.Write(Item^.State,PasMPInterlockedHashTableItemStateDeleted);
+        TPasMPInterlocked.Write(Item^.Lock,0);
+        TPasMPInterlocked.Decrement(CurrentState^.Count);
+        if Version=fLastState^.Version then begin
+         result:=true;
+         break;
+        end else begin
+         continue;
+        end;
        end;
+       TPasMPInterlocked.Sub(Item^.Lock,2);
       end;
-      TPasMPInterlocked.Sub(Item^.Lock,2);
      end;
     end;
-   end;
-   Index:=(Index+Step) and CurrentState^.Mask;
-  until Index=StartIndex;
-  ReleaseState(CurrentState);
- until Version=fLastState^.Version; // Check when we do need to restart after a grow race condition case
- result:=false;
+    Index:=(Index+Step) and CurrentState^.Mask;
+   until Index=StartIndex;
+  finally
+   ReleaseState(CurrentState);
+  end;
+ until result and (Version=fLastState^.Version); // Check when we do need to restart after a grow race condition case
 end;
 
 constructor TPasMPSingleProducerSingleConsumerRingBuffer.Create(const Size:longint);
