@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-18-13-58-0000                       *
+ *                        Version 2016-02-18-14-04-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1536,7 +1536,7 @@ type TPasMPAvailableCPUCores=array of longint;
        class function CreateGlobalInstance:TPasMP;
        class function GetGlobalInstance:TPasMP; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        class function GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):longint; {$ifdef HAS_STATIC}static;{$endif}
-       class procedure Relax;
+       class procedure Relax; {$ifdef HAS_STATIC}static;{$endif}{$if defined(CPU386) or defined(CPUx86_64)}{$elseif defined(CAN_INLINE)}inline;{$ifend}
        class procedure Yield; {$ifdef HAS_STATIC}static;{$endif}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        class function Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean; {$ifdef Linux}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
        class function IsJobCompleted(const Job:PPasMPJob):boolean; {$ifdef CAN_INLINE}inline;{$endif}
@@ -2241,7 +2241,7 @@ end;
 
 class procedure TPasMP.Relax;{$if defined(CPU386)}assembler;
 asm
- rep nop // pause
+ db $f3,$90 // pause (rep nop)
 end;
 {$elseif defined(CPUx86_64)}assembler;
 asm
@@ -2249,7 +2249,11 @@ asm
 end;
 {$else}
 begin
- Yield;
+{$ifdef fpc}
+ TPasMP.Yield;
+{$else}
+ YieldProcessor;
+{$endif}
 end;
 {$ifend}
 
