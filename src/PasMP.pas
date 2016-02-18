@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-18-14-04-0000                       *
+ *                        Version 2016-02-18-14-34-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -5005,18 +5005,14 @@ begin
     UnderGrowLoadFactor:=CurrentState^.Count<((int64(CurrentState^.Size)*fGrowLoadFactor) shr 7);
    end;
    if UnderGrowLoadFactor and SetKeyValueOnState(CurrentState,Key,Value) then begin
-    result:=Version=fLastState^.Version;
+    result:=true;
    end else begin
-    // Grow
     Grow;
    end;
   finally
    ReleaseState(CurrentState);
   end;
-  while (fResizeLock.fState and 1)<>0 do begin
-   TPasMP.Relax;
-  end;
- until result and (Version=fLastState^.Version) and (Version=fVersion); // Check if we're done or when we do need to restart after a grow race condition case
+ until result and (Version=fVersion);
 end;
 
 function TPasMPInterlockedHashTable.DeleteKey(const Key:pointer):boolean;
@@ -5065,11 +5061,7 @@ begin
         TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(Item^.Lock);
        end;
        if result then begin
-        if (Version=fLastState^.Version) and (Version=fVersion) then begin
-         break;
-        end else begin
-         continue;
-        end;
+        break;
        end;
       end;
      end;
@@ -5079,10 +5071,7 @@ begin
   finally
    ReleaseState(CurrentState);
   end;
-  while (fResizeLock.fState and 1)<>0 do begin
-   TPasMP.Relax;
-  end;
- until result and (Version=fLastState^.Version) and (Version=fVersion); // Check when we do need to restart after a grow race condition case
+ until Version=fVersion;
 end;
 
 constructor TPasMPSingleProducerSingleConsumerRingBuffer.Create(const Size:longint);
