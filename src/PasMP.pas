@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-21-18-08-0000                       *
+ *                        Version 2016-02-21-18-12-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -6229,8 +6229,8 @@ begin
        // Grow
        for BucketIndex:=OldCountBuckets to NewCountBuckets-1 do begin
         BucketSize:=PasMPThreadSafeDynamicArrayFirstBucketSize shl BucketIndex;
-        TPasMPMemory.AllocateAlignedMemory(Bucket,BucketSize*TPasMPPtrUInt(fInternalItemSize));
-        FillChar(Bucket^,BucketSize*TPasMPPtrUInt(fInternalItemSize),#0);
+        TPasMPMemory.AllocateAlignedMemory(Bucket,TPasMPPtrUInt(BucketSize)*TPasMPPtrUInt(fInternalItemSize));
+        FillChar(Bucket^,TPasMPPtrUInt(BucketSize)*TPasMPPtrUInt(fInternalItemSize),#0);
         if assigned(Bucket) then begin
          for BucketItemIndex:=0 to BucketSize-1 do begin
           BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
@@ -6363,8 +6363,8 @@ begin
    // Grow
    for BucketIndex:=OldCountBuckets to NewCountBuckets-1 do begin
     BucketSize:=PasMPThreadSafeDynamicArrayFirstBucketSize shl BucketIndex;
-    TPasMPMemory.AllocateAlignedMemory(Bucket,BucketSize*TPasMPPtrUInt(fInternalItemSize));
-    FillChar(Bucket^,BucketSize*TPasMPPtrUInt(fInternalItemSize),#0);
+    TPasMPMemory.AllocateAlignedMemory(Bucket,TPasMPPtrUInt(BucketSize)*TPasMPPtrUInt(fInternalItemSize));
+    FillChar(Bucket^,TPasMPPtrUInt(BucketSize)*TPasMPPtrUInt(fInternalItemSize),#0);
     if assigned(Bucket) then begin
      for BucketItemIndex:=0 to BucketSize-1 do begin
       BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
