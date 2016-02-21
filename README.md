@@ -13,9 +13,11 @@ License: zlib
 - Parallel-for pattern
 - Parallel intro sort (direct and indirect)
 - Parellel merge sort (direct and indirect)
-- Single producer single consumer queue (untyped and typed, bounded-only)
-- Multiple producer multiple consumer stack (untyped and typed, bounded and unbounded)
-- Multiple producer multiple consumer queue (untyped and typed, bounded and unbounded)
+- Thread-safe single producer single consumer queue (untyped and typed, bounded-only, lock-free)
+- Thread-safe multiple producer multiple consumer stack (untyped and typed, bounded and unbounded, lock-free on x86-32/x86-64/ARM32, lock-based on another CPU targets)
+- Thread-safe multiple producer multiple consumer queue (untyped and typed, bounded and unbounded, lock-free on x86-32/x86-64/ARM32, lock-based on another CPU targets)
+- Thread-safe hash table (untyped and typed, hybrid-implementation of lock-free and fine-graded lock-based single-operation code parts)
+- Thread-safe dynamic-sized array (untyped and typed, fine-graded lock-based on another CPU targets)
 - Optional strict singleton usage option per global PasMPUseAsStrictSingletonInstance define (besides the option of usage of multiple PasMP instances)
 - Compatible with FreePascal >= 3.0.0 and Delphi >= 7
 - Cross platform (Windows (needs Vista or higher, so no XP, no 9x, no NT 3.0, no NT 4.x), Linux, etc.)
