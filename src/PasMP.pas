@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-21-16-32-0000                       *
+ *                        Version 2016-02-21-17-28-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1050,7 +1050,6 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fCountBuckets:TPasMPInt32;
        fLock:TPasMPMultipleReaderSingleWriterSpinLock;
        fBuckets:TPasMPThreadSafeDynamicArrayBuckets;
-       procedure GetBucketIndex(const ItemIndex:TPasMPInt32;out BucketIndex,BucketItemIndex:TPasMPInt32); {$ifdef CAN_INLINE}inline;{$endif}
       protected
        procedure InitializeItem(const ItemData:pointer); virtual;
        procedure FinalizeItem(const ItemData:pointer); virtual;
@@ -6126,15 +6125,6 @@ begin
  inherited Destroy;
 end;
 
-procedure TPasMPThreadSafeDynamicArray.GetBucketIndex(const ItemIndex:TPasMPInt32;out BucketIndex,BucketItemIndex:TPasMPInt32); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-var Position,PositionHighestBit:TPasMPInt32;
-begin
- Position:=ItemIndex+PasMPThreadSafeDynamicArrayFirstBucketSize;
- PositionHighestBit:=TPasMPMath.BitScanReverse32(Position);
- BucketIndex:=PositionHighestBit-PasMPThreadSafeDynamicArrayFirstBucketBits;
- BucketItemIndex:=(TPasMPInt32(1) shl PositionHighestBit) xor Position;
-end;
-
 procedure TPasMPThreadSafeDynamicArray.InitializeItem(const ItemData:pointer);
 begin
 end;
@@ -6154,68 +6144,74 @@ var ItemIndex,BucketIndex,BucketItemIndex,Position,PositionHighestBit,OldCountBu
     BucketItemOffset:TPasMPPtrUInt;
 begin
 
- fLock.AcquireRead;
- try
+ TPasMPMemoryBarrier.ReadWrite;
 
-  if fSize<>NewSize then begin
+ if fSize<>NewSize then begin
 
-   fLock.ReadToWrite;
-   try
+  fLock.AcquireRead;
+  try
 
-    TPasMPMemoryBarrier.ReadWrite;
+   if fSize<>NewSize then begin
 
-    if fSize<>NewSize then begin
+    fLock.ReadToWrite;
+    try
 
-     Position:=NewSize+PasMPThreadSafeDynamicArrayFirstBucketSize;
-     PositionHighestBit:=TPasMPMath.BitScanReverse32(Position);
+     TPasMPMemoryBarrier.ReadWrite;
 
-     OldCountBuckets:=fCountBuckets;
-     NewCountBuckets:=PositionHighestBit-(PasMPThreadSafeDynamicArrayFirstBucketBits-1);
+     if fSize<>NewSize then begin
 
-     if OldCountBuckets<NewCountBuckets then begin
-      // Grow
-      for BucketIndex:=OldCountBuckets to NewCountBuckets-1 do begin
-       BucketSize:=PasMPThreadSafeDynamicArrayFirstBucketSize shl BucketIndex;
-       TPasMPMemory.AllocateAlignedMemory(Bucket,BucketSize*TPasMPPtrUInt(fInternalItemSize));
-       FillChar(Bucket^,BucketSize*TPasMPPtrUInt(fInternalItemSize),#0);
-       if assigned(Bucket) then begin
-        for BucketItemIndex:=0 to BucketSize-1 do begin
-         BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
-         InitializeItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
-         PPasMPInt32(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset+TPasMPPtrUInt(fItemLockOffset))))^:=0;
+      Position:=NewSize+PasMPThreadSafeDynamicArrayFirstBucketSize;
+      PositionHighestBit:=TPasMPMath.BitScanReverse32(Position);
+
+      OldCountBuckets:=fCountBuckets;
+      NewCountBuckets:=PositionHighestBit-(PasMPThreadSafeDynamicArrayFirstBucketBits-1);
+
+      if OldCountBuckets<NewCountBuckets then begin
+       // Grow
+       for BucketIndex:=OldCountBuckets to NewCountBuckets-1 do begin
+        BucketSize:=PasMPThreadSafeDynamicArrayFirstBucketSize shl BucketIndex;
+        TPasMPMemory.AllocateAlignedMemory(Bucket,BucketSize*TPasMPPtrUInt(fInternalItemSize));
+        FillChar(Bucket^,BucketSize*TPasMPPtrUInt(fInternalItemSize),#0);
+        if assigned(Bucket) then begin
+         for BucketItemIndex:=0 to BucketSize-1 do begin
+          BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
+          InitializeItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
+          PPasMPInt32(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset+TPasMPPtrUInt(fItemLockOffset))))^:=0;
+         end;
+        end;
+        TPasMPInterlocked.Write(fBuckets[BucketIndex],Bucket);
+       end;
+      end else if NewCountBuckets<OldCountBuckets then begin
+       // Shrink
+       for BucketIndex:=NewCountBuckets-1 downto OldCountBuckets do begin
+        BucketSize:=PasMPThreadSafeDynamicArrayFirstBucketSize shl BucketIndex;
+        Bucket:=TPasMPInterlocked.Exchange(fBuckets[BucketIndex],nil);
+        if assigned(Bucket) then begin
+         for BucketItemIndex:=0 to BucketSize-1 do begin
+          BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
+          FinalizeItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
+         end;
+         TPasMPMemory.FreeAlignedMemory(Bucket);
         end;
        end;
-       TPasMPInterlocked.Write(fBuckets[BucketIndex],Bucket);
       end;
-     end else if NewCountBuckets<OldCountBuckets then begin
-      // Shrink
-      for BucketIndex:=NewCountBuckets-1 downto OldCountBuckets do begin
-       BucketSize:=PasMPThreadSafeDynamicArrayFirstBucketSize shl BucketIndex;
-       Bucket:=TPasMPInterlocked.Exchange(fBuckets[BucketIndex],nil);
-       if assigned(Bucket) then begin
-        for BucketItemIndex:=0 to BucketSize-1 do begin
-         BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
-         FinalizeItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
-        end;
-        TPasMPMemory.FreeAlignedMemory(Bucket);
-       end;
-      end;
+
+      fAllocated:=TPasMPInt32(1) shl PositionHighestBit;
+      fCountBuckets:=NewCountBuckets;
+      fSize:=NewSize;
+
      end;
 
-     fAllocated:=TPasMPInt32(1) shl PositionHighestBit;
-     fCountBuckets:=NewCountBuckets;
-     fSize:=NewSize;
-
+    finally
+     fLock.WriteToRead;
     end;
 
-   finally
-    fLock.WriteToRead;
    end;
 
+  finally
+   fLock.ReleaseRead;
   end;
 
- finally
-  fLock.ReleaseRead;
  end;
 
 end;
@@ -6227,27 +6223,29 @@ var Position,PositionHighestBit,BucketIndex,BucketItemIndex:TPasMPInt32;
     BucketItem:PPasMPInt32;
     BucketItemLock:PPasMPInt32;
 begin
- fLock.AcquireRead;
- try
-  if (ItemIndex>=0) and (ItemIndex<fSize) then begin
-   Position:=ItemIndex+PasMPThreadSafeDynamicArrayFirstBucketSize;
-   PositionHighestBit:=TPasMPMath.BitScanReverse32(Position);
-   BucketIndex:=PositionHighestBit-PasMPThreadSafeDynamicArrayFirstBucketBits;
-   BucketItemIndex:=(TPasMPInt32(1) shl PositionHighestBit) xor Position;
-   BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
-   BucketItemLock:=PPasMPInt32(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset+TPasMPPtrUInt(fItemLockOffset))));
-   TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(BucketItemLock^);
-   try
-    CopyItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)),ItemData);
-   finally
-    TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(BucketItemLock^);
+ result:=false;
+ if (ItemIndex>=0) and (ItemIndex<fSize) then begin
+  fLock.AcquireRead;
+  try
+   if (ItemIndex>=0) and (ItemIndex<fSize) then begin
+    Position:=ItemIndex+PasMPThreadSafeDynamicArrayFirstBucketSize;
+    PositionHighestBit:=TPasMPMath.BitScanReverse32(Position);
+    BucketIndex:=PositionHighestBit-PasMPThreadSafeDynamicArrayFirstBucketBits;
+    BucketItemIndex:=(TPasMPInt32(1) shl PositionHighestBit) xor Position;
+    Bucket:=fBuckets[BucketIndex];
+    BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
+    BucketItemLock:=PPasMPInt32(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset+TPasMPPtrUInt(fItemLockOffset))));
+    TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(BucketItemLock^);
+    try
+     CopyItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)),ItemData);
+    finally
+     TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(BucketItemLock^);
+    end;
+    result:=true;
    end;
-   result:=true;
-  end else begin
-   result:=false;
+  finally
+   fLock.ReleaseRead;
   end;
- finally
-  fLock.ReleaseRead;
  end;
 end;
 
@@ -6257,27 +6255,29 @@ var Position,PositionHighestBit,BucketIndex,BucketItemIndex:TPasMPInt32;
     BucketItemOffset:TPasMPPtrUInt;
     BucketItemLock:PPasMPInt32;
 begin
- fLock.AcquireRead;
- try
-  if (ItemIndex>=0) and (ItemIndex<fSize) then begin
-   Position:=ItemIndex+PasMPThreadSafeDynamicArrayFirstBucketSize;
-   PositionHighestBit:=TPasMPMath.BitScanReverse32(Position);
-   BucketIndex:=PositionHighestBit-PasMPThreadSafeDynamicArrayFirstBucketBits;
-   BucketItemIndex:=(TPasMPInt32(1) shl PositionHighestBit) xor Position;
-   BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
-   BucketItemLock:=PPasMPInt32(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset+TPasMPPtrUInt(fItemLockOffset))));
-   TPasMPMultipleReaderSingleWriterSpinLock.AcquireWrite(BucketItemLock^);
-   try
-    CopyItem(ItemData,pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
-   finally
-    TPasMPMultipleReaderSingleWriterSpinLock.ReleaseWrite(BucketItemLock^);
+ result:=false;
+ if (ItemIndex>=0) and (ItemIndex<fSize) then begin
+  fLock.AcquireRead;
+  try
+   if (ItemIndex>=0) and (ItemIndex<fSize) then begin
+    Position:=ItemIndex+PasMPThreadSafeDynamicArrayFirstBucketSize;
+    PositionHighestBit:=TPasMPMath.BitScanReverse32(Position);
+    BucketIndex:=PositionHighestBit-PasMPThreadSafeDynamicArrayFirstBucketBits;
+    Bucket:=fBuckets[BucketIndex];
+    BucketItemIndex:=(TPasMPInt32(1) shl PositionHighestBit) xor Position;
+    BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
+    BucketItemLock:=PPasMPInt32(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset+TPasMPPtrUInt(fItemLockOffset))));
+    TPasMPMultipleReaderSingleWriterSpinLock.AcquireWrite(BucketItemLock^);
+    try
+     CopyItem(ItemData,pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
+    finally
+     TPasMPMultipleReaderSingleWriterSpinLock.ReleaseWrite(BucketItemLock^);
+    end;
+    result:=true;
    end;
-   result:=true;
-  end else begin
-   result:=false;
+  finally
+   fLock.ReleaseRead;
   end;
- finally
-  fLock.ReleaseRead;
  end;
 end;
 
@@ -6320,6 +6320,11 @@ begin
   fCountBuckets:=NewCountBuckets;
   fSize:=NewSize;
 
+  Position:=(NewSize-1)+PasMPThreadSafeDynamicArrayFirstBucketSize;
+  PositionHighestBit:=TPasMPMath.BitScanReverse32(Position);
+  BucketIndex:=PositionHighestBit-PasMPThreadSafeDynamicArrayFirstBucketBits;
+  Bucket:=fBuckets[BucketIndex];
+  BucketItemIndex:=(TPasMPInt32(1) shl PositionHighestBit) xor Position;
   BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
   BucketItemLock:=PPasMPInt32(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset+TPasMPPtrUInt(fItemLockOffset))));
   TPasMPMultipleReaderSingleWriterSpinLock.AcquireWrite(BucketItemLock^);
@@ -6335,12 +6340,70 @@ begin
 end;
 
 function TPasMPThreadSafeDynamicArray.Pop(const ItemData:pointer):boolean;
+var NewSize,Position,PositionHighestBit,OldCountBuckets,NewCountBuckets,BucketIndex,BucketSize,BucketItemIndex:TPasMPInt32;
+    Bucket:pointer;
+    BucketItemOffset:TPasMPPtrUInt;
+    BucketItemLock:PPasMPInt32;
 begin
- fLock.AcquireRead;
- try
-  result:=false;
- finally
-  fLock.ReleaseRead;
+
+ result:=false;
+
+ if fSize>0 then begin
+
+  fLock.AcquireWrite;
+  try
+
+   if fSize>0 then begin
+
+    NewSize:=fSize-1;
+
+    Position:=NewSize+PasMPThreadSafeDynamicArrayFirstBucketSize;
+    PositionHighestBit:=TPasMPMath.BitScanReverse32(Position);
+
+    BucketIndex:=PositionHighestBit-PasMPThreadSafeDynamicArrayFirstBucketBits;
+    Bucket:=fBuckets[BucketIndex];
+    BucketItemIndex:=(TPasMPInt32(1) shl PositionHighestBit) xor Position;
+    BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
+    BucketItemLock:=PPasMPInt32(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset+TPasMPPtrUInt(fItemLockOffset))));
+    TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(BucketItemLock^);
+    try
+     CopyItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)),ItemData);
+    finally
+     TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(BucketItemLock^);
+    end;
+
+    FinalizeItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
+
+    OldCountBuckets:=fCountBuckets;
+    NewCountBuckets:=PositionHighestBit-(PasMPThreadSafeDynamicArrayFirstBucketBits-1);
+
+    if NewCountBuckets<OldCountBuckets then begin
+     // Shrink
+     for BucketIndex:=NewCountBuckets-1 downto OldCountBuckets do begin
+      BucketSize:=PasMPThreadSafeDynamicArrayFirstBucketSize shl BucketIndex;
+      Bucket:=TPasMPInterlocked.Exchange(fBuckets[BucketIndex],nil);
+      if assigned(Bucket) then begin
+       for BucketItemIndex:=0 to BucketSize-1 do begin
+        BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
+        FinalizeItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
+       end;
+       TPasMPMemory.FreeAlignedMemory(Bucket);
+      end;
+     end;
+    end;
+
+    fAllocated:=TPasMPInt32(1) shl PositionHighestBit;
+    fCountBuckets:=NewCountBuckets;
+    fSize:=NewSize;
+
+    result:=true;
+
+   end;
+
+  finally
+   fLock.ReleaseWrite;
+  end;
+
  end;
 end;
 
