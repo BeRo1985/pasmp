@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-21-18-12-0000                       *
+ *                        Version 2016-02-21-18-22-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -6280,7 +6280,6 @@ function TPasMPThreadSafeDynamicArray.GetItem(const ItemIndex:TPasMPInt32;const 
 var Position,PositionHighestBit,BucketIndex,BucketItemIndex:TPasMPInt32;
     Bucket:pointer;
     BucketItemOffset:TPasMPPtrUInt;
-    BucketItem:PPasMPInt32;
     BucketItemLock:PPasMPInt32;
 begin
  result:=false;
