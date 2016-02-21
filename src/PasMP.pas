@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-21-18-22-0000                       *
+ *                        Version 2016-02-21-19-27-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1462,7 +1462,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function SetItem(const ItemIndex:TPasMPInt32;const ItemData:T):boolean;
        function Push(const ItemData:T):TPasMPInt32;
        function Pop(out ItemData:T):boolean;
-       property Items[const ItemIndex:TPasMPInt32]:T read GetPropertyItem write SetPropertyItem;
+       property Items[const ItemIndex:TPasMPInt32]:T read GetPropertyItem write SetPropertyItem; default;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 {$endif}
@@ -6135,7 +6135,7 @@ begin
  fSize:=0;
  fAllocated:=PasMPThreadSafeDynamicArrayFirstBucketSize;
  fCountBuckets:=1;
- fItemSize:=ItemSize;
+ fItemSize:=AItemSize;
  fItemLockOffset:=TPasMPMath.RoundUpToMask32(fItemSize,SizeOf(TPasMPInt32));
  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fItemLockOffset+SizeOf(TPasMPInt32),PasMPCPUCacheLineSize);
  fLock:=TPasMPMultipleReaderSingleWriterSpinLock.Create;
@@ -6352,7 +6352,7 @@ begin
 
   NewSize:=fSize+1;
 
-  Position:=NewSize+PasMPThreadSafeDynamicArrayFirstBucketSize;
+  Position:=result+PasMPThreadSafeDynamicArrayFirstBucketSize;
   PositionHighestBit:=TPasMPMath.BitScanReverse32(Position);
 
   OldCountBuckets:=fCountBuckets;
