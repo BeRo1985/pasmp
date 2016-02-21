@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-21-18-02-0000                       *
+ *                        Version 2016-02-21-18-08-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1062,6 +1062,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       public
        constructor Create(const AItemSize:TPasMPInt32);
        destructor Destroy; override;
+       procedure Clear; virtual;
        property Size:TPasMPInt32 read fSize write SetSize;
        property ItemSize:TPasMPInt32 read fItemSize;
        property Allocated:TPasMPInt32 read fAllocated;
@@ -6203,6 +6204,21 @@ begin
 
      if fSize<>NewSize then begin
 
+      if NewSize<fSize then begin
+       for ItemIndex:=fSize-1 downto NewSize do begin
+        Position:=ItemIndex+PasMPThreadSafeDynamicArrayFirstBucketSize;
+        PositionHighestBit:=TPasMPMath.BitScanReverse32(Position);
+        BucketIndex:=PositionHighestBit-PasMPThreadSafeDynamicArrayFirstBucketBits;
+        BucketItemIndex:=(TPasMPInt32(1) shl PositionHighestBit) xor Position;
+        Bucket:=fBuckets[BucketIndex];
+        if assigned(Bucket) then begin
+         BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
+         FinalizeItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
+         FillChar(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset))^,fInternalItemSize,#0);
+        end;
+       end;
+      end;
+
       Position:=NewSize+PasMPThreadSafeDynamicArrayFirstBucketSize;
       PositionHighestBit:=TPasMPMath.BitScanReverse32(Position);
 
@@ -6233,6 +6249,7 @@ begin
          for BucketItemIndex:=0 to BucketSize-1 do begin
           BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
           FinalizeItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
+          FillChar(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset))^,fInternalItemSize,#0);
          end;
          TPasMPMemory.FreeAlignedMemory(Bucket);
         end;
@@ -6417,6 +6434,7 @@ begin
     end;
 
     FinalizeItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
+    FillChar(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset))^,fInternalItemSize,#0);
 
     OldCountBuckets:=fCountBuckets;
     NewCountBuckets:=PositionHighestBit-(PasMPThreadSafeDynamicArrayFirstBucketBits-1);
@@ -6449,6 +6467,11 @@ begin
   end;
 
  end;
+end;
+
+procedure TPasMPThreadSafeDynamicArray.Clear;
+begin
+ SetSize(0);
 end;
 
 constructor TPasMPSingleProducerSingleConsumerRingBuffer.Create(const Size:TPasMPInt32);
