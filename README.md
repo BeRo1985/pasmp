@@ -38,7 +38,7 @@ License: zlib
   - TPasMPBarrier  
 - Optional strict singleton usage option per global PasMPUseAsStrictSingletonInstance define (besides the option of usage of multiple PasMP instances)
 - Compatible with FreePascal >= 3.0.0 and Delphi >= 7
-- Cross platform (Windows (needs Vista or higher, so no XP, no 9x, no NT 3.0, no NT 4.x), Linux, etc.)
+- Cross platform (Windows (needs Vista or higher, so no XP, no 9x, no NT 3.x, no NT 4.x), Linux, etc.)
 
 ## Target informations (i.e. System requirements)
 
