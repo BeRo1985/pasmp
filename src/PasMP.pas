@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-21-16-15-0000                       *
+ *                        Version 2016-02-21-16-23-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -6221,21 +6221,62 @@ begin
 end;
 
 function TPasMPThreadSafeDynamicArray.GetItem(const ItemIndex:TPasMPInt32;const ItemData:pointer):boolean;
+var Position,PositionHighestBit,BucketIndex,BucketItemIndex:TPasMPInt32;
+    Bucket:pointer;
+    BucketItemOffset:TPasMPPtrUInt;
+    BucketItem:PPasMPInt32;
+    BucketItemLock:PPasMPInt32;
 begin
  fLock.AcquireRead;
  try
-
-  result:=false;
+  if (ItemIndex>=0) and (ItemIndex<fSize) then begin
+   Position:=ItemIndex+PasMPThreadSafeDynamicArrayFirstBucketSize;
+   PositionHighestBit:=TPasMPMath.BitScanReverse32(Position);
+   BucketIndex:=PositionHighestBit-PasMPThreadSafeDynamicArrayFirstBucketBits;
+   BucketItemIndex:=(TPasMPInt32(1) shl PositionHighestBit) xor Position;
+   BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
+   BucketItemLock:=PPasMPInt32(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset+TPasMPPtrUInt(fItemLockOffset))));
+   TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(BucketItemLock^);
+   try
+    CopyItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)),ItemData);
+   finally
+    TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(BucketItemLock^);
+   end;
+   result:=true;
+  end else begin
+   result:=false;
+  end;
  finally
   fLock.ReleaseRead;
  end;
 end;
 
 function TPasMPThreadSafeDynamicArray.SetItem(const ItemIndex:TPasMPInt32;const ItemData:pointer):boolean;
+var Position,PositionHighestBit,BucketIndex,BucketItemIndex:TPasMPInt32;
+    Bucket:pointer;
+    BucketItemOffset:TPasMPPtrUInt;
+    BucketItem:PPasMPInt32;
+    BucketItemLock:PPasMPInt32;
 begin
  fLock.AcquireRead;
  try
-  result:=false;
+  if (ItemIndex>=0) and (ItemIndex<fSize) then begin
+   Position:=ItemIndex+PasMPThreadSafeDynamicArrayFirstBucketSize;
+   PositionHighestBit:=TPasMPMath.BitScanReverse32(Position);
+   BucketIndex:=PositionHighestBit-PasMPThreadSafeDynamicArrayFirstBucketBits;
+   BucketItemIndex:=(TPasMPInt32(1) shl PositionHighestBit) xor Position;
+   BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
+   BucketItemLock:=PPasMPInt32(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset+TPasMPPtrUInt(fItemLockOffset))));
+   TPasMPMultipleReaderSingleWriterSpinLock.AcquireWrite(BucketItemLock^);
+   try
+    CopyItem(ItemData,pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
+   finally
+    TPasMPMultipleReaderSingleWriterSpinLock.ReleaseWrite(BucketItemLock^);
+   end;
+   result:=true;
+  end else begin
+   result:=false;
+  end;
  finally
   fLock.ReleaseRead;
  end;
