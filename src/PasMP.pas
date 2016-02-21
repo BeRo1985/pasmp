@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-21-01-35-0000                       *
+ *                        Version 2016-02-21-01-38-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1920,7 +1920,7 @@ function BSFDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef 
 asm
  bsf eax,eax
  jnz @Done
- xor eax,eax
+ mov eax,255
 @Done:
 end;
 
@@ -1928,7 +1928,7 @@ function BSRDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef 
 asm
  bsr eax,eax
  jnz @Done
- xor eax,eax
+ mov eax,255
 @Done:
 end;
 
@@ -1941,7 +1941,7 @@ asm
  add eax,32
  jmp @Done
 @Fail:
- xor eax,eax
+ mov eax,255
 @Done:
 end;
 
@@ -1955,7 +1955,7 @@ asm
  xor ecx,ecx
  bsr eax,dword ptr [Value+0]
  jnz @Done
- xor eax,eax
+ mov eax,255
 @Done:
 end;
 
@@ -2132,8 +2132,8 @@ asm
  bsf eax,edi
 {$endif}
  jnz @Done
-  xor eax,eax
- @Done:
+ mov eax,255
+@Done:
 end;
 
 function BSRDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
@@ -2147,7 +2147,7 @@ asm
  bsr eax,edi
 {$endif}
  jnz @Done
- xor eax,eax
+ mov eax,255
 @Done:
 end;
 
@@ -2162,7 +2162,7 @@ asm
  bsf rax,rdi
 {$endif}
  jnz @Done
- xor eax,eax
+ mov eax,255
 @Done:
 end;
 
@@ -2177,7 +2177,7 @@ asm
  bsr rax,rdi
 {$endif}
  jnz @Done
- xor eax,eax
+ mov eax,255
 @Done:
 end;
 
@@ -2401,33 +2401,49 @@ end;
 
 function BSFDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
 begin
- result:=PasMPBSFDebruijn32Table[(((Value and not (Value-1))*PasMPBSFDebruijn32Multiplicator) shr PasMPBSFDebruijn32Shift) and PasMPBSFDebruijn32Mask];
+ if Value=0 then begin
+  result:=255;
+ end else begin
+  result:=PasMPBSFDebruijn32Table[(((Value and not (Value-1))*PasMPBSFDebruijn32Multiplicator) shr PasMPBSFDebruijn32Shift) and PasMPBSFDebruijn32Mask];
+ end;
 end;
 
 function BSFQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
 begin
- result:=PasMPBSFDebruijn64Table[(((Value and not (Value-1))*PasMPBSFDebruijn64Multiplicator) shr PasMPBSFDebruijn64Shift) and PasMPBSFDebruijn64Mask];
+ if Value=0 then begin
+  result:=255;
+ end else begin
+  result:=PasMPBSFDebruijn64Table[(((Value and not (Value-1))*PasMPBSFDebruijn64Multiplicator) shr PasMPBSFDebruijn64Shift) and PasMPBSFDebruijn64Mask];
+ end;
 end;
 
 function BSRDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
 begin
- Value:=Value or (Value shr 1);
- Value:=Value or (Value shr 2);
- Value:=Value or (Value shr 4);
- Value:=Value or (Value shr 8);
- Value:=Value or (Value shr 16);
- result:=PasMPBSRDebruijn32Table[((Value*PasMPBSRDebruijn32Multiplicator) shr PasMPBSRDebruijn32Shift) and PasMPBSRDebruijn32Mask];
+ if Value=0 then begin
+  result:=255;
+ end else begin
+  Value:=Value or (Value shr 1);
+  Value:=Value or (Value shr 2);
+  Value:=Value or (Value shr 4);
+  Value:=Value or (Value shr 8);
+  Value:=Value or (Value shr 16);
+  result:=PasMPBSRDebruijn32Table[((Value*PasMPBSRDebruijn32Multiplicator) shr PasMPBSRDebruijn32Shift) and PasMPBSRDebruijn32Mask];
+ end;
 end;
 
 function BSRQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
 begin
- Value:=Value or (Value shr 1);
- Value:=Value or (Value shr 2);
- Value:=Value or (Value shr 4);
- Value:=Value or (Value shr 8);
- Value:=Value or (Value shr 16);
- Value:=Value or (Value shr 32);
- result:=PasMPBSRDebruijn64Table[((Value*PasMPBSRDebruijn64Multiplicator) shr PasMPBSRDebruijn64Shift) and PasMPBSRDebruijn64Mask];
+ if Value=0 then begin
+  result:=255;
+ end else begin
+  Value:=Value or (Value shr 1);
+  Value:=Value or (Value shr 2);
+  Value:=Value or (Value shr 4);
+  Value:=Value or (Value shr 8);
+  Value:=Value or (Value shr 16);
+  Value:=Value or (Value shr 32);
+  result:=PasMPBSRDebruijn64Table[((Value*PasMPBSRDebruijn64Multiplicator) shr PasMPBSRDebruijn64Shift) and PasMPBSRDebruijn64Mask];
+ end;
 end;
 
 function CLZDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
