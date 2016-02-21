@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-21-16-23-0000                       *
+ *                        Version 2016-02-21-16-32-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1058,7 +1058,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure SetSize(const NewSize:TPasMPInt32);
        function GetItem(const ItemIndex:TPasMPInt32;const ItemData:pointer):boolean;
        function SetItem(const ItemIndex:TPasMPInt32;const ItemData:pointer):boolean;
-       function Push(const ItemData:pointer):boolean;
+       function Push(const ItemData:pointer):TPasMPInt32;
        function Pop(const ItemData:pointer):boolean;
       public
        constructor Create(const AItemSize:TPasMPInt32);
@@ -1781,16 +1781,16 @@ function POPCNTQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; register; {$if
 {$endif}
 {$elseif not defined(fpc)}
 function UInt64Mul(a,b:TPasMPUInt64):TPasMPUInt64;{$ifdef cpu386}assembler; stdcall;{$else}{$ifdef cpu64}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
-function BSFDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
-function BSFQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
-function BSRDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
-function BSRQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
-function CLZDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
-function CLZQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
-function CTZDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
-function CTZQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
-function POPCNTDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
-function POPCNTQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function BSFDWord(Value:TPasMPUInt32):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
+function BSFQWord(Value:TPasMPUInt64):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
+function BSRDWord(Value:TPasMPUInt32):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
+function BSRQWord(Value:TPasMPUInt64):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
+function CLZDWord(Value:TPasMPUInt32):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
+function CLZQWord(Value:TPasMPUInt64):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
+function CTZDWord(Value:TPasMPUInt32):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
+function CTZQWord(Value:TPasMPUInt64):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
+function POPCNTDWord(Value:TPasMPUInt32):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
+function POPCNTQWord(Value:TPasMPUInt64):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
 {$ifend}
 
 {$ifdef fpc}
@@ -2402,7 +2402,7 @@ end;
 {$endif}
 {$endif}
 
-function BSFDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function BSFDWord(Value:TPasMPUInt32):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  if Value=0 then begin
   result:=255;
@@ -2411,7 +2411,7 @@ begin
  end;
 end;
 
-function BSFQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function BSFQWord(Value:TPasMPUInt64):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  if Value=0 then begin
   result:=255;
@@ -2420,7 +2420,7 @@ begin
  end;
 end;
 
-function BSRDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function BSRDWord(Value:TPasMPUInt32):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  if Value=0 then begin
   result:=255;
@@ -2434,7 +2434,7 @@ begin
  end;
 end;
 
-function BSRQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function BSRQWord(Value:TPasMPUInt64):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  if Value=0 then begin
   result:=255;
@@ -2449,7 +2449,7 @@ begin
  end;
 end;
 
-function CLZDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function CLZDWord(Value:TPasMPUInt32):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  if Value=0 then begin
   result:=32;
@@ -2463,7 +2463,7 @@ begin
  end;
 end;
 
-function CLZQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function CLZQWord(Value:TPasMPUInt64):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  if Value=0 then begin
   result:=64;
@@ -2478,7 +2478,7 @@ begin
  end;
 end;
 
-function CTZDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function CTZDWord(Value:TPasMPUInt32):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  if Value=0 then begin
   result:=32;
@@ -2487,7 +2487,7 @@ begin
  end;
 end;
 
-function CTZQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function CTZQWord(Value:TPasMPUInt64):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  if Value=0 then begin
   result:=64;
@@ -2496,7 +2496,7 @@ begin
  end;
 end;
 
-function POPCNTDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function POPCNTDWord(Value:TPasMPUInt32):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  Value:=Value-((Value shr 1) and longword($55555555));
  Value:=(Value and longword($33333333))+((Value shr 2) and longword($33333333));
@@ -2506,7 +2506,7 @@ begin
  result:=Value and $3f;
 end;
 
-function POPCNTQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function POPCNTQWord(Value:TPasMPUInt64):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  Value:=Value-((Value shr 1) and uint64($5555555555555555));
  Value:=(Value and uint64($3333333333333333))+((Value shr 2) and uint64($3333333333333333));
@@ -6255,7 +6255,6 @@ function TPasMPThreadSafeDynamicArray.SetItem(const ItemIndex:TPasMPInt32;const 
 var Position,PositionHighestBit,BucketIndex,BucketItemIndex:TPasMPInt32;
     Bucket:pointer;
     BucketItemOffset:TPasMPPtrUInt;
-    BucketItem:PPasMPInt32;
     BucketItemLock:PPasMPInt32;
 begin
  fLock.AcquireRead;
@@ -6282,13 +6281,56 @@ begin
  end;
 end;
 
-function TPasMPThreadSafeDynamicArray.Push(const ItemData:pointer):boolean;
+function TPasMPThreadSafeDynamicArray.Push(const ItemData:pointer):TPasMPInt32;
+var NewSize,Position,PositionHighestBit,OldCountBuckets,NewCountBuckets,BucketIndex,BucketSize,BucketItemIndex:TPasMPInt32;
+    Bucket:pointer;
+    BucketItemOffset:TPasMPPtrUInt;
+    BucketItemLock:PPasMPInt32;
 begin
- fLock.AcquireRead;
+ fLock.AcquireWrite;
  try
-  result:=false;
+  result:=fSize;
+
+  NewSize:=fSize+1;
+
+  Position:=NewSize+PasMPThreadSafeDynamicArrayFirstBucketSize;
+  PositionHighestBit:=TPasMPMath.BitScanReverse32(Position);
+
+  OldCountBuckets:=fCountBuckets;
+  NewCountBuckets:=PositionHighestBit-(PasMPThreadSafeDynamicArrayFirstBucketBits-1);
+
+  if OldCountBuckets<NewCountBuckets then begin
+   // Grow
+   for BucketIndex:=OldCountBuckets to NewCountBuckets-1 do begin
+    BucketSize:=PasMPThreadSafeDynamicArrayFirstBucketSize shl BucketIndex;
+    TPasMPMemory.AllocateAlignedMemory(Bucket,BucketSize*TPasMPPtrUInt(fInternalItemSize));
+    FillChar(Bucket^,BucketSize*TPasMPPtrUInt(fInternalItemSize),#0);
+    if assigned(Bucket) then begin
+     for BucketItemIndex:=0 to BucketSize-1 do begin
+      BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
+      InitializeItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
+      PPasMPInt32(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset+TPasMPPtrUInt(fItemLockOffset))))^:=0;
+     end;
+    end;
+    TPasMPInterlocked.Write(fBuckets[BucketIndex],Bucket);
+   end;
+  end;
+
+  fAllocated:=TPasMPInt32(1) shl PositionHighestBit;
+  fCountBuckets:=NewCountBuckets;
+  fSize:=NewSize;
+
+  BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
+  BucketItemLock:=PPasMPInt32(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset+TPasMPPtrUInt(fItemLockOffset))));
+  TPasMPMultipleReaderSingleWriterSpinLock.AcquireWrite(BucketItemLock^);
+  try
+   CopyItem(ItemData,pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
+  finally
+   TPasMPMultipleReaderSingleWriterSpinLock.ReleaseWrite(BucketItemLock^);
+  end;
+
  finally
-  fLock.ReleaseRead;
+  fLock.ReleaseWrite;
  end;
 end;
 
