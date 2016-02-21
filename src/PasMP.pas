@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-21-17-29-0000                       *
+ *                        Version 2016-02-21-17-44-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1040,7 +1040,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
      TPasMPThreadSafeDynamicArrayBuckets=array[0..PasMPThreadSafeDynamicArrayNumberOfBuckets-1] of pointer;
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPThreadSafeDynamicArray=class
+     TPasMPThreadSafeDynamicArray=class // only for PasMP internal usage
       private
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fSize:TPasMPInt32;
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fItemSize:TPasMPInt32;
@@ -1396,7 +1396,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 
 {$ifdef HasGenericsCollections}
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPTypedHashTable<KeyType,ValueType>=class(TPasMPThreadSafeHashTable)
+     TPasMPHashTable<KeyType,ValueType>=class(TPasMPThreadSafeHashTable)
       private
        fKeySize:TPasMPInt32;
        fValueSize:TPasMPInt32;
@@ -1421,6 +1421,22 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 {$endif}
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPDynamicArray=class(TPasMPThreadSafeDynamicArray)
+      protected
+       procedure InitializeItem(const ItemData:pointer); override;
+       procedure FinalizeItem(const ItemData:pointer); override;
+       procedure CopyItem(const Source,Destination:pointer); override;
+      public
+       constructor Create(const AItemSize:TPasMPInt32);
+       destructor Destroy; override;
+       function GetItem(const ItemIndex:TPasMPInt32;out ItemData):boolean;
+       function SetItem(const ItemIndex:TPasMPInt32;const ItemData):boolean;
+       function Push(const ItemData):TPasMPInt32;
+       function Pop(out ItemData):boolean;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPThread=class(TThread);
@@ -6135,7 +6151,6 @@ end;
 
 procedure TPasMPThreadSafeDynamicArray.CopyItem(const Source,Destination:pointer);
 begin
- Move(Source^,Destination^,fItemSize);
 end;
 
 procedure TPasMPThreadSafeDynamicArray.SetSize(const NewSize:TPasMPInt32);
@@ -7853,7 +7868,7 @@ begin
 end;
 
 {$ifdef HasGenericsCollections}
-constructor TPasMPTypedHashTable<KeyType,ValueType>.Create;
+constructor TPasMPHashTable<KeyType,ValueType>.Create;
 begin
  fKeySize:=SizeOf(KeyType);
  fValueSize:=SizeOf(ValueType);
@@ -7862,50 +7877,50 @@ begin
  inherited Create(fItemSize);
 end;
 
-destructor TPasMPTypedHashTable<KeyType,ValueType>.Destroy;
+destructor TPasMPHashTable<KeyType,ValueType>.Destroy;
 begin
  inherited Destroy;
 end;
 
-procedure TPasMPTypedHashTable<KeyType,ValueType>.InitializeItem(const Data:pointer);
+procedure TPasMPHashTable<KeyType,ValueType>.InitializeItem(const Data:pointer);
 begin
  Initialize(KeyType(Data^));
  Initialize(ValueType(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)+TPasMPPtrUInt(fKeySize)))^));
 end;
 
-procedure TPasMPTypedHashTable<KeyType,ValueType>.FinalizeItem(const Data:pointer);
+procedure TPasMPHashTable<KeyType,ValueType>.FinalizeItem(const Data:pointer);
 begin
  Finalize(KeyType(Data^));
  Finalize(ValueType(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)+TPasMPPtrUInt(fKeySize)))^));
 end;
 
-procedure TPasMPTypedHashTable<KeyType,ValueType>.CopyItem(const Source,Destination:pointer);
+procedure TPasMPHashTable<KeyType,ValueType>.CopyItem(const Source,Destination:pointer);
 begin
  KeyType(Destination^):=KeyType(Source^);
  ValueType(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Destination)+TPasMPPtrUInt(fKeySize)))^):=ValueType(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Source)+TPasMPPtrUInt(fKeySize)))^);
 end;
 
-procedure TPasMPTypedHashTable<KeyType,ValueType>.GetKey(const Data,Key:pointer);
+procedure TPasMPHashTable<KeyType,ValueType>.GetKey(const Data,Key:pointer);
 begin
  KeyType(Key^):=KeyType(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)))^);
 end;
 
-procedure TPasMPTypedHashTable<KeyType,ValueType>.SetKey(const Data,Key:pointer);
+procedure TPasMPHashTable<KeyType,ValueType>.SetKey(const Data,Key:pointer);
 begin
  KeyType(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)))^):=KeyType(Key^);
 end;
 
-procedure TPasMPTypedHashTable<KeyType,ValueType>.GetValue(const Data,Value:pointer);
+procedure TPasMPHashTable<KeyType,ValueType>.GetValue(const Data,Value:pointer);
 begin
  ValueType(Value^):=ValueType(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)+TPasMPPtrUInt(fKeySize)))^);
 end;
 
-procedure TPasMPTypedHashTable<KeyType,ValueType>.SetValue(const Data,Value:pointer);
+procedure TPasMPHashTable<KeyType,ValueType>.SetValue(const Data,Value:pointer);
 begin
  ValueType(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Data)+TPasMPPtrUInt(fKeySize)))^):=ValueType(Value^);
 end;
 
-function TPasMPTypedHashTable<KeyType,ValueType>.HashKey(const Key:pointer):TPasMPThreadSafeHashTableHash;
+function TPasMPHashTable<KeyType,ValueType>.HashKey(const Key:pointer):TPasMPThreadSafeHashTableHash;
 begin
  result:=fComparer.GetHashCode(KeyType(Key^));
  if result=0 then begin
@@ -7913,26 +7928,69 @@ begin
  end;
 end;
 
-function TPasMPTypedHashTable<KeyType,ValueType>.CompareKey(const Data,Key:pointer):boolean;
+function TPasMPHashTable<KeyType,ValueType>.CompareKey(const Data,Key:pointer):boolean;
 begin
  result:=fComparer.Equals(KeyType(Data^),KeyType(Key^));
 end;
 
-function TPasMPTypedHashTable<KeyType,ValueType>.GetKeyValue(const Key:KeyType;out Value:ValueType):boolean;
+function TPasMPHashTable<KeyType,ValueType>.GetKeyValue(const Key:KeyType;out Value:ValueType):boolean;
 begin
  result:=inherited GetKeyValue(@Key,@Value);
 end;
 
-function TPasMPTypedHashTable<KeyType,ValueType>.SetKeyValue(const Key:KeyType;const Value:ValueType):boolean;
+function TPasMPHashTable<KeyType,ValueType>.SetKeyValue(const Key:KeyType;const Value:ValueType):boolean;
 begin
  result:=inherited SetKeyValue(@Key,@Value);
 end;
 
-function TPasMPTypedHashTable<KeyType,ValueType>.DeleteKey(const Key:KeyType):boolean;
+function TPasMPHashTable<KeyType,ValueType>.DeleteKey(const Key:KeyType):boolean;
 begin
  result:=inherited DeleteKey(@Key);
 end;
 {$endif}
+
+constructor TPasMPDynamicArray.Create(const AItemSize:TPasMPInt32);
+begin
+ inherited Create(AItemSize);
+end;
+
+destructor TPasMPDynamicArray.Destroy;
+begin
+ inherited Destroy;
+end;
+
+procedure TPasMPDynamicArray.InitializeItem(const ItemData:pointer);
+begin
+end;
+
+procedure TPasMPDynamicArray.FinalizeItem(const ItemData:pointer);
+begin
+end;
+
+procedure TPasMPDynamicArray.CopyItem(const Source,Destination:pointer);
+begin
+ Move(Source^,Destination^,ItemSize);
+end;
+
+function TPasMPDynamicArray.GetItem(const ItemIndex:TPasMPInt32;out ItemData):boolean;
+begin
+ result:=inherited GetItem(ItemIndex,@ItemData);
+end;
+
+function TPasMPDynamicArray.SetItem(const ItemIndex:TPasMPInt32;const ItemData):boolean;
+begin
+ result:=inherited SetItem(ItemIndex,@ItemData);
+end;
+
+function TPasMPDynamicArray.Push(const ItemData):TPasMPInt32;
+begin
+ result:=inherited Push(@ItemData);
+end;
+
+function TPasMPDynamicArray.Pop(out ItemData):boolean;
+begin
+ result:=inherited Pop(@ItemData);
+end;
 
 constructor TPasMPJobTask.Create;
 begin
