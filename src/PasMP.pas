@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-21-01-25-0000                       *
+ *                        Version 2016-02-21-01-35-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1760,9 +1760,9 @@ function CTZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register;
 function CLZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register;
 function CTZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall;
 function CLZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall;
+function POPCNTDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register;
+function POPCNTQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; stdcall;
 {$endif}
-function PopulationCount32(Value:TPasMPUInt32):TPasMPUInt32; assembler; register;
-function PopulationCount64(Value:TPasMPUInt64):TPasMPUInt32; assembler; stdcall;
 {$elseif defined(cpux86_64)}
 {$ifndef fpc}
 function BSFDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
@@ -1773,9 +1773,9 @@ function CTZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef 
 function CLZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 function CTZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 function CLZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function POPCNTDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function POPCNTQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 {$endif}
-function PopulationCount32(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
-function PopulationCount64(Value:TPasMPUInt64):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 {$elseif not defined(fpc)}
 function UInt64Mul(a,b:TPasMPUInt64):TPasMPUInt64;{$ifdef cpu386}assembler; stdcall;{$else}{$ifdef cpu64}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
 function BSFDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
@@ -1786,8 +1786,8 @@ function CLZDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif
 function CLZQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
 function CTZDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
 function CTZQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
-function PopulationCount32(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
-function PopulationCount64(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function POPCNTDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function POPCNTQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
 {$ifend}
 
 {$ifdef fpc}
@@ -2007,9 +2007,8 @@ asm
  mov eax,63
  sub eax,edx
 end;
-{$endif}
 
-function PopulationCount32(Value:TPasMPUInt32):TPasMPUInt32; assembler; register;
+function POPCNTDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register;
 asm
  // result:=Value-((Value shr 1) and $55555555);
  mov edx,eax
@@ -2044,7 +2043,7 @@ asm
  and eax,$3f
 end;
 
-function PopulationCount64(Value:TPasMPUInt64):TPasMPUInt32; assembler; stdcall;
+function POPCNTQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; stdcall;
 asm
  mov eax,dword [Value+0]
  mov ecx,dword [Value+4]
@@ -2117,6 +2116,7 @@ asm
 
  add eax,ecx
 end;
+{$endif}
 
 {$elseif defined(cpux86_64)}
 
@@ -2258,9 +2258,8 @@ asm
  sub rax,rdi
 {$endif}
 end;
-{$endif}
 
-function PopulationCount32(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function POPCNTDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 asm
 {$ifndef fpc}
  .NOFRAME
@@ -2304,7 +2303,7 @@ asm
  and eax,$3f
 end;
 
-function PopulationCount64(Value:TPasMPUInt64):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function POPCNTQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 asm
 {$ifndef fpc}
  .NOFRAME
@@ -2355,8 +2354,10 @@ asm
  // result:=result and $7f;
  and rax,$7f
 end;
+{$endif}
 
 {$elseif not defined(fpc)}
+
 function UInt64Mul(a,b:TPasMPUInt64):TPasMPUInt64;{$ifdef cpu386}assembler; stdcall;
 asm
  push ebx
@@ -2476,7 +2477,7 @@ begin
  end;
 end;
 
-function PopulationCount32(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function POPCNTDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  Value:=Value-((Value shr 1) and longword($55555555));
  Value:=(Value and longword($33333333))+((Value shr 2) and longword($33333333));
@@ -2486,7 +2487,7 @@ begin
  result:=Value and $3f;
 end;
 
-function PopulationCount64(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function POPCNTQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  Value:=Value-((Value shr 1) and uint64($5555555555555555));
  Value:=(Value and uint64($3333333333333333))+((Value shr 2) and uint64($3333333333333333));
@@ -3010,179 +3011,109 @@ end;
 
 class function TPasMPMath.PopulationCount32(Value:TPasMPUInt32):TPasMPInt32;
 begin
- Value:=Value-((Value shr 1) and TPasMPUInt32($55555555));
- Value:=(Value and TPasMPUInt32($33333333))+((Value shr 2) and TPasMPUInt32($33333333));
- Value:=(Value+(Value shr 4)) and TPasMPUInt32($0f0f0f0f);
- inc(Value,Value shr 8);
- inc(Value,Value shr 16);
- result:=Value and $3f;
+{$ifdef fpc}
+ result:=PopCnt(Value);
+{$else}
+ result:=POPCNTDWord(Value);
+{$endif}
 end;
 
 class function TPasMPMath.PopulationCount64(Value:TPasMPUInt64):TPasMPInt32;
 begin
- Value:=Value-((Value shr 1) and TPasMPUInt64($5555555555555555));
- Value:=(Value and TPasMPUInt64($3333333333333333))+((Value shr 2) and TPasMPUInt64($3333333333333333));
- Value:=(Value+(Value shr 4)) and TPasMPUInt64($0f0f0f0f0f0f0f0f);
- inc(Value,Value shr 8);
- inc(Value,Value shr 16);
- inc(Value,Value shr 32);
- result:=Value and $7f;
+{$ifdef fpc}
+ result:=PopCnt(Value);
+{$else}
+ result:=POPCNTQWord(Value);
+{$endif}
 end;
 
 class function TPasMPMath.PopulationCount(Value:TPasMPPtrUInt):TPasMPInt32;
-{$ifdef CPU64}
 begin
- Value:=Value-((Value shr 1) and TPasMPPtrUInt($5555555555555555));
- Value:=(Value and TPasMPPtrUInt($3333333333333333))+((Value shr 2) and TPasMPPtrUInt($3333333333333333));
- Value:=(Value+(Value shr 4)) and TPasMPPtrUInt($0f0f0f0f0f0f0f0f);
- inc(Value,Value shr 8);
- inc(Value,Value shr 16);
- inc(Value,Value shr 32);
- result:=Value and $7f;
-end;
+{$ifdef fpc}
+ result:=PopCnt(Value);
 {$else}
-begin
- Value:=Value-((Value shr 1) and TPasMPPtrUInt($55555555));
- Value:=(Value and TPasMPPtrUInt($33333333))+((Value shr 2) and TPasMPPtrUInt($33333333));
- Value:=(Value+(Value shr 4)) and TPasMPPtrUInt($0f0f0f0f);
- inc(Value,Value shr 8);
- inc(Value,Value shr 16);
- result:=Value and $3f;
-end;
+{$ifdef CPU64}
+ result:=POPCNTQWord(Value);
+{$else}
+ result:=POPCNTDWord(Value);
 {$endif}
+{$endif}
+end;
 
 class function TPasMPMath.BitScanForward32(Value:TPasMPUInt32):TPasMPInt32;
 begin
- result:=PasMPBSFDebruijn32Table[(((Value and not (Value-1))*PasMPBSFDebruijn32Multiplicator) shr PasMPBSFDebruijn32Shift) and PasMPBSFDebruijn32Mask];
+ result:=BSFDWord(Value);
 end;
 
 class function TPasMPMath.BitScanForward64(Value:TPasMPUInt64):TPasMPInt32;
 begin
- result:=PasMPBSFDebruijn64Table[(((Value and not (Value-1))*PasMPBSFDebruijn64Multiplicator) shr PasMPBSFDebruijn64Shift) and PasMPBSFDebruijn64Mask];
+ result:=BSFQWord(Value);
 end;
 
 class function TPasMPMath.BitScanForward(Value:TPasMPPtrUInt):TPasMPInt32;
 begin
 {$ifdef CPU64}
- result:=PasMPBSFDebruijn64Table[(((Value and not (Value-1))*PasMPBSFDebruijn64Multiplicator) shr PasMPBSFDebruijn64Shift) and PasMPBSFDebruijn64Mask];
+ result:=BSFQWord(Value);
 {$else}
- result:=PasMPBSFDebruijn32Table[(((Value and not (Value-1))*PasMPBSFDebruijn32Multiplicator) shr PasMPBSFDebruijn32Shift) and PasMPBSFDebruijn32Mask];
+ result:=BSFDWord(Value);
 {$endif}
 end;
 
 class function TPasMPMath.BitScanReverse32(Value:TPasMPUInt32):TPasMPInt32;
 begin
- Value:=Value or (Value shr 1);
- Value:=Value or (Value shr 2);
- Value:=Value or (Value shr 4);
- Value:=Value or (Value shr 8);
- Value:=Value or (Value shr 16);
- result:=PasMPBSRDebruijn32Table[((Value*PasMPBSRDebruijn32Multiplicator) shr PasMPBSRDebruijn32Shift) and PasMPBSRDebruijn32Mask];
+ result:=BSRDWord(Value);
 end;
 
 class function TPasMPMath.BitScanReverse64(Value:TPasMPUInt64):TPasMPInt32;
 begin
- Value:=Value or (Value shr 1);
- Value:=Value or (Value shr 2);
- Value:=Value or (Value shr 4);
- Value:=Value or (Value shr 8);
- Value:=Value or (Value shr 16);
- Value:=Value or (Value shr 32);
- result:=PasMPBSRDebruijn64Table[((Value*PasMPBSRDebruijn64Multiplicator) shr PasMPBSRDebruijn64Shift) and PasMPBSRDebruijn64Mask];
+ result:=BSRQWord(Value);
 end;
 
 class function TPasMPMath.BitScanReverse(Value:TPasMPPtrUInt):TPasMPInt32;
 begin
- Value:=Value or (Value shr 1);
- Value:=Value or (Value shr 2);
- Value:=Value or (Value shr 4);
- Value:=Value or (Value shr 8);
- Value:=Value or (Value shr 16);
 {$ifdef CPU64}
- Value:=Value or (Value shr 32);
- result:=PasMPBSRDebruijn64Table[((Value*PasMPBSRDebruijn64Multiplicator) shr PasMPBSRDebruijn64Shift) and PasMPBSRDebruijn64Mask];
+ result:=BSRQWord(Value);
 {$else}
- result:=PasMPBSRDebruijn32Table[((Value*PasMPBSRDebruijn32Multiplicator) shr PasMPBSRDebruijn32Shift) and PasMPBSRDebruijn32Mask];
+ result:=BSRDWord(Value);
 {$endif}
 end;
 
 class function TPasMPMath.CountLeadingZeros32(Value:TPasMPUInt32):TPasMPInt32;
 begin
- if Value=0 then begin
-  result:=32;
- end else begin
-  Value:=Value or (Value shr 1);
-  Value:=Value or (Value shr 2);
-  Value:=Value or (Value shr 4);
-  Value:=Value or (Value shr 8);
-  Value:=Value or (Value shr 16);
-  result:=PasMPCLZDebruijn32Table[((TPasMPUInt32(Value)*PasMPCLZDebruijn32Multiplicator) shr PasMPCLZDebruijn32Shift) and PasMPCLZDebruijn32Mask];
- end;
+ result:=CLZDWord(Value);
 end;
 
 class function TPasMPMath.CountLeadingZeros64(Value:TPasMPUInt64):TPasMPInt32;
 begin
- if Value=0 then begin
-  result:=64;
- end else begin
-  Value:=Value or (Value shr 1);
-  Value:=Value or (Value shr 2);
-  Value:=Value or (Value shr 4);
-  Value:=Value or (Value shr 8);
-  Value:=Value or (Value shr 16);
-  Value:=Value or (Value shr 32);
-  result:=PasMPCLZDebruijn64Table[((Value*PasMPCLZDebruijn64Multiplicator) shr PasMPCLZDebruijn64Shift) and PasMPCLZDebruijn64Mask];
- end;
+ result:=CLZQWord(Value);
 end;
 
 class function TPasMPMath.CountLeadingZeros(Value:TPasMPPtrUInt):TPasMPInt32;
 begin
- if Value=0 then begin
-  result:=SizeOf(TPasMPPtrUInt) shl 3;
- end else begin
-  Value:=Value or (Value shr 1);
-  Value:=Value or (Value shr 2);
-  Value:=Value or (Value shr 4);
-  Value:=Value or (Value shr 8);
-  Value:=Value or (Value shr 16);
 {$ifdef CPU64}
-  Value:=Value or (Value shr 32);
-  result:=PasMPCLZDebruijn64Table[((Value*PasMPCLZDebruijn64Multiplicator) shr PasMPCLZDebruijn64Shift) and PasMPCLZDebruijn64Mask];
+ result:=CLZQWord(Value);
 {$else}
-  result:=PasMPCLZDebruijn32Table[((TPasMPUInt32(Value)*PasMPCLZDebruijn32Multiplicator) shr PasMPCLZDebruijn32Shift) and PasMPCLZDebruijn32Mask];
+ result:=CLZDWord(Value);
 {$endif}
- end;
 end;
 
 class function TPasMPMath.CountTrailingZeros32(Value:TPasMPUInt32):TPasMPInt32;
 begin
- if Value=0 then begin
-  result:=32;
- end else begin
-  result:=PasMPCTZDebruijn32Table[((TPasMPUInt32(Value and (-Value))*PasMPCTZDebruijn32Multiplicator) shr PasMPCTZDebruijn32Shift) and PasMPCTZDebruijn32Mask];
- end;
+ result:=CTZDWord(Value);
 end;
 
 class function TPasMPMath.CountTrailingZeros64(Value:TPasMPUInt64):TPasMPInt32;
 begin
- if Value=0 then begin
-  result:=64;
- end else begin
-  result:=PasMPCTZDebruijn64Table[(((Value and (-Value))*PasMPCTZDebruijn64Multiplicator) shr PasMPCTZDebruijn64Shift) and PasMPCTZDebruijn64Mask];
- end;
+ result:=CTZQWord(Value);
 end;
 
 class function TPasMPMath.CountTrailingZeros(Value:TPasMPPtrUInt):TPasMPInt32;
 begin
- if Value=0 then begin
-  result:=SizeOf(TPasMPPtrUInt) shl 3;
- end else begin
 {$ifdef CPU64}
-  result:=PasMPCTZDebruijn64Table[(((Value and (-Value))*PasMPCTZDebruijn64Multiplicator) shr PasMPCTZDebruijn64Shift) and PasMPCTZDebruijn64Mask];
+ result:=CTZQWord(Value);
 {$else}
-  result:=PasMPCTZDebruijn32Table[((TPasMPUInt32(Value and (-Value))*PasMPCTZDebruijn32Multiplicator) shr PasMPCTZDebruijn32Shift) and PasMPCTZDebruijn32Mask];
+ result:=CTZDWord(Value);
 {$endif}
- end;
 end;
 
 class function TPasMPMath.RoundUpToPowerOfTwo32(Value:TPasMPUInt32):TPasMPUInt32;
