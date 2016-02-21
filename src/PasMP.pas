@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-21-01-13-0000                       *
+ *                        Version 2016-02-21-01-25-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1750,6 +1750,53 @@ procedure FallbackMemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 {$ifend}
 {$endif}
 
+{$if defined(cpu386)}
+{$ifndef fpc}
+function BSFDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register;
+function BSRDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register;
+function BSFQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall;
+function BSRQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall;
+function CTZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register;
+function CLZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register;
+function CTZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall;
+function CLZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall;
+{$endif}
+function PopulationCount32(Value:TPasMPUInt32):TPasMPUInt32; assembler; register;
+function PopulationCount64(Value:TPasMPUInt64):TPasMPUInt32; assembler; stdcall;
+{$elseif defined(cpux86_64)}
+{$ifndef fpc}
+function BSFDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function BSRDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function BSFQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function BSRQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function CTZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function CLZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function CTZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function CLZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+{$endif}
+function PopulationCount32(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function PopulationCount64(Value:TPasMPUInt64):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+{$elseif not defined(fpc)}
+function UInt64Mul(a,b:TPasMPUInt64):TPasMPUInt64;{$ifdef cpu386}assembler; stdcall;{$else}{$ifdef cpu64}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
+function BSFDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function BSFQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function BSRDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function BSRQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function CLZDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function CLZQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function CTZDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function CTZQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function PopulationCount32(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
+function PopulationCount64(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+{$ifend}
+
+{$ifdef fpc}
+function CTZDWord(Value:TPasMPUInt32):TPasMPUInt8; {$ifdef CAN_INLINE}inline;{$endif}
+function CLZDWord(Value:TPasMPUInt32):TPasMPUInt8; {$ifdef CAN_INLINE}inline;{$endif}
+function CTZQWord(Value:TPasMPUInt64):TPasMPUInt8; {$ifdef CAN_INLINE}inline;{$endif}
+function CLZQWord(Value:TPasMPUInt64):TPasMPUInt8; {$ifdef CAN_INLINE}inline;{$endif}
+{$endif}
+
 implementation
 
 const PasMPBarrierFlag=TPasMPInt32(1) shl 30;
@@ -1865,6 +1912,628 @@ function pthread_rwlock_unlock(__rwlock:Ppthread_rwlock_t):TPasMPInt32; cdecl; e
 {$endif}
 
 {$endif}
+{$endif}
+
+{$if defined(cpu386)}
+{$ifndef fpc}
+function BSFDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+asm
+ bsf eax,eax
+ jnz @Done
+ xor eax,eax
+@Done:
+end;
+
+function BSRDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+asm
+ bsr eax,eax
+ jnz @Done
+ xor eax,eax
+@Done:
+end;
+
+function BSFQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall; {$ifdef fpc}nostackframe;{$endif}
+asm
+ bsf eax,dword ptr [Value+0]
+ jnz @Done
+ bsf eax,dword ptr [Value+4]
+ jz @Fail
+ add eax,32
+ jmp @Done
+@Fail:
+ xor eax,eax
+@Done:
+end;
+
+function BSRQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall; {$ifdef fpc}nostackframe;{$endif}
+asm
+ bsr eax,dword ptr [Value+4]
+ jz @LowPart
+ add eax,32
+ jmp @Done
+@LowPart:
+ xor ecx,ecx
+ bsr eax,dword ptr [Value+0]
+ jnz @Done
+ xor eax,eax
+@Done:
+end;
+
+function CTZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+asm
+ bsf eax,eax
+ jnz @Done
+ mov eax,32
+@Done:
+end;
+
+function CLZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+asm
+ bsr edx,eax
+ jnz @Done
+ xor edx,edx
+ not edx
+@Done:
+ mov eax,31
+ sub eax,edx
+end;
+
+function CTZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall; {$ifdef fpc}nostackframe;{$endif}
+asm
+ bsf eax,dword ptr [Value+0]
+ jnz @Done
+ bsf eax,dword ptr [Value+4]
+ jz @Fail
+ add eax,32
+ jmp @Done
+@Fail:
+ xor eax,eax
+ not eax
+@Done:
+end;
+
+function CLZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall; {$ifdef fpc}nostackframe;{$endif}
+asm
+ bsr edx,dword ptr [Value+4]
+ jz @LowPart
+ add edx,32
+ jmp @Done
+@LowPart:
+ bsr edx,dword ptr [Value+0]
+ jnz @Done
+ xor edx,edx
+ not edx
+@Done:
+ mov eax,63
+ sub eax,edx
+end;
+{$endif}
+
+function PopulationCount32(Value:TPasMPUInt32):TPasMPUInt32; assembler; register;
+asm
+ // result:=Value-((Value shr 1) and $55555555);
+ mov edx,eax
+ shr eax,1
+ and eax,$55555555
+ sub edx,eax
+
+ // result:=(result and $33333333)+((result shr 2) and $33333333);
+ mov eax,edx
+ shr edx,2
+ and eax,$33333333
+ and edx,$33333333
+ add eax,edx
+
+ // result:=(result+(result shr 4)) and $0f0f0f0f;
+ mov edx,eax
+ shr eax,4
+ add eax,edx
+ and eax,$0f0f0f0f
+
+ // inc(result,result shr 8);
+ mov edx,eax
+ shr edx,8
+ add eax,edx
+
+ // inc(result,result shr 16);
+ mov edx,eax
+ shr edx,16
+ add eax,edx
+
+ // result:=result and $3f;
+ and eax,$3f
+end;
+
+function PopulationCount64(Value:TPasMPUInt64):TPasMPUInt32; assembler; stdcall;
+asm
+ mov eax,dword [Value+0]
+ mov ecx,dword [Value+4]
+
+ // result:=Value-((Value shr 1) and $55555555);
+ mov edx,eax
+ shr eax,1
+ and eax,$55555555
+ sub edx,eax
+
+ // result:=(result and $33333333)+((result shr 2) and $33333333);
+ mov eax,edx
+ shr edx,2
+ and eax,$33333333
+ and edx,$33333333
+ add eax,edx
+
+ // result:=(result+(result shr 4)) and $0f0f0f0f;
+ mov edx,eax
+ shr eax,4
+ add eax,edx
+ and eax,$0f0f0f0f
+
+ // inc(result,result shr 8);
+ mov edx,eax
+ shr edx,8
+ add eax,edx
+
+ // inc(result,result shr 16);
+ mov edx,eax
+ shr edx,16
+ add eax,edx
+
+ // result:=result and $3f;
+ and eax,$3f
+
+ xchg ecx,eax
+
+ // result:=Value-((Value shr 1) and $55555555);
+ mov edx,eax
+ shr eax,1
+ and eax,$55555555
+ sub edx,eax
+
+ // result:=(result and $33333333)+((result shr 2) and $33333333);
+ mov eax,edx
+ shr edx,2
+ and eax,$33333333
+ and edx,$33333333
+ add eax,edx
+
+ // result:=(result+(result shr 4)) and $0f0f0f0f;
+ mov edx,eax
+ shr eax,4
+ add eax,edx
+ and eax,$0f0f0f0f
+
+ // inc(result,result shr 8);
+ mov edx,eax
+ shr edx,8
+ add eax,edx
+
+ // inc(result,result shr 16);
+ mov edx,eax
+ shr edx,16
+ add eax,edx
+
+ // result:=result and $3f;
+ and eax,$3f
+
+ add eax,ecx
+end;
+
+{$elseif defined(cpux86_64)}
+
+{$ifndef fpc}
+function BSFDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+asm
+{$ifndef fpc}
+ .NOFRAME
+{$endif}
+{$ifdef Windows}
+ bsf eax,ecx
+{$else}
+ bsf eax,edi
+{$endif}
+ jnz @Done
+  xor eax,eax
+ @Done:
+end;
+
+function BSRDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+asm
+{$ifndef fpc}
+ .NOFRAME
+{$endif}
+{$ifdef Windows}
+ bsr eax,ecx
+{$else}
+ bsr eax,edi
+{$endif}
+ jnz @Done
+ xor eax,eax
+@Done:
+end;
+
+function BSFQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+asm
+{$ifndef fpc}
+ .NOFRAME
+{$endif}
+{$ifdef Windows}
+ bsf rax,rcx
+{$else}
+ bsf rax,rdi
+{$endif}
+ jnz @Done
+ xor eax,eax
+@Done:
+end;
+
+function BSRQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+asm
+{$ifndef fpc}
+ .NOFRAME
+{$endif}
+{$ifdef Windows}
+ bsr rax,rcx
+{$else}
+ bsr rax,rdi
+{$endif}
+ jnz @Done
+ xor eax,eax
+@Done:
+end;
+
+function CTZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+asm
+{$ifndef fpc}
+ .NOFRAME
+{$endif}
+{$ifdef Windows}
+ bsf eax,ecx
+{$else}
+ bsf eax,edi
+{$endif}
+ jnz @Done
+ mov eax,32
+@Done:
+end;
+
+function CLZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+asm
+{$ifndef fpc}
+ .NOFRAME
+{$endif}
+{$ifdef Windows}
+ bsr ecx,ecx
+ jnz @Done
+ xor ecx,ecx
+ not ecx
+@Done:
+ mov eax,31
+ sub eax,ecx
+{$else}
+ bsr edi,edi
+ jnz @Done
+ xor edi,edi
+ not edi
+@Done:
+ mov eax,31
+ sub eax,edi
+{$endif}
+end;
+
+function CTZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+asm
+{$ifndef fpc}
+ .NOFRAME
+{$endif}
+{$ifdef Windows}
+ bsf rax,rcx
+{$else}
+ bsf rax,rdi
+{$endif}
+ jnz @Done
+ mov eax,64
+@Done:
+end;
+
+function CLZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+asm
+{$ifndef fpc}
+ .NOFRAME
+{$endif}
+{$ifdef Windows}
+ bsr rcx,rcx
+ jnz @Done
+ xor rcx,rcx
+ not rcx
+@Done:
+ mov rax,63
+ sub rax,rcx
+{$else}
+ bsr rdi,rdi
+ jnz @Done
+ xor rdi,rdi
+ not rdi
+@Done:
+ mov rax,63
+ sub rax,rdi
+{$endif}
+end;
+{$endif}
+
+function PopulationCount32(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+asm
+{$ifndef fpc}
+ .NOFRAME
+{$endif}
+{$ifdef Windows}
+ mov eax,ecx
+{$else}
+ mov eax,edi
+{$endif}
+
+ // result:=Value-((Value shr 1) and $55555555);
+ mov edx,eax
+ shr eax,1
+ and eax,$55555555
+ sub edx,eax
+
+ // result:=(result and $33333333)+((result shr 2) and $33333333);
+ mov eax,edx
+ shr edx,2
+ and eax,$33333333
+ and edx,$33333333
+ add eax,edx
+
+ // result:=(result+(result shr 4)) and $0f0f0f0f;
+ mov edx,eax
+ shr eax,4
+ add eax,edx
+ and eax,$0f0f0f0f
+
+ // inc(result,result shr 8);
+ mov edx,eax
+ shr edx,8
+ add eax,edx
+
+ // inc(result,result shr 16);
+ mov edx,eax
+ shr edx,16
+ add eax,edx
+
+ // result:=result and $3f;
+ and eax,$3f
+end;
+
+function PopulationCount64(Value:TPasMPUInt64):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+asm
+{$ifndef fpc}
+ .NOFRAME
+{$endif}
+{$ifdef Windows}
+ mov rax,rcx
+{$else}
+ mov rax,rdi
+{$endif}
+
+ // result:=Value-((Value shr 1) and $5555555555555555);
+ mov rdx,rax
+ shr rax,1
+ mov r8,$5555555555555555
+ and rax,r8
+ sub rdx,rax
+
+ // result:=(result and $3333333333333333)+((result shr 2) and $3333333333333333);
+ mov rax,rdx
+ shr rdx,2
+ mov r8,$3333333333333333
+ and rax,r8
+ and rdx,r8
+ add rax,rdx
+
+ // result:=(result+(result shr 4)) and $0f0f0f0f0f0f0f0f;
+ mov rdx,rax
+ shr rax,4
+ add rax,rdx
+ mov r8,$0f0f0f0f0f0f0f0f
+ and rax,r8
+
+ // inc(result,result shr 8);
+ mov rdx,rax
+ shr rdx,8
+ add rax,rdx
+
+ // inc(result,result shr 16);
+ mov rdx,rax
+ shr rdx,16
+ add rax,rdx
+
+ // inc(result,result shr 32);
+ mov rdx,rax
+ shr rdx,32
+ add rax,rdx
+
+ // result:=result and $7f;
+ and rax,$7f
+end;
+
+{$elseif not defined(fpc)}
+function UInt64Mul(a,b:TPasMPUInt64):TPasMPUInt64;{$ifdef cpu386}assembler; stdcall;
+asm
+ push ebx
+ push esi
+ push edi
+  mov ebx,dword ptr [b+0]
+  mov ecx,dword ptr [b+4]
+  mov esi,dword ptr [a+0]
+  mov edi,dword ptr [a+4]
+  mov eax,edi
+  mul ebx
+  xchg eax,ebx
+  mul esi
+  xchg esi,eax
+  add ebx,edx
+  mul ecx
+  lea edx,[eax+ebx]
+  mov eax,esi
+ pop edi
+ pop esi
+ pop ebx
+end;
+{$else}
+{$ifdef cpu64}{$ifdef CAN_INLINE}inline;{$endif}
+begin
+ result:=a*b;
+end;
+{$else}
+var al,ah,bl,bh,zl,zh:TPasMPUInt32;
+begin
+ al:=a and $ffffffff;
+ ah:=a shr 32;
+ bl:=b and $ffffffff;
+ bh:=b shr 32;
+ zl:=al*bl;
+ zh:=(al*bh)+(ah*bl)+(((al shr 1)*(bl shr 1)) shr 30);
+ result:=(uint64(zh) shl 32) or uint64(zl);
+end;
+{$endif}
+{$endif}
+
+function BSFDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ result:=PasMPBSFDebruijn32Table[(((Value and not (Value-1))*PasMPBSFDebruijn32Multiplicator) shr PasMPBSFDebruijn32Shift) and PasMPBSFDebruijn32Mask];
+end;
+
+function BSFQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ result:=PasMPBSFDebruijn64Table[(((Value and not (Value-1))*PasMPBSFDebruijn64Multiplicator) shr PasMPBSFDebruijn64Shift) and PasMPBSFDebruijn64Mask];
+end;
+
+function BSRDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ Value:=Value or (Value shr 1);
+ Value:=Value or (Value shr 2);
+ Value:=Value or (Value shr 4);
+ Value:=Value or (Value shr 8);
+ Value:=Value or (Value shr 16);
+ result:=PasMPBSRDebruijn32Table[((Value*PasMPBSRDebruijn32Multiplicator) shr PasMPBSRDebruijn32Shift) and PasMPBSRDebruijn32Mask];
+end;
+
+function BSRQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ Value:=Value or (Value shr 1);
+ Value:=Value or (Value shr 2);
+ Value:=Value or (Value shr 4);
+ Value:=Value or (Value shr 8);
+ Value:=Value or (Value shr 16);
+ Value:=Value or (Value shr 32);
+ result:=PasMPBSRDebruijn64Table[((Value*PasMPBSRDebruijn64Multiplicator) shr PasMPBSRDebruijn64Shift) and PasMPBSRDebruijn64Mask];
+end;
+
+function CLZDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ if Value=0 then begin
+  result:=32;
+ end else begin
+  Value:=Value or (Value shr 1);
+  Value:=Value or (Value shr 2);
+  Value:=Value or (Value shr 4);
+  Value:=Value or (Value shr 8);
+  Value:=Value or (Value shr 16);
+  result:=PasMPCLZDebruijn32Table[((longword(Value)*PasMPCLZDebruijn32Multiplicator) shr PasMPCLZDebruijn32Shift) and PasMPCLZDebruijn32Mask];
+ end;
+end;
+
+function CLZQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ if Value=0 then begin
+  result:=64;
+ end else begin
+  Value:=Value or (Value shr 1);
+  Value:=Value or (Value shr 2);
+  Value:=Value or (Value shr 4);
+  Value:=Value or (Value shr 8);
+  Value:=Value or (Value shr 16);
+  Value:=Value or (Value shr 32);
+  result:=PasMPCLZDebruijn64Table[((Value*PasMPCLZDebruijn64Multiplicator) shr PasMPCLZDebruijn64Shift) and PasMPCLZDebruijn64Mask];
+ end;
+end;
+
+function CTZDWord(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ if Value=0 then begin
+  result:=32;
+ end else begin
+  result:=PasMPCTZDebruijn32Table[((longword(Value and (-Value))*PasMPCTZDebruijn32Multiplicator) shr PasMPCTZDebruijn32Shift) and PasMPCTZDebruijn32Mask];
+ end;
+end;
+
+function CTZQWord(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ if Value=0 then begin
+  result:=64;
+ end else begin
+  result:=PasMPCTZDebruijn64Table[(((Value and (-Value))*PasMPCTZDebruijn64Multiplicator) shr PasMPCTZDebruijn64Shift) and PasMPCTZDebruijn64Mask];
+ end;
+end;
+
+function PopulationCount32(Value:TPasMPUInt32):longint; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ Value:=Value-((Value shr 1) and longword($55555555));
+ Value:=(Value and longword($33333333))+((Value shr 2) and longword($33333333));
+ Value:=(Value+(Value shr 4)) and longword($0f0f0f0f);
+ inc(Value,Value shr 8);
+ inc(Value,Value shr 16);
+ result:=Value and $3f;
+end;
+
+function PopulationCount64(Value:TPasMPUInt64):longint; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ Value:=Value-((Value shr 1) and uint64($5555555555555555));
+ Value:=(Value and uint64($3333333333333333))+((Value shr 2) and uint64($3333333333333333));
+ Value:=(Value+(Value shr 4)) and uint64($0f0f0f0f0f0f0f0f);
+ inc(Value,Value shr 8);
+ inc(Value,Value shr 16);
+ inc(Value,Value shr 32);
+ result:=Value and $7f;
+end;
+{$ifend}
+
+{$ifdef fpc}
+function CTZDWord(Value:TPasMPUInt32):TPasMPUInt8; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ if Value=0 then begin
+  result:=32;
+ end else begin
+  result:=BSFDWord(Value);
+ end;
+end;
+
+function CLZDWord(Value:TPasMPUInt32):TPasMPUInt8; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ if Value=0 then begin
+  result:=0;
+ end else begin
+  result:=31-BSRDWord(Value);
+ end;
+end;
+
+function CTZQWord(Value:TPasMPUInt64):TPasMPUInt8; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ if Value=0 then begin
+  result:=64;
+ end else begin
+  result:=BSFQWord(Value);
+ end;
+end;
+
+function CLZQWord(Value:TPasMPUInt64):TPasMPUInt8; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ if Value=0 then begin
+  result:=0;
+ end else begin
+  result:=63-BSRQWord(Value);
+ end;
+end;
 {$endif}
 
 {$ifdef CPUARM}
