@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-21-01-43-0000                       *
+ *                        Version 2016-02-21-16-15-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -343,7 +343,8 @@ const PasMPAllocatorPoolBucketBits=12;
 {$endif}
 {$endif}
 
-      PasMPThreadSafeDynamicArrayFirstBucketSize=8;
+      PasMPThreadSafeDynamicArrayFirstBucketBits=3;
+      PasMPThreadSafeDynamicArrayFirstBucketSize=1 shl PasMPThreadSafeDynamicArrayFirstBucketBits;
       PasMPThreadSafeDynamicArrayNumberOfBuckets=30;
       PasMPThreadSafeDynamicArrayMarkFirstBit=TPasMPUInt32($80000000);
 
@@ -1043,11 +1044,13 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       private
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fSize:TPasMPInt32;
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fItemSize:TPasMPInt32;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fItemLockOffset:TPasMPInt32;
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fInternalItemSize:TPasMPInt32;
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fAllocated:TPasMPInt32;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fCountBuckets:TPasMPInt32;
        fLock:TPasMPMultipleReaderSingleWriterSpinLock;
        fBuckets:TPasMPThreadSafeDynamicArrayBuckets;
-       function GetBucketIndex(const ItemIndex:TPasMPInt32):TPasMPInt32;
+       procedure GetBucketIndex(const ItemIndex:TPasMPInt32;out BucketIndex,BucketItemIndex:TPasMPInt32); {$ifdef CAN_INLINE}inline;{$endif}
       protected
        procedure InitializeItem(const ItemData:pointer); virtual;
        procedure FinalizeItem(const ItemData:pointer); virtual;
@@ -5575,7 +5578,7 @@ begin
  fLock:=TPasMPMultipleReaderSingleWriterSpinLock.Create;
  fResizeLock:=TPasMPMultipleReaderSingleWriterSpinLock.Create;
  fItemSize:=ItemSize;
- fInternalItemSize:=TPasMPMath.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPThreadSafeHashTableItem)+fItemSize,PasMPCPUCacheLineSize));
+ fInternalItemSize:=TPasMPMath.RoundUpToMask32(SizeOf(TPasMPThreadSafeHashTableItem)+fItemSize,PasMPCPUCacheLineSize);
  fGrowLoadFactor:=((75 shl 7)+128) div 100; // 0.75
  TPasMPMemory.AllocateAlignedMemory(fFirstState,SizeOf(TPasMPThreadSafeHashTableState),PasMPCPUCacheLineSize);
  FillChar(fFirstState^,SizeOf(TPasMPThreadSafeHashTableState),#0);
@@ -6080,20 +6083,35 @@ begin
 end;
 
 constructor TPasMPThreadSafeDynamicArray.Create(const AItemSize:TPasMPInt32);
+var BucketItemIndex:TPasMPInt32;
+    Bucket:pointer;
+    BucketItemOffset:TPasMPPtrUInt;
 begin
  inherited Create;
  fSize:=0;
- fAllocated:=0;
+ fAllocated:=PasMPThreadSafeDynamicArrayFirstBucketSize;
+ fCountBuckets:=1;
  fItemSize:=ItemSize;
- fInternalItemSize:=TPasMPMath.RoundUpToPowerOfTwo(Max(fItemSize,PasMPCPUCacheLineSize));
+ fItemLockOffset:=TPasMPMath.RoundUpToMask32(fItemSize,SizeOf(TPasMPInt32));
+ fInternalItemSize:=TPasMPMath.RoundUpToMask32(fItemLockOffset+SizeOf(TPasMPInt32),PasMPCPUCacheLineSize);
  fLock:=TPasMPMultipleReaderSingleWriterSpinLock.Create;
  FillChar(fBuckets,SizeOf(TPasMPThreadSafeDynamicArrayBuckets),#0);
+ TPasMPMemory.AllocateAlignedMemory(Bucket,PasMPThreadSafeDynamicArrayFirstBucketSize*TPasMPPtrUInt(fInternalItemSize));
+ FillChar(Bucket^,PasMPThreadSafeDynamicArrayFirstBucketSize*TPasMPPtrUInt(fInternalItemSize),#0);
+ for BucketItemIndex:=0 to PasMPThreadSafeDynamicArrayFirstBucketSize-1 do begin
+  BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
+  InitializeItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
+  PPasMPInt32(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset+TPasMPPtrUInt(fItemLockOffset))))^:=0;
+ end;
+ TPasMPInterlocked.Write(fBuckets[0],Bucket);
+ TPasMPMemoryBarrier.ReadWrite;
 end;
 
 destructor TPasMPThreadSafeDynamicArray.Destroy;
 var BucketIndex,BucketSize,BucketItemIndex:TPasMPInt32;
     Bucket:pointer;
 begin
+ TPasMPMemoryBarrier.ReadWrite;
  for BucketIndex:=low(TPasMPThreadSafeDynamicArrayBuckets) to high(TPasMPThreadSafeDynamicArrayBuckets) do begin
   Bucket:=TPasMPInterlocked.Exchange(fBuckets[BucketIndex],nil);
   if assigned(Bucket) then begin
@@ -6108,9 +6126,13 @@ begin
  inherited Destroy;
 end;
 
-function TPasMPThreadSafeDynamicArray.GetBucketIndex(const ItemIndex:TPasMPInt32):TPasMPInt32;
+procedure TPasMPThreadSafeDynamicArray.GetBucketIndex(const ItemIndex:TPasMPInt32;out BucketIndex,BucketItemIndex:TPasMPInt32); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+var Position,PositionHighestBit:TPasMPInt32;
 begin
- result:=0;
+ Position:=ItemIndex+PasMPThreadSafeDynamicArrayFirstBucketSize;
+ PositionHighestBit:=TPasMPMath.BitScanReverse32(Position);
+ BucketIndex:=PositionHighestBit-PasMPThreadSafeDynamicArrayFirstBucketBits;
+ BucketItemIndex:=(TPasMPInt32(1) shl PositionHighestBit) xor Position;
 end;
 
 procedure TPasMPThreadSafeDynamicArray.InitializeItem(const ItemData:pointer);
@@ -6127,36 +6149,75 @@ begin
 end;
 
 procedure TPasMPThreadSafeDynamicArray.SetSize(const NewSize:TPasMPInt32);
-var OldSize,Index:TPasMPInt32;
+var ItemIndex,BucketIndex,BucketItemIndex,Position,PositionHighestBit,OldCountBuckets,NewCountBuckets,BucketSize:TPasMPInt32;
+    Bucket:pointer;
+    BucketItemOffset:TPasMPPtrUInt;
 begin
+
  fLock.AcquireRead;
  try
+
   if fSize<>NewSize then begin
+
    fLock.ReadToWrite;
    try
-    TPasMPMemoryBarrier.Write;
+
+    TPasMPMemoryBarrier.ReadWrite;
+
     if fSize<>NewSize then begin
-     OldSize:=fSize;
-     if OldSize<NewSize then begin
+
+     Position:=NewSize+PasMPThreadSafeDynamicArrayFirstBucketSize;
+     PositionHighestBit:=TPasMPMath.BitScanReverse32(Position);
+
+     OldCountBuckets:=fCountBuckets;
+     NewCountBuckets:=PositionHighestBit-(PasMPThreadSafeDynamicArrayFirstBucketBits-1);
+
+     if OldCountBuckets<NewCountBuckets then begin
       // Grow
-      for Index:=OldSize to NewSize-1 do begin
-       // InitializeItem
+      for BucketIndex:=OldCountBuckets to NewCountBuckets-1 do begin
+       BucketSize:=PasMPThreadSafeDynamicArrayFirstBucketSize shl BucketIndex;
+       TPasMPMemory.AllocateAlignedMemory(Bucket,BucketSize*TPasMPPtrUInt(fInternalItemSize));
+       FillChar(Bucket^,BucketSize*TPasMPPtrUInt(fInternalItemSize),#0);
+       if assigned(Bucket) then begin
+        for BucketItemIndex:=0 to BucketSize-1 do begin
+         BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
+         InitializeItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
+         PPasMPInt32(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset+TPasMPPtrUInt(fItemLockOffset))))^:=0;
+        end;
+       end;
+       TPasMPInterlocked.Write(fBuckets[BucketIndex],Bucket);
       end;
-     end else begin
+     end else if NewCountBuckets<OldCountBuckets then begin
       // Shrink
-      for Index:=NewSize to OldSize-1 do begin
-       // FinalizeItem
+      for BucketIndex:=NewCountBuckets-1 downto OldCountBuckets do begin
+       BucketSize:=PasMPThreadSafeDynamicArrayFirstBucketSize shl BucketIndex;
+       Bucket:=TPasMPInterlocked.Exchange(fBuckets[BucketIndex],nil);
+       if assigned(Bucket) then begin
+        for BucketItemIndex:=0 to BucketSize-1 do begin
+         BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
+         FinalizeItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
+        end;
+        TPasMPMemory.FreeAlignedMemory(Bucket);
+       end;
       end;
      end;
+
+     fAllocated:=TPasMPInt32(1) shl PositionHighestBit;
+     fCountBuckets:=NewCountBuckets;
      fSize:=NewSize;
+
     end;
+
    finally
     fLock.WriteToRead;
    end;
+
   end;
+
  finally
   fLock.ReleaseRead;
  end;
+
 end;
 
 function TPasMPThreadSafeDynamicArray.GetItem(const ItemIndex:TPasMPInt32;const ItemData:pointer):boolean;
@@ -6827,7 +6888,7 @@ begin
  fFree:=TPasMPThreadSafeStack.Create;
  fMaximalCount:=MaximalCount;
  fItemSize:=ItemSize;
- fInternalItemSize:=TPasMPMath.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPBoundedStackItem)+fItemSize,PasMPCPUCacheLineSize));
+ fInternalItemSize:=TPasMPMath.RoundUpToMask32(SizeOf(TPasMPBoundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
  for i:=0 to fMaximalCount-1 do begin
@@ -6891,7 +6952,7 @@ begin
  fStack:=TPasMPThreadSafeStack.Create;
  fFree:=TPasMPThreadSafeStack.Create;
  fMaximalCount:=MaximalCount;
- fInternalItemSize:=Max(TPasMPMath.RoundUpToPowerOfTwo(SizeOf(TPasMPBoundedTypedStackItem)),PasMPCPUCacheLineSize);
+ fInternalItemSize:=TPasMPMath.RoundUpToMask32(SizeOf(TPasMPBoundedTypedStackItem),PasMPCPUCacheLineSize);
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
  for i:=0 to fMaximalCount-1 do begin
@@ -7070,7 +7131,7 @@ begin
  fFree:=TPasMPThreadSafeStack.Create;
  fMaximalCount:=MaximalCount;
  fItemSize:=ItemSize;
- fInternalItemSize:=TPasMPMath.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPBoundedQueueItem)+fItemSize,PasMPCPUCacheLineSize));
+ fInternalItemSize:=TPasMPMath.RoundUpToMask32(SizeOf(TPasMPBoundedQueueItem)+fItemSize,PasMPCPUCacheLineSize);
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
  for i:=0 to fMaximalCount-1 do begin
@@ -7131,7 +7192,7 @@ begin
  fQueue:=TPasMPThreadSafeQueue.Create(SizeOf(PPasMPBoundedQueueItem));
  fFree:=TPasMPThreadSafeStack.Create;
  fMaximalCount:=MaximalCount;
- fInternalItemSize:=Max(TPasMPMath.RoundUpToPowerOfTwo(SizeOf(TPasMPBoundedTypedQueueItem)),PasMPCPUCacheLineSize);
+ fInternalItemSize:=TPasMPMath.RoundUpToMask32(SizeOf(TPasMPBoundedTypedQueueItem),PasMPCPUCacheLineSize);
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
  for i:=0 to fMaximalCount-1 do begin
