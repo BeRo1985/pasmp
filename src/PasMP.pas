@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-21-17-44-0000                       *
+ *                        Version 2016-02-21-18-02-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1423,6 +1423,10 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$endif}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     EPasMPDynamicArrayOutOfBounds=class(Exception);
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPDynamicArray=class(TPasMPThreadSafeDynamicArray)
       protected
        procedure InitializeItem(const ItemData:pointer); override;
@@ -1437,6 +1441,30 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function Pop(out ItemData):boolean;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+{$ifdef HAS_GENERICS}
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPDynamicArray<T>=class(TPasMPThreadSafeDynamicArray)
+      private
+       type PPasMPDynamicArrayDataType=^TPasMPDynamicArrayDataType;
+            TPasMPDynamicArrayDataType=T;
+      protected
+       procedure InitializeItem(const ItemData:pointer); override;
+       procedure FinalizeItem(const ItemData:pointer); override;
+       procedure CopyItem(const Source,Destination:pointer); override;
+       function GetPropertyItem(const ItemIndex:TPasMPInt32):T;
+       procedure SetPropertyItem(const ItemIndex:TPasMPInt32;const ItemData:T);
+      public
+       constructor Create;
+       destructor Destroy; override;
+       function GetItem(const ItemIndex:TPasMPInt32;out ItemData:T):boolean;
+       function SetItem(const ItemIndex:TPasMPInt32;const ItemData:T):boolean;
+       function Push(const ItemData:T):TPasMPInt32;
+       function Pop(out ItemData:T):boolean;
+       property Items[const ItemIndex:TPasMPInt32]:T read GetPropertyItem write SetPropertyItem;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+{$endif}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPThread=class(TThread);
@@ -7991,6 +8019,68 @@ function TPasMPDynamicArray.Pop(out ItemData):boolean;
 begin
  result:=inherited Pop(@ItemData);
 end;
+
+{$ifdef HAS_GENERICS}
+constructor TPasMPDynamicArray<T>.Create;
+begin
+ inherited Create(SizeOf(T));
+end;
+
+destructor TPasMPDynamicArray<T>.Destroy;
+begin
+ inherited Destroy;
+end;
+
+procedure TPasMPDynamicArray<T>.InitializeItem(const ItemData:pointer);
+begin
+ Initialize(PPasMPDynamicArrayDataType(ItemData)^);
+end;
+
+procedure TPasMPDynamicArray<T>.FinalizeItem(const ItemData:pointer);
+begin
+ Finalize(PPasMPDynamicArrayDataType(ItemData)^);
+end;
+
+procedure TPasMPDynamicArray<T>.CopyItem(const Source,Destination:pointer);
+begin
+ PPasMPDynamicArrayDataType(Destination)^:=PPasMPDynamicArrayDataType(Source)^;
+end;
+
+function TPasMPDynamicArray<T>.GetItem(const ItemIndex:TPasMPInt32;out ItemData:T):boolean;
+begin
+ result:=inherited GetItem(ItemIndex,@ItemData);
+end;
+
+function TPasMPDynamicArray<T>.SetItem(const ItemIndex:TPasMPInt32;const ItemData:T):boolean;
+begin
+ result:=inherited SetItem(ItemIndex,@ItemData);
+end;
+
+function TPasMPDynamicArray<T>.Push(const ItemData:T):TPasMPInt32;
+begin
+ result:=inherited Push(@ItemData);
+end;
+
+function TPasMPDynamicArray<T>.Pop(out ItemData:T):boolean;
+begin
+ result:=inherited Pop(@ItemData);
+end;
+
+function TPasMPDynamicArray<T>.GetPropertyItem(const ItemIndex:TPasMPInt32):T;
+begin
+//Initialize(result); // <= should insert the compiler itself automatically
+ if not inherited GetItem(ItemIndex,@result) then begin
+  raise EPasMPDynamicArrayOutOfBounds.Create('Out of bounds');
+ end;
+end;
+
+procedure TPasMPDynamicArray<T>.SetPropertyItem(const ItemIndex:TPasMPInt32;const ItemData:T);
+begin
+ if not inherited SetItem(ItemIndex,@ItemData) then begin
+  raise EPasMPDynamicArrayOutOfBounds.Create('Out of bounds');
+ end;
+end;
+{$endif}
 
 constructor TPasMPJobTask.Create;
 begin
