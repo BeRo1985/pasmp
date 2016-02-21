@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-21-17-28-0000                       *
+ *                        Version 2016-02-21-17-29-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -6327,6 +6327,7 @@ begin
   BucketItemIndex:=(TPasMPInt32(1) shl PositionHighestBit) xor Position;
   BucketItemOffset:=TPasMPPtrUInt(BucketItemIndex)*TPasMPPtrUInt(fInternalItemSize);
   BucketItemLock:=PPasMPInt32(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset+TPasMPPtrUInt(fItemLockOffset))));
+  InitializeItem(pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
   TPasMPMultipleReaderSingleWriterSpinLock.AcquireWrite(BucketItemLock^);
   try
    CopyItem(ItemData,pointer(TPasMPPtrUInt(TPasMPPtrUInt(Bucket)+BucketItemOffset)));
