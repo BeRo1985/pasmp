@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-21-01-38-0000                       *
+ *                        Version 2016-02-21-01-43-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -5763,6 +5763,7 @@ var Hash:TPasMPThreadSafeHashTableHash;
     StartIndex,Index,Step,FoundDeletedItemSlotIndex:TPasMPInt32;
     Item:PPasMPThreadSafeHashTableItem;
 begin
+ result:=false;
 
  Hash:=HashKey(Key);
 
@@ -6109,6 +6110,7 @@ end;
 
 function TPasMPThreadSafeDynamicArray.GetBucketIndex(const ItemIndex:TPasMPInt32):TPasMPInt32;
 begin
+ result:=0;
 end;
 
 procedure TPasMPThreadSafeDynamicArray.InitializeItem(const ItemData:pointer);
