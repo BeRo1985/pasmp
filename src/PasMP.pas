@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-02-21-19-27-0000                       *
+ *                        Version 2016-03-22-01-53-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -10032,7 +10032,7 @@ var NewJobs:array[0..1] of PPasMPJob;
     JobData,NewJobData:PPasMPParallelDirectIntroSortJobData;
     Left,Right,ElementSize,Size,Parent,Child,Middle,Pivot,i,j,iA,iB,iC:TPasMPInt32;
     CompareFunc:TPasMPParallelSortCompareFunction;
-    Items,Temp:pointer;
+    Items{$ifdef PasMPAlternativeDirectHeapSort},Temp{$endif}:pointer;
 begin
  JobData:=PPasMPParallelDirectIntroSortJobData(pointer(@Job^.Data));
  Left:=JobData^.Left;
@@ -10061,20 +10061,21 @@ begin
   end else begin
    if (JobData^.Depth=0) or (Size<=JobData^.Granularity) then begin
     // Heap sort
+{$ifdef PasMPAlternativeDirectHeapSort}
     GetMem(Temp,JobData^.ElementSize);
     try
      i:=Size div 2;
      repeat
-      if i>Left then begin
+      if i>0 then begin
        dec(i);
        Move(PByteArray(Items)^[(Left+i)*ElementSize],Temp^,ElementSize);
       end else begin
-       if Size=0 then begin
-        break;
-       end else begin
-        dec(Size);
+       dec(Size);
+       if Size>0 then begin
         Move(PByteArray(Items)^[(Left+Size)*ElementSize],Temp^,ElementSize);
         Move(PByteArray(Items)^[Left*ElementSize],PByteArray(Items)^[(Left+Size)*ElementSize],ElementSize);
+       end else begin
+        break;
        end;
       end;
       Parent:=i;
@@ -10096,6 +10097,36 @@ begin
     finally
      FreeMem(Temp);
     end;
+{$else}
+    i:=Size div 2;
+    repeat
+     if i>0 then begin
+      dec(i);
+     end else begin
+      dec(Size);
+      if Size>0 then begin
+       MemorySwap(@PByteArray(Items)^[(Left+Size)*ElementSize],@PByteArray(Items)^[Left*ElementSize],ElementSize);
+      end else begin
+       break;
+      end;
+     end;
+     Parent:=i;
+     repeat
+      Child:=(Parent*2)+1;
+      if Child<Size then begin
+       if (Child<(Size-1)) and (CompareFunc(pointer(@PByteArray(Items)^[(Left+Child)*ElementSize]),pointer(@PByteArray(Items)^[(Left+Child+1)*ElementSize]))<0) then begin
+        inc(Child);
+       end;
+       if CompareFunc(pointer(@PByteArray(Items)^[(Left+Parent)*ElementSize]),pointer(@PByteArray(Items)^[(Left+Child)*ElementSize]))<0 then begin
+        MemorySwap(@PByteArray(Items)^[(Left+Parent)*ElementSize],@PByteArray(Items)^[(Left+Child)*ElementSize],ElementSize);
+        Parent:=Child;
+        continue;
+       end;
+      end;
+      break;
+     until false;
+    until false;
+{$endif}
    end else begin
     // Quick sort width median-of-three optimization
     Middle:=Left+((Right-Left) shr 1);
@@ -10230,19 +10261,53 @@ begin
   end else begin
    if (JobData^.Depth=0) or (Size<=JobData^.Granularity) then begin
     // Heap sort
+{$ifdef PasMPAlternativeIndirectHeapSort}
+    i:=Size div 2;
+    repeat
+     if i>0 then begin
+      dec(i);
+     end else begin
+      dec(Size);
+      if Size>0 then begin
+       Temp:=PPointers(Items)^[Left+Size];
+       PPointers(Items)^[Left+Size]:=PPointers(Items)^[Left];
+       PPointers(Items)^[Left]:=Temp;
+      end else begin
+       break;
+      end;
+     end;
+     Parent:=i;
+     repeat
+      Child:=(Parent*2)+1;
+      if Child<Size then begin
+       if (Child<(Size-1)) and (CompareFunc(PPointers(Items)^[Left+Child],PPointers(Items)^[Left+Child+1])<0) then begin
+        inc(Child);
+       end;
+       if CompareFunc(PPointers(Items)^[Left+Parent],PPointers(Items)^[Left+Child])<0 then begin
+        Temp:=PPointers(Items)^[Left+Parent];
+        PPointers(Items)^[Left+Parent]:=PPointers(Items)^[Left+Child];
+        PPointers(Items)^[Left+Child]:=Temp;
+        Parent:=Child;
+        continue;
+       end;
+      end;
+      break;
+     until false;
+    until false;
+{$else}
     i:=Size div 2;
     Temp:=nil;
     repeat
-     if i>Left then begin
+     if i>0 then begin
       dec(i);
       Temp:=PPointers(Items)^[Left+i];
      end else begin
-      if Size=0 then begin
-       break;
-      end else begin
-       dec(Size);
+      dec(Size);
+      if Size>0 then begin
        Temp:=PPointers(Items)^[Left+Size];
        PPointers(Items)^[Left+Size]:=PPointers(Items)^[Left];
+      end else begin
+       break;
       end;
      end;
      Parent:=i;
@@ -10261,6 +10326,7 @@ begin
      end;
      PPointers(Items)^[Left+Parent]:=Temp;
     until false;
+{$endif}
    end else begin
     // Quick sort width median-of-three optimization
     Middle:=Left+((Right-Left) shr 1);
