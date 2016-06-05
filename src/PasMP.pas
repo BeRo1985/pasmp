@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-06-05-17-58-0000                       *
+ *                        Version 2016-06-05-18-00-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -3578,7 +3578,7 @@ begin
  result:=AtomicCmpExchange(pointer(Source),nil,nil);
 {$else}
 {$ifdef CPU64}
- result:=pointer(TPasMPPtrInt(InterlockedCompareExchange64(TPasMPInt64(TPasMPPtrInt(Source)),TPasMPInt64(TPasMPPtrInt(0)),TPasMPInt64(TPasMPPtrInt(0))));
+ result:=pointer(TPasMPPtrInt(InterlockedCompareExchange64(TPasMPInt64(TPasMPPtrInt(Source)),TPasMPInt64(TPasMPPtrInt(0)),TPasMPInt64(TPasMPPtrInt(0)))));
 {$else}
  result:=pointer(TPasMPPtrInt(InterlockedCompareExchange(TPasMPInt32(TPasMPPtrInt(Source)),TPasMPInt32(TPasMPPtrInt(0)),TPasMPInt32(TPasMPPtrInt(0)))));
 {$endif}
