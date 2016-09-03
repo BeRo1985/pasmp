@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-03-22-06-0000                       *
+ *                        Version 2016-09-04-00-18-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -3721,7 +3721,7 @@ begin
 {$endif}
 end;
 
-class function TPasMPInterlocked.Add(var Destination:TPasMPUInt64;const Value:TPasMPUInt64):TPasMPUInt64;
+class function TPasMPInterlocked.Sub(var Destination:TPasMPUInt64;const Value:TPasMPUInt64):TPasMPUInt64;
 begin
 {$ifdef HAS_ATOMICS}
  result:=TPasMPUInt64(TPasMPInt64(AtomicIncrement(TPasMPInt64(Destination),-TPasMPInt64(Value))));
