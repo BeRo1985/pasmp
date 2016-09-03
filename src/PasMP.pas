@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-06-05-18-00-0000                       *
+ *                        Version 2016-09-03-18-00-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -56,7 +56,7 @@ unit PasMP;
  {$ifdef CPUi386}
   {$define CPU386}
  {$endif}
- {$ifdef CPUamd64}
+ {$ifdef CPUAMD64}
   {$define CPUx86_64}
  {$endif}
  {$ifdef CPU386}
@@ -77,6 +77,7 @@ unit PasMP;
   {$endif}
  {$endif}
  {-$pic off}
+ {$define HAS_ADVANCED_RECORDS}
  {$define CAN_INLINE}
  {$ifdef FPC_HAS_TYPE_EXTENDED}
   {$define HAS_TYPE_EXTENDED}
@@ -123,7 +124,44 @@ unit PasMP;
  {$endif}
  {$define HAS_TYPE_EXTENDED}
  {$define HAS_TYPE_DOUBLE}
+ {$define HAS_TYPE_SINGLE}
+ {$undef HAS_TYPE_RAWBYTESTRING}
+ {$undef HAS_TYPE_UTF8STRING}
+ {$realcompatibility off}
+ {$localsymbols on}
+ {$define LITTLE_ENDIAN}
+ {$ifndef cpu64}
+  {$define cpu32}
+ {$endif}
+ {$ifndef BCB}
+  {$ifdef ver120}
+   {$define Delphi4or5}
+  {$endif}
+  {$ifdef ver130}
+   {$define Delphi4or5}
+  {$endif}
+  {$ifdef ver140}
+   {$define Delphi6}
+  {$endif}
+  {$ifdef ver150}
+   {$define Delphi7}
+  {$endif}
+  {$ifdef ver170}
+   {$define Delphi2005}
+  {$endif}
+ {$else}
+  {$ifdef ver120}
+   {$define Delphi4or5}
+   {$define BCB4}
+  {$endif}
+  {$ifdef ver130}
+   {$define Delphi4or5}
+  {$endif}
+ {$endif}
  {$ifdef conditionalexpressions}
+  {$if CompilerVersion>=24.0}
+   {$legacyifend on}
+  {$ifend}
   {$if declared(RawByteString)}
    {$define HAS_TYPE_RAWBYTESTRING}
   {$else}
@@ -134,25 +172,144 @@ unit PasMP;
   {$else}
    {$undef HAS_TYPE_UTF8STRING}
   {$ifend}
- {$else}
-  {$undef HAS_TYPE_RAWBYTESTRING}
-  {$undef HAS_TYPE_UTF8STRING}
+  {$if CompilerVersion>=14.0}
+   {$if CompilerVersion=14.0}
+    {$define Delphi6}
+   {$ifend}
+   {$define Delphi6AndUp}
+  {$ifend}
+  {$if CompilerVersion>=15.0}
+   {$if CompilerVersion=15.0}
+    {$define Delphi7}
+   {$ifend}
+   {$define Delphi7AndUp}
+  {$ifend}
+  {$if CompilerVersion>=17.0}
+   {$if CompilerVersion=17.0}
+    {$define Delphi2005}
+   {$ifend}
+   {$define Delphi2005AndUp}
+  {$ifend}
+  {$if CompilerVersion>=18.0}
+   {$if CompilerVersion=18.0}
+    {$define BDS2006}
+    {$define Delphi2006}
+   {$ifend}
+   {$define Delphi2006AndUp}
+   {$define CAN_INLINE}
+   {$define HAS_ADVANCED_RECORDS}
+  {$ifend}
+  {$if CompilerVersion>=18.5}
+   {$if CompilerVersion=18.5}
+    {$define Delphi2007}
+   {$ifend}
+   {$define Delphi2007AndUp}
+  {$ifend}
+  {$if CompilerVersion=19.0}
+   {$define Delphi2007Net}
+  {$ifend}
+  {$if CompilerVersion>=20.0}
+   {$if CompilerVersion=20.0}
+    {$define Delphi2009}
+   {$ifend}
+   {$define Delphi2009AndUp}
+   {$define HAS_ANONYMOUS_METHODS}
+   {$define HAS_GENERICS}
+   {$define HAS_STATIC}
+  {$ifend}
+  {$if CompilerVersion>=21.0}
+   {$if CompilerVersion=21.0}
+    {$define Delphi2010}
+   {$ifend}
+   {$define Delphi2010AndUp}
+  {$ifend}
+  {$if CompilerVersion>=22.0}
+   {$if CompilerVersion=22.0}
+    {$define DelphiXE}
+   {$ifend}
+   {$define DelphiXEAndUp}
+  {$ifend}
+  {$if CompilerVersion>=23.0}
+   {$if CompilerVersion=23.0}
+    {$define DelphiXE2}
+   {$ifend}
+   {$define DelphiXE2AndUp}
+  {$ifend}
+  {$if CompilerVersion>=24.0}
+   {$if CompilerVersion=24.0}
+    {$define DelphiXE3}
+   {$ifend}
+   {$define DelphiXE3AndUp}
+   {$define HAS_ATOMICS}
+  {$ifend}
+  {$if CompilerVersion>=25.0}
+   {$if CompilerVersion=25.0}
+    {$define DelphiXE4}
+   {$ifend}
+   {$define DelphiXE4AndUp}
+   {$define HAS_WEAK}
+   {$define HAS_VOLATILE}
+   {$define HAS_REF}
+  {$ifend}
+  {$if CompilerVersion>=26.0}
+   {$if CompilerVersion=26.0}
+    {$define DelphiXE5}
+   {$ifend}
+   {$define DelphiXE5AndUp}
+  {$ifend}
+  {$if CompilerVersion>=27.0}
+   {$if CompilerVersion=27.0}
+    {$define DelphiXE6}
+   {$ifend}
+   {$define DelphiXE6AndUp}
+  {$ifend}
+  {$if CompilerVersion>=28.0}
+   {$if CompilerVersion=28.0}
+    {$define DelphiXE7}
+   {$ifend}
+   {$define DelphiXE7AndUp}
+  {$ifend}
+  {$if CompilerVersion>=29.0}
+   {$if CompilerVersion=29.0}
+    {$define DelphiXE8}
+   {$ifend}
+   {$define DelphiXE8AndUp}
+  {$ifend}
+  {$if CompilerVersion>=30.0}
+   {$if CompilerVersion=30.0}
+    {$define Delphi10Seattle}
+   {$ifend}
+   {$define Delphi10SeattleAndUp}
+  {$ifend}
+  {$if CompilerVersion>=31.0}
+   {$if CompilerVersion=31.0}
+    {$define Delphi10Berlin}
+   {$ifend}
+   {$define Delphi10BerlinAndUp}
+  {$ifend}
  {$endif}
- {$if CompilerVersion>=24}
-  {$legacyifend on}
-  {$define HAS_ATOMICS}
- {$ifend}
- {$if CompilerVersion>=20}
-  {$define CAN_INLINE}
-  {$define HAS_ANONYMOUS_METHODS}
-  {$define HAS_GENERICS}
-  {$define HAS_STATIC}
- {$ifend}
- {$if CompilerVersion>=25}
-  {$define HAS_WEAK}
-  {$define HAS_VOLATILE}
-  {$define HAS_REF}
- {$ifend}
+ {$ifndef Delphi4or5}
+  {$ifndef BCB}
+   {$define Delphi6AndUp}
+  {$endif}
+   {$ifndef Delphi6}
+    {$define BCB6OrDelphi7AndUp}
+    {$ifndef BCB}
+     {$define Delphi7AndUp}
+    {$endif}
+    {$ifndef BCB}
+     {$ifndef Delphi7}
+      {$ifndef Delphi2005}
+       {$define BDS2006AndUp}
+      {$endif}
+     {$endif}
+    {$endif}
+   {$endif}
+ {$endif}
+ {$ifdef Delphi6AndUp}
+  {$warn symbol_platform off}
+  {$warn symbol_deprecated off}
+ {$endif}
 {$endif}
 {$ifdef CPU386}
  {$define HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
@@ -312,14 +469,26 @@ const PasMPAllocatorPoolBucketBits=12;
 
       PasMPDefaultDepth=16;
 
-      PasMPJobThreadIndexBits=16;
+      PasMPJobThreadIndexBits=12; // 4096 threads should be enough for the first time
       PasMPJobThreadIndexSize=TPasMPUInt32(TPasMPUInt32(1) shl PasMPJobThreadIndexBits);
       PasMPJobThreadIndexMask=PasMPJobThreadIndexSize-1;
+      PasMPJobThreadIndexShift=0;
 
-      PasMPJobFlagHasOwnerWorkerThread=TPasMPUInt32(TPasMPUInt32(1) shl (PasMPJobThreadIndexBits+1));
-      PasMPJobFlagReleaseOnFinish=TPasMPUInt32(TPasMPUInt32(1) shl (PasMPJobThreadIndexBits+2));
+      PasMPJobTaskTagBits=12; // 4096 task tags should be enough for the first time
+      PasMPJobTaskTagSize=TPasMPUInt32(TPasMPUInt32(1) shl PasMPJobTaskTagBits);
+      PasMPJobTaskTagMask=PasMPJobTaskTagSize-1;
+      PasMPJobTaskTagShift=PasMPJobThreadIndexBits;
+
+      PasMPJobFlagHasOwnerWorkerThread=TPasMPUInt32(TPasMPUInt32(1) shl ((PasMPJobThreadIndexBits+PasMPJobThreadIndexBits)+1)); // Bit 25
+      PasMPJobFlagReleaseOnFinish=TPasMPUInt32(TPasMPUInt32(1) shl ((PasMPJobThreadIndexBits+PasMPJobThreadIndexBits)+2));      // Bit 26
 
       PasMPCPUCacheLineSize=64;
+
+{$ifdef PasMPProfiler}
+      PasMPProfilerHistoryRingBufferSizeBits=16;
+      PasMPProfilerHistoryRingBufferSize=TPasMPUInt32(1) shl PasMPProfilerHistoryRingBufferSizeBits;
+      PasMPProfilerHistoryRingBufferSizeMask=TPasMPUInt32(PasMPProfilerHistoryRingBufferSize-1);
+{$endif}
 
       PasMPOnceInit={$ifdef Linux}PTHREAD_ONCE_INIT{$else}0{$endif};
 
@@ -461,20 +630,28 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
      TPasMPInterlocked=class
       public
        class function Increment(var Destination:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Increment(var Destination:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$ifdef CPU64}
        class function Increment(var Destination:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Increment(var Destination:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$endif}
        class function Decrement(var Destination:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Decrement(var Destination:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$ifdef CPU64}
        class function Decrement(var Destination:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Decrement(var Destination:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$endif}
        class function Add(var Destination:TPasMPInt32;const Value:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Add(var Destination:TPasMPUInt32;const Value:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$ifdef CPU64}
        class function Add(var Destination:TPasMPInt64;const Value:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Add(var Destination:TPasMPUInt64;const Value:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$endif}
        class function Sub(var Destination:TPasMPInt32;const Value:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Sub(var Destination:TPasMPUInt32;const Value:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$ifdef CPU64}
        class function Sub(var Destination:TPasMPInt64;const Value:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Sub(var Destination:TPasMPUInt64;const Value:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$endif}
        class function Exchange(var Destination:TPasMPInt32;const Source:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Exchange(var Destination:TPasMPUInt32;const Source:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
@@ -497,9 +674,11 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        class function CompareExchange(var Destination:pointer;const NewValue,Comperand:pointer):pointer; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function CompareExchange(var Destination:TObject;const NewValue,Comperand:TObject):TObject; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Read(var Source:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Read(var Source:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
        class function Read(var Source:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Read(var Source:TPasMPInt64Record):TPasMPInt64Record; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Read(var Source:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
        class function Read(var Source:TPasMPInt128Record):TPasMPInt128Record; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(fpc)}inline;{$ifend}
 {$ifend}
@@ -507,9 +686,11 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        class function Read(var Source:TObject):TObject; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$ifend}
        class function Write(var Destination:TPasMPInt32;const Source:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Write(var Destination:TPasMPUInt32;const Source:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
        class function Write(var Destination:TPasMPInt64;const Source:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Write(var Destination:TPasMPInt64Record;const Source:TPasMPInt64Record):TPasMPInt64Record; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Write(var Destination:TPasMPUInt64;const Source:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
        class function Write(var Destination:TPasMPInt128Record;const Source:TPasMPInt128Record):TPasMPInt128Record; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(fpc)}inline;{$ifend}
 {$ifend}
@@ -542,6 +723,43 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        class procedure Barrier; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+     PPPasMPHighResolutionTime=^PPasMPHighResolutionTime;
+     PPasMPHighResolutionTime=^TPasMPHighResolutionTime;
+     TPasMPHighResolutionTime=TPasMPInt64;
+
+     TPasMPHighResolutionTimer=class
+      private
+       fFrequency:TPasMPInt64;
+       fFrequencyShift:TPasMPInt32;
+       fMillisecondInterval:TPasMPHighResolutionTime;
+       fTwoMillisecondsInterval:TPasMPHighResolutionTime;
+       fFourMillisecondsInterval:TPasMPHighResolutionTime;
+       fQuarterSecondInterval:TPasMPHighResolutionTime;
+       fMinuteInterval:TPasMPHighResolutionTime;
+       fHourInterval:TPasMPHighResolutionTime;
+      public
+       constructor Create;
+       destructor Destroy; override;
+       function GetTime:TPasMPInt64;
+       procedure Sleep(const pDelay:TPasMPHighResolutionTime);
+       function ToFloatSeconds(const pTime:TPasMPHighResolutionTime):double;
+       function FromFloatSeconds(const pTime:double):TPasMPHighResolutionTime;
+       function ToMilliseconds(const pTime:TPasMPHighResolutionTime):TPasMPInt64;
+       function FromMilliseconds(const pTime:TPasMPInt64):TPasMPHighResolutionTime;
+       function ToMicroseconds(const pTime:TPasMPHighResolutionTime):TPasMPInt64;
+       function FromMicroseconds(const pTime:TPasMPInt64):TPasMPHighResolutionTime;
+       function ToNanoseconds(const pTime:TPasMPHighResolutionTime):TPasMPInt64;
+       function FromNanoseconds(const pTime:TPasMPInt64):TPasMPHighResolutionTime;
+       property Frequency:TPasMPInt64 read fFrequency;
+       property MillisecondInterval:TPasMPHighResolutionTime read fMillisecondInterval;
+       property TwoMillisecondsInterval:TPasMPHighResolutionTime read fTwoMillisecondsInterval;
+       property FourMillisecondsInterval:TPasMPHighResolutionTime read fFourMillisecondsInterval;
+       property QuarterSecondInterval:TPasMPHighResolutionTime read fQuarterSecondInterval;
+       property SecondInterval:TPasMPHighResolutionTime read fFrequency;
+       property MinuteInterval:TPasMPHighResolutionTime read fMinuteInterval;
+       property HourInterval:TPasMPHighResolutionTime read fHourInterval;
+     end;
 
      TPasMP=class;
 
@@ -1500,8 +1718,8 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        0:(                                          // 32 / 64 bit
         Method:TMethod;                             //  8 / 16 => 2x pointers
         ParentJob:PPasMPJob;                        //  4 /  8 => 1x pointer
-        InternalData:TPasMPUInt32;                      //  4 /  4 => 1x 32-bit unsigned integer (lower bits => owner worker thread index, higher bits => flags)
-        State:TPasMPInt32;                              //  4 /  4 => 1x 32-bit signed integer (if it's below 0, then the job is completed, otherwise it's a 0-based unfinished job counter)
+        InternalData:TPasMPUInt32;                  //  4 /  4 => 1x 32-bit unsigned integer (12 bits => owner worker thread index, 12 bits => task tag, remaining higher bits => flags)
+        State:TPasMPInt32;                          //  4 /  4 => 1x 32-bit signed integer (if it's below 0, then the job is completed, otherwise it's a 0-based unfinished job counter)
         Data:pointer;                               // ------- => just a dummy variable as struct field offset anchor
        );                                           // 20 / 32
        1:(
@@ -1523,6 +1741,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fFreeOnRelease:boolean;
        fJob:PPasMPJob;
        fThreadIndex:TPasMPInt32;
+       fTaskTag:TPasMPUInt32;
       public
        constructor Create;
        destructor Destroy; override;
@@ -1533,6 +1752,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        property FreeOnRelease:boolean read fFreeOnRelease write fFreeOnRelease;
        property Job:PPasMPJob read fJob;
        property ThreadIndex:TPasMPInt32 read fThreadIndex;
+       property TaskTag:TPasMPUInt32 read fTaskTag write fTaskTag;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -1650,6 +1870,41 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
+{$ifdef PasMPProfiler}
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     PPasMPProfilerHistoryRingBufferItem=^TPasMPProfilerHistoryRingBufferItem;
+     TPasMPProfilerHistoryRingBufferItem=record // 32 byte per item
+      TaskTag:TPasMPUInt32;
+      ThreadIndex:TPasMPUInt32;
+      Dummy:TPasMPUInt64;
+      StartTime:TPasMPHighResolutionTime;
+      EndTime:TPasMPHighResolutionTime;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+     PPasMPProfilerHistoryRingBufferItems=^TPasMPProfilerHistoryRingBufferItems;
+     TPasMPProfilerHistoryRingBufferItems=array[0..PasMPProfilerHistoryRingBufferSize-1] of TPasMPProfilerHistoryRingBufferItem;
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     PPasMPProfilerHistory=^TPasMPProfilerHistory;
+     TPasMPProfilerHistory={$ifdef HAS_ADVANCED_RECORDS}record{$else}object{$endif}
+      private
+       fHistoryRingBufferItems:TPasMPProfilerHistoryRingBufferItems;
+       fCount:TPasMPUInt32;
+       fHighResolutionTimer:TPasMPHighResolutionTimer;
+       fStartTime:TPasMPHighResolutionTime;
+       function GetHistoryRingBufferItem(const pIndex:TPasMPUInt32):PPasMPProfilerHistoryRingBufferItem; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+      public
+       procedure Reset;
+       function Acquire:PPasMPProfilerHistoryRingBufferItem; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       property HistoryRingBufferItems[const pIndex:TPasMPUInt32]:PPasMPProfilerHistoryRingBufferItem read GetHistoryRingBufferItem;
+       property Count:TPasMPUInt32 read fCount;
+       property HighResolutionTimer:TPasMPHighResolutionTimer read fHighResolutionTimer;
+       property StartTime:TPasMPHighResolutionTime read fStartTime;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+{$endif}
+
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMP=class
       private
@@ -1678,6 +1933,11 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$ifndef UseThreadLocalStorage}
        fJobWorkerThreadHashTableCriticalSection:TPasMPCriticalSection;
        fJobWorkerThreadHashTable:TPasMPJobWorkerThreadHashTable;
+{$endif}
+{$ifdef PasMPProfiler}
+       fProfilerHighResolutionTimer:TPasMPHighResolutionTimer;
+       fProfilerHistory:TPasMPProfilerHistory;
+       fPointerToProfilerHistory:PPasMPProfilerHistory;
 {$endif}
        class procedure DestroyGlobalInstance;
        class function GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif}):TPasMPUInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
@@ -1718,6 +1978,8 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        class function Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean; {$ifdef Linux}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
        class function IsJobCompleted(const Job:PPasMPJob):boolean; {$ifdef CAN_INLINE}inline;{$endif}
        class function IsJobValid(const Job:PPasMPJob):boolean; {$ifdef CAN_INLINE}inline;{$endif}
+       class function EncodeTaskTagToFlags(const TaskTag:TPasMPUInt32):TPasMPUInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
+       class function DecodeTaskTagFromFlags(const Flags:TPasMPUInt32):TPasMPUInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        procedure Reset;
        function CreateScope:TPasMPScope; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef HAS_ANONYMOUS_METHODS}
@@ -3250,6 +3512,16 @@ begin
  result:=(ThreadID*83492791) xor ((ThreadID shr 24)*19349669) xor ((ThreadID shr 16)*73856093) xor ((ThreadID shr 8)*50331653);
 end;
 
+class function TPasMP.EncodeTaskTagToFlags(const TaskTag:TPasMPUInt32):TPasMPUInt32;
+begin
+ result:=(TaskTag and PasMPJobTaskTagMask) shl PasMPJobTaskTagShift;
+end;
+
+class function TPasMP.DecodeTaskTagFromFlags(const Flags:TPasMPUInt32):TPasMPUInt32;
+begin
+ result:=(Flags shr PasMPJobTaskTagShift) and PasMPJobTaskTagMask;
+end;
+
 class procedure TPasMP.Relax;{$if defined(CPU386)}assembler;
 asm
  db $f3,$90 // pause (rep nop)
@@ -3305,6 +3577,15 @@ begin
 {$endif}
 end;
 
+class function TPasMPInterlocked.Increment(var Destination:TPasMPUInt32):TPasMPUInt32;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=TPasMPUInt32(TPasMPInt32(AtomicIncrement(TPasMPInt32(Destination))));
+{$else}
+ result:=TPasMPUInt32(TPasMPInt32(InterlockedIncrement(TPasMPInt32(Destination))));
+{$endif}
+end;
+
 {$ifdef CPU64}
 class function TPasMPInterlocked.Increment(var Destination:TPasMPInt64):TPasMPInt64;
 begin
@@ -3312,6 +3593,15 @@ begin
  result:=AtomicIncrement(Destination);
 {$else}
  result:=InterlockedIncrement64(Destination);
+{$endif}
+end;
+
+class function TPasMPInterlocked.Increment(var Destination:TPasMPUInt64):TPasMPUInt64;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=TPasMPUInt64(TPasMPInt64(AtomicIncrement(TPasMPInt64(Destination))));
+{$else}
+ result:=TPasMPUInt64(TPasMPInt64(InterlockedIncrement64(TPasMPInt64(Destination))));
 {$endif}
 end;
 {$endif}
@@ -3325,6 +3615,15 @@ begin
 {$endif}
 end;
 
+class function TPasMPInterlocked.Decrement(var Destination:TPasMPUInt32):TPasMPUInt32;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=TPasMPUInt32(TPasMPInt32(AtomicDecrement(TPasMPInt32(Destination))));
+{$else}
+ result:=TPasMPUInt32(TPasMPInt32(InterlockedDecrement(TPasMPInt32(Destination))));
+{$endif}
+end;
+
 {$ifdef CPU64}
 class function TPasMPInterlocked.Decrement(var Destination:TPasMPInt64):TPasMPInt64;
 begin
@@ -3332,6 +3631,15 @@ begin
  result:=AtomicDecrement(Destination);
 {$else}
  result:=InterlockedDecrement64(Destination);
+{$endif}
+end;
+
+class function TPasMPInterlocked.Decrement(var Destination:TPasMPUInt64):TPasMPUInt64;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=TPasMPUInt64(TPasMPInt64(AtomicDecrement(TPasMPInt64(Destination))));
+{$else}
+ result:=TPasMPUInt64(TPasMPInt64(InterlockedDecrement64(TPasMPInt64(Destination))));
 {$endif}
 end;
 {$endif}
@@ -3345,6 +3653,15 @@ begin
 {$endif}
 end;
 
+class function TPasMPInterlocked.Add(var Destination:TPasMPUInt32;const Value:TPasMPUInt32):TPasMPUInt32;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=TPasMPUInt32(TPasMPInt32(AtomicIncrement(TPasMPInt32(Destination),TPasMPInt32(Value))));
+{$else}
+ result:=TPasMPUInt32(TPasMPInt32(InterlockedExchangeAdd(TPasMPInt32(Destination),TPasMPInt32(Value))));
+{$endif}
+end;
+
 {$ifdef CPU64}
 class function TPasMPInterlocked.Add(var Destination:TPasMPInt64;const Value:TPasMPInt64):TPasMPInt64;
 begin
@@ -3352,6 +3669,15 @@ begin
  result:=AtomicIncrement(Destination,Value);
 {$else}
  result:=InterlockedExchangeAdd64(Destination,Value);
+{$endif}
+end;
+
+class function TPasMPInterlocked.Add(var Destination:TPasMPUInt64;const Value:TPasMPUInt64):TPasMPUInt64;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=TPasMPUInt64(TPasMPInt64(AtomicIncrement(TPasMPInt64(Destination),TPasMPInt64(Value))));
+{$else}
+ result:=TPasMPUInt64(TPasMPInt64(InterlockedExchangeAdd64(TPasMPInt64(Destination),TPasMPInt64(Value))));
 {$endif}
 end;
 {$endif}
@@ -3365,6 +3691,15 @@ begin
 {$endif}
 end;
 
+class function TPasMPInterlocked.Sub(var Destination:TPasMPUInt32;const Value:TPasMPUInt32):TPasMPUInt32;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=TPasMPUInt32(TPasMPInt32(AtomicIncrement(TPasMPInt32(Destination),-TPasMPInt32(Value))));
+{$else}
+ result:=TPasMPUInt32(TPasMPInt32(InterlockedExchangeAdd(TPasMPInt32(Destination),-TPasMPInt32(Value))));
+{$endif}
+end;
+
 {$ifdef CPU64}
 class function TPasMPInterlocked.Sub(var Destination:TPasMPInt64;const Value:TPasMPInt64):TPasMPInt64;
 begin
@@ -3372,6 +3707,15 @@ begin
  result:=AtomicIncrement(Destination,-Value);
 {$else}
  result:=InterlockedExchangeAdd64(Destination,-Value);
+{$endif}
+end;
+
+class function TPasMPInterlocked.Add(var Destination:TPasMPUInt64;const Value:TPasMPUInt64):TPasMPUInt64;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=TPasMPUInt64(TPasMPInt64(AtomicIncrement(TPasMPInt64(Destination),-TPasMPInt64(Value))));
+{$else}
+ result:=TPasMPUInt64(TPasMPInt64(InterlockedExchangeAdd64(TPasMPInt64(Destination),-TPasMPInt64(Value))));
 {$endif}
 end;
 {$endif}
@@ -3529,6 +3873,15 @@ begin
 {$endif}
 end;
 
+class function TPasMPInterlocked.Read(var Source:TPasMPUInt32):TPasMPUInt32;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=TPasMPUInt32(TPasMPInt32(AtomicCmpExchange(TPasMPInt32(Source),0,0)));
+{$else}
+ result:=TPasMPUInt32(TPasMPInt32(InterlockedCompareExchange(TPasMPInt32(Source),0,0)));
+{$endif}
+end;
+
 {$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
 class function TPasMPInterlocked.Read(var Source:TPasMPInt64):TPasMPInt64;
 begin
@@ -3545,6 +3898,15 @@ begin
  result.Value:=AtomicCmpExchange(Source.Value,0,0);
 {$else}
  result.Value:=InterlockedCompareExchange64(Source.Value,0,0);
+{$endif}
+end;
+
+class function TPasMPInterlocked.Read(var Source:TPasMPUInt64):TPasMPUInt64;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=TPasMPUInt64(TPasMPInt64(AtomicCmpExchange(TPasMPInt64(Source),0,0)));
+{$else}
+ result:=TPasMPUInt64(TPasMPInt64(InterlockedCompareExchange64(TPasMPInt64(Source),0,0)));
 {$endif}
 end;
 
@@ -3591,6 +3953,15 @@ begin
  result:=AtomicExchange(Destination,Source);
 {$else}
  result:=InterlockedExchange(Destination,Source);
+{$endif}
+end;
+
+class function TPasMPInterlocked.Write(var Destination:TPasMPUInt32;const Source:TPasMPUInt32):TPasMPUInt32;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=TPasMPUInt32(TPasMPInt32(AtomicExchange(TPasMPInt32(Destination),TPasMPInt32(Source))));
+{$else}
+ result:=TPasMPUInt32(TPasMPInt32(InterlockedExchange(TPasMPInt32(Destination),TPasMPInt32(Source))));
 {$endif}
 end;
 
@@ -3667,6 +4038,38 @@ begin
  until (result.Lo=Old.Lo) and (result.Hi=Old.Hi);
 end;
 {$ifend}
+
+class function TPasMPInterlocked.Write(var Destination:TPasMPUInt64;const Source:TPasMPUInt64):TPasMPUInt64;
+{$ifdef CPU64}
+{$ifdef HAS_ATOMICS}
+begin
+ result:=TPasMPUInt64(TPasMPInt64(AtomicExchange(TPasMPInt64(Destination),TPasMPInt64(Source))));
+end;
+{$else}
+begin
+ result:=TPasMPUInt64(TPasMPInt64(InterlockedExchange64(TPasMPInt64(Destination),TPasMPInt64(Source))));
+end;
+{$endif}
+{$else}
+{$ifdef HAS_ATOMICS}
+var Old:TPasMPUInt64;
+begin
+ repeat
+  Old:=Destination;
+  result:=TPasMPUInt64(TPasMPInt64(AtomicCmpExchange(TPasMPInt64(Destination),TPasMPInt64(Source),TPasMPInt64(Old))));
+ until result=Old;
+end;
+{$else}
+var Old:TPasMPUInt64;
+begin
+ repeat
+  Old:=Destination;
+  result:=TPasMPUInt64(TPasMPInt64(InterlockedCompareExchange64(TPasMPInt64(Destination),TPasMPInt64(Source),TPasMPInt64(Old))));
+ until result=Old;
+end;
+{$endif}
+{$endif}
+
 {$ifend}
 
 class function TPasMPInterlocked.Write(var Destination:pointer;const Source:pointer):pointer;
@@ -3792,6 +4195,238 @@ begin
  FallbackReadWriteBarrier;
 {$ifend}
 {$endif}
+end;
+
+constructor TPasMPHighResolutionTimer.Create;
+begin
+ inherited Create;
+ fFrequencyShift:=0;
+{$ifdef windows}
+ if QueryPerformanceFrequency(fFrequency) then begin
+  while (fFrequency and $ffffffffe0000000)<>0 do begin
+   fFrequency:=fFrequency shr 1;
+   inc(fFrequencyShift);
+  end;
+ end else begin
+  fFrequency:=1000;
+ end;
+{$else}
+{$ifdef linux}
+  fFrequency:=1000000000;
+{$else}
+{$ifdef unix}
+  fFrequency:=1000000;
+{$else}
+  fFrequency:=1000;
+{$endif}
+{$endif}
+{$endif}
+ fMillisecondInterval:=(fFrequency+500) div 1000;
+ fTwoMillisecondsInterval:=(fFrequency+250) div 500;
+ fFourMillisecondsInterval:=(fFrequency+125) div 250;
+ fQuarterSecondInterval:=(fFrequency+2) div 4;
+ fMinuteInterval:=fFrequency*60;
+ fHourInterval:=fFrequency*3600;
+end;
+
+destructor TPasMPHighResolutionTimer.Destroy;
+begin
+ inherited Destroy;
+end;
+
+function TPasMPHighResolutionTimer.GetTime:TPasMPInt64;
+{$ifdef linux}
+var NowTimeSpec:TimeSpec;
+    ia,ib:TPasMPInt64;
+{$else}
+{$ifdef unix}
+var tv:timeval;
+    tz:timezone;
+    ia,ib:TPasMPInt64;
+{$endif}
+{$endif}
+begin
+{$ifdef windows}
+ if not QueryPerformanceCounter(result) then begin
+  result:=timeGetTime;
+ end;
+{$else}
+{$ifdef linux}
+ clock_gettime(CLOCK_MONOTONIC,@NowTimeSpec);
+ ia:=TPasMPInt64(NowTimeSpec.tv_sec)*TPasMPInt64(1000000000);
+ ib:=NowTimeSpec.tv_nsec;
+ result:=ia+ib;
+{$else}
+{$ifdef unix}
+  tz.tz_minuteswest:=0;
+  tz.tz_dsttime:=0;
+  fpgettimeofday(@tv,@tz);
+  ia:=TPasMPInt64(tv.tv_sec)*TPasMPInt64(1000000);
+  ib:=tv.tv_usec;
+  result:=ia+ib;
+{$else}
+ result:=SDL_GetTicks;
+{$endif}
+{$endif}
+{$endif}
+ result:=result shr fFrequencyShift;
+end;
+
+procedure TPasMPHighResolutionTimer.Sleep(const pDelay:TPasMPInt64);
+var EndTime,NowTime{$ifdef unix},SleepTime{$endif}:TPasMPInt64;
+{$ifdef unix}
+    req,rem:timespec;
+{$endif}
+begin
+ if pDelay>0 then begin
+{$ifdef windows}
+  NowTime:=GetTime;
+  EndTime:=NowTime+pDelay;
+  while (NowTime+fTwoMillisecondsInterval)<EndTime do begin
+   Sleep(1);
+   NowTime:=GetTime;
+  end;
+  while (NowTime+fMillisecondInterval)<EndTime do begin
+   Sleep(0);
+   NowTime:=GetTime;
+  end;
+  while NowTime<EndTime do begin
+   NowTime:=GetTime;
+  end;
+{$else}
+{$ifdef linux}
+  NowTime:=GetTime;
+  EndTime:=NowTime+pDelay;
+  while true do begin
+   SleepTime:=abs(EndTime-NowTime);
+   if SleepTime>=fFourMillisecondsInterval then begin
+    SleepTime:=(SleepTime+2) shr 2;
+    if SleepTime>0 then begin
+     req.tv_sec:=SleepTime div 1000000000;
+     req.tv_nsec:=SleepTime mod 10000000000;
+     fpNanoSleep(@req,@rem);
+     NowTime:=GetTime;
+     continue;
+    end;
+   end;
+   break;
+  end;
+  while (NowTime+fTwoMillisecondsInterval)<EndTime do begin
+   ThreadSwitch;
+   NowTime:=GetTime;
+  end;
+  while NowTime<EndTime do begin
+   NowTime:=GetTime;
+  end;
+{$else}
+{$ifdef unix}
+  NowTime:=GetTime;
+  EndTime:=NowTime+pDelay;
+  while true do begin
+   SleepTime:=abs(EndTime-NowTime);
+   if SleepTime>=fFourMillisecondsInterval then begin
+    SleepTime:=(SleepTime+2) shr 2;
+    if SleepTime>0 then begin
+     req.tv_sec:=SleepTime div 1000000;
+     req.tv_nsec:=(SleepTime mod 1000000)*1000;
+     fpNanoSleep(@req,@rem);
+     NowTime:=GetTime;
+     continue;
+    end;
+   end;
+   break;
+  end;
+  while (NowTime+fTwoMillisecondsInterval)<EndTime do begin
+   ThreadSwitch;
+   NowTime:=GetTime;
+  end;
+  while NowTime<EndTime do begin
+   NowTime:=GetTime;
+  end;
+{$else}
+  NowTime:=GetTime;
+  EndTime:=NowTime+pDelay;
+  while (NowTime+4)<EndTime then begin
+   SDL_Delay(1);
+   NowTime:=GetTime;
+  end;
+  while (NowTime+2)<EndTime do begin
+   SDL_Delay(0);
+   NowTime:=GetTime;
+  end;
+  while NowTime<EndTime do begin
+   NowTime:=GetTime;
+  end;
+{$endif}
+{$endif}
+{$endif}
+ end;
+end;
+
+function TPasMPHighResolutionTimer.ToFloatSeconds(const pTime:TPasMPHighResolutionTime):double;
+begin
+ if fFrequency<>0 then begin
+  result:=pTime/fFrequency;
+ end else begin
+  result:=0;
+ end;
+end;
+
+function TPasMPHighResolutionTimer.FromFloatSeconds(const pTime:double):TPasMPHighResolutionTime;
+begin
+ if fFrequency<>0 then begin
+  result:=trunc(pTime*fFrequency);
+ end else begin
+  result:=0;
+ end;
+end;
+
+function TPasMPHighResolutionTimer.ToMilliseconds(const pTime:TPasMPHighResolutionTime):TPasMPInt64;
+begin
+ result:=pTime;
+ if fFrequency<>1000 then begin
+  result:=((pTime*1000)+((fFrequency+1) shr 1)) div fFrequency;
+ end;
+end;
+
+function TPasMPHighResolutionTimer.FromMilliseconds(const pTime:TPasMPInt64):TPasMPHighResolutionTime;
+begin
+ result:=pTime;
+ if fFrequency<>1000 then begin
+  result:=((pTime*fFrequency)+500) div 1000;
+ end;
+end;
+
+function TPasMPHighResolutionTimer.ToMicroseconds(const pTime:TPasMPHighResolutionTime):TPasMPInt64;
+begin
+ result:=pTime;
+ if fFrequency<>1000000 then begin
+  result:=((pTime*1000000)+((fFrequency+1) shr 1)) div fFrequency;
+ end;
+end;
+
+function TPasMPHighResolutionTimer.FromMicroseconds(const pTime:TPasMPInt64):TPasMPHighResolutionTime;
+begin
+ result:=pTime;
+ if fFrequency<>1000000 then begin
+  result:=((pTime*fFrequency)+500000) div 1000000;
+ end;
+end;
+
+function TPasMPHighResolutionTimer.ToNanoseconds(const pTime:TPasMPHighResolutionTime):TPasMPInt64;
+begin
+ result:=pTime;
+ if fFrequency<>1000000000 then begin
+  result:=((pTime*1000000000)+((fFrequency+1) shr 1)) div fFrequency;
+ end;
+end;
+
+function TPasMPHighResolutionTimer.FromNanoseconds(const pTime:TPasMPInt64):TPasMPHighResolutionTime;
+begin
+ result:=pTime;
+ if fFrequency<>1000000000 then begin
+  result:=((pTime*fFrequency)+500000000) div 1000000000;
+ end;
 end;
 
 constructor TPasMPSimpleEvent.Create;
@@ -8138,6 +8773,7 @@ begin
  fFreeOnRelease:=false;
  fJob:=nil;
  fThreadIndex:=-1;
+ fTaskTag:=0;
 end;
 
 destructor TPasMPJobTask.Destroy;
@@ -8745,6 +9381,24 @@ begin
  end;
 end;
 
+{$ifdef PasMPProfiler}
+function TPasMPProfilerHistory.GetHistoryRingBufferItem(const pIndex:TPasMPUInt32):PPasMPProfilerHistoryRingBufferItem;
+begin
+ result:=@fHistoryRingBufferItems[pIndex and PasMPProfilerHistoryRingBufferSizeMask];
+end;
+
+procedure TPasMPProfilerHistory.Reset;
+begin
+ fCount:=0;
+ fStartTime:=HighResolutionTimer.GetTime;
+end;
+
+function TPasMPProfilerHistory.Acquire:PPasMPProfilerHistoryRingBufferItem;
+begin
+ result:=@fHistoryRingBufferItems[TPasMPUInt32(TPasMPInterlocked.Increment(TPasMPInt32(fCount))-1) and PasMPProfilerHistoryRingBufferSizeMask];
+end;
+{$endif}
+
 constructor TPasMP.Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true);
 var Index:TPasMPInt32;
 begin
@@ -8760,6 +9414,13 @@ begin
  fDoCPUCorePinning:=DoCPUCorePinning;
  
  fSleepingOnIdle:=SleepingOnIdle;
+
+{$ifdef PasMPProfiler}
+ fProfilerHighResolutionTimer:=TPasMPHighResolutionTimer.Create;
+ fProfilerHistory.fHighResolutionTimer:=fProfilerHighResolutionTimer;
+ fProfilerHistory.Reset;
+ fPointerToProfilerHistory:=@fProfilerHistory;
+{$endif}
 
  fCountJobWorkerThreads:=TPasMP.GetCountOfHardwareThreads(fAvailableCPUCores)-ThreadHeadRoomForForeignTasks;
  if fCountJobWorkerThreads<1 then begin
@@ -8854,6 +9515,9 @@ begin
 {$endif}
 {$ifndef UseThreadLocalStorage}
  fJobWorkerThreadHashTableCriticalSection.Free;
+{$endif}
+{$ifdef PasMPProfiler}
+ fProfilerHighResolutionTimer.Free;
 {$endif}
  fCriticalSection.Free;
  inherited Destroy;
@@ -9133,6 +9797,9 @@ end;
 procedure TPasMP.Reset;
 var Index:TPasMPInt32;
 begin
+{$ifdef PasMPProfiler}
+ fProfilerHistory.Reset;
+{$endif}
  fJobAllocator.FreeJobs;
  for Index:=0 to fCountJobWorkerThreads-1 do begin
   fJobWorkerThreads[Index].fJobAllocator.FreeJobs;
@@ -9299,7 +9966,7 @@ begin
  result^.Method.Code:=MethodCode;
  result^.Method.Data:=MethodData;
  result^.ParentJob:=ParentJob;
- if assigned(JobWorkerThread) then begin
+ if assigned(JobWorkerThread) then begin                                                  
   result^.InternalData:=TPasMPUInt32(JobWorkerThread.fThreadIndex) or (PasMPJobFlagHasOwnerWorkerThread or Flags);
  end else begin
   result^.InternalData:=Flags;
@@ -9353,7 +10020,7 @@ end;
 
 function TPasMP.Acquire(const JobTask:TPasMPJobTask;const Data:pointer=nil;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
 begin
- result:=AllocateJob(nil,pointer(JobTask),Data,ParentJob,Flags);
+ result:=AllocateJob(nil,pointer(JobTask),Data,ParentJob,Flags or TPasMP.EncodeTaskTagToFlags(JobTask.fTaskTag));
  JobTask.fJob:=result;
  JobTask.fThreadIndex:=-1;
 end;
@@ -9530,10 +10197,19 @@ begin
 end;
 
 procedure TPasMP.ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$ifdef PasMPProfiler}
+var ProfilerHistoryRingBufferItem:PPasMPProfilerHistoryRingBufferItem;
+{$endif}
 begin
  if JobWorkerThread.fJobQueue.HasJobs then begin
   WakeUpAll;
  end;
+{$ifdef PasMPProfiler}
+ ProfilerHistoryRingBufferItem:=fProfilerHistory.Acquire;
+ ProfilerHistoryRingBufferItem^.TaskTag:=TPasMP.DecodeTaskTagFromFlags(Job^.InternalData);
+ ProfilerHistoryRingBufferItem^.ThreadIndex:=JobWorkerThread.ThreadIndex;
+ ProfilerHistoryRingBufferItem^.StartTime:=fProfilerHighResolutionTimer.GetTime-fProfilerHistory.fStartTime;
+{$endif}
  if assigned(Job^.Method.Data) then begin
   if assigned(Job^.Method.Code) then begin
    TPasMPJobMethod(Job^.Method)(Job,JobWorkerThread.ThreadIndex);
@@ -9545,6 +10221,9 @@ begin
    TPasMPJobProcedure(pointer(Job^.Method.Code))(Job,JobWorkerThread.ThreadIndex);
   end;
  end;
+{$ifdef PasMPProfiler}
+ ProfilerHistoryRingBufferItem^.EndTime:=fProfilerHighResolutionTimer.GetTime-fProfilerHistory.fStartTime;
+{$endif}
  FinishJob(Job);
 end;
 
@@ -10904,7 +11583,13 @@ initialization
 {$endif}
  GlobalPasMP:=nil;
  GlobalPasMPCriticalSection:=TPasMPCriticalSection.Create;
+{$ifdef Windows}
+ timeBeginPeriod(1);
+{$endif}
 finalization
+{$ifdef Windows}
+ timeEndPeriod(1);
+{$endif}
  if assigned(GlobalPasMP) then begin
   TPasMP.DestroyGlobalInstance;
  end;
