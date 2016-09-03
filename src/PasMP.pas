@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-03-20-21-0000                       *
+ *                        Version 2016-09-03-22-06-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1894,21 +1894,28 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fHistory:TPasMPProfilerHistory;
        fPointerToHistory:PPasMPProfilerHistory;
        fPasMPInstance:TPasMP;
-       fCount:TPasMPUInt32;
+       fCount:TPasMPInt32;
        fHighResolutionTimer:TPasMPHighResolutionTimer;
        fStartTime:TPasMPHighResolutionTime;
+       fLastTime:TPasMPHighResolutionTime;
+       fOffsetTime:TPasMPHighResolutionTime;
        function GetHistoryRingBufferItem(const pIndex:TPasMPUInt32):PPasMPProfilerHistoryRingBufferItem; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure Sort;
       public
        constructor Create(const pPasMPInstance:TPasMP);
        destructor Destroy; override;
        procedure Reset;
+       procedure Start(const SuppressGaps:boolean=true);
+       procedure Stop(const MaximalTimePeriodToKeep:TPasMPHighResolutionTime=-1);
        function Acquire:PPasMPProfilerHistoryRingBufferItem; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        property History:PPasMPProfilerHistory read fPointerToHistory;
        property HistoryRingBufferItems[const pIndex:TPasMPUInt32]:PPasMPProfilerHistoryRingBufferItem read GetHistoryRingBufferItem;
        property PasMPInstance:TPasMP read fPasMPInstance;
-       property Count:TPasMPUInt32 read fCount;
+       property Count:TPasMPInt32 read fCount;
        property HighResolutionTimer:TPasMPHighResolutionTimer read fHighResolutionTimer;
        property StartTime:TPasMPHighResolutionTime read fStartTime;
+       property LastTime:TPasMPHighResolutionTime read fLastTime;
+       property OffsetTime:TPasMPHighResolutionTime read fOffsetTime;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -9405,10 +9412,187 @@ begin
  result:=@fHistory[pIndex and PasMPProfilerHistoryRingBufferSizeMask];
 end;
 
+procedure TPasMPProfiler.Sort;
+type PItem=^TItem;
+     TItem=TPasMPProfilerHistoryRingBufferItem;
+     PItemArray=^TItemArray;
+     TItemArray=array of TItem;
+     PStackItem=^TStackItem;
+     TStackItem=record
+      Left,Right,Depth:TPasMPInt32;
+     end;
+var Left,Right,Depth,i,j,Middle,Size,Parent,Child,Pivot,iA,iB,iC:TPasMPInt32;
+    StackItem:PStackItem;
+    Stack:array[0..31] of TStackItem;
+    Temp:TPasMPProfilerHistoryRingBufferItem;
+begin
+ if fCount>0 then begin
+  StackItem:=@Stack[0];
+  StackItem^.Left:=0;
+  StackItem^.Right:=Min(fCount-1,PasMPProfilerHistoryRingBufferSizeMask);
+  StackItem^.Depth:=TPasMPMath.BitScanReverse32(StackItem^.Right+1) shl 1;
+  inc(StackItem);
+  while TPasMPPtrUInt(pointer(StackItem))>TPasMPPtrUInt(pointer(@Stack[0])) do begin
+   dec(StackItem);
+   Left:=StackItem^.Left;
+   Right:=StackItem^.Right;
+   Depth:=StackItem^.Depth;
+   Size:=(Right-Left)+1;
+   if Size<16 then begin
+    // Insertion sort
+    iA:=Left;
+    iB:=iA+1;
+    while iB<=Right do begin
+     iC:=iB;
+     while (iA>=Left) and
+           (iC>=Left) and
+           (fHistory[iA].StartTime>fHistory[iC].StartTime) do begin
+      Temp:=fHistory[iA];
+      fHistory[iA]:=fHistory[iC];
+      fHistory[iC]:=Temp;
+      dec(iA);
+      dec(iC);
+     end;
+     iA:=iB;
+     inc(iB);
+    end;
+   end else begin
+    if (Depth=0) or (TPasMPPtrUInt(pointer(StackItem))>=TPasMPPtrUInt(pointer(@Stack[high(Stack)-1]))) then begin
+     // Heap sort
+     i:=Size div 2;
+     repeat
+      if i>0 then begin
+       dec(i);
+      end else begin
+       dec(Size);
+       if Size>0 then begin
+        Temp:=fHistory[Left+Size];
+        fHistory[Left+Size]:=fHistory[Left];
+        fHistory[Left]:=Temp;
+       end else begin
+        break;
+       end;
+      end;
+      Parent:=i;
+      repeat
+       Child:=(Parent*2)+1;
+       if Child<Size then begin
+        if (Child<(Size-1)) and (fHistory[Left+Child].StartTime<fHistory[Left+Child+1].StartTime) then begin
+         inc(Child);
+        end;
+        if fHistory[Left+Parent].StartTime<fHistory[Left+Child].StartTime then begin
+         Temp:=fHistory[Left+Parent];
+         fHistory[Left+Parent]:=fHistory[Left+Child];
+         fHistory[Left+Child]:=Temp;
+         Parent:=Child;
+         continue;
+        end;
+       end;
+       break;
+      until false;
+     until false;
+    end else begin
+     // Quick sort width median-of-three optimization
+     Middle:=Left+((Right-Left) shr 1);
+     if (Right-Left)>3 then begin
+      if fHistory[Left].StartTime>fHistory[Middle].StartTime then begin
+       Temp:=fHistory[Left];
+       fHistory[Left]:=fHistory[Middle];
+       fHistory[Middle]:=Temp;
+      end;
+      if fHistory[Left].StartTime>fHistory[Right].StartTime then begin
+       Temp:=fHistory[Left];
+       fHistory[Left]:=fHistory[Right];
+       fHistory[Right]:=Temp;
+      end;
+      if fHistory[Middle].StartTime>fHistory[Right].StartTime then begin
+       Temp:=fHistory[Middle];
+       fHistory[Middle]:=fHistory[Right];
+       fHistory[Right]:=Temp;
+      end;
+     end;
+     Pivot:=Middle;
+     i:=Left;
+     j:=Right;
+     repeat
+      while (i<Right) and (fHistory[i].StartTime<fHistory[Pivot].StartTime) do begin
+       inc(i);
+      end;
+      while (j>=i) and (fHistory[j].StartTime>fHistory[Pivot].StartTime) do begin
+       dec(j);
+      end;
+      if i>j then begin
+       break;
+      end else begin
+       if i<>j then begin
+        Temp:=fHistory[i];
+        fHistory[i]:=fHistory[j];
+        fHistory[j]:=Temp;
+        if Pivot=i then begin
+         Pivot:=j;
+        end else if Pivot=j then begin
+         Pivot:=i;
+        end;
+       end;
+       inc(i);
+       dec(j);
+      end;
+     until false;
+     if i<Right then begin
+      StackItem^.Left:=i;
+      StackItem^.Right:=Right;
+      StackItem^.Depth:=Depth-1;
+      inc(StackItem);
+     end;
+     if Left<j then begin
+      StackItem^.Left:=Left;
+      StackItem^.Right:=j;
+      StackItem^.Depth:=Depth-1;
+      inc(StackItem);
+     end;
+    end;
+   end;
+  end;
+ end;
+end;
+
 procedure TPasMPProfiler.Reset;
 begin
  fCount:=0;
  fStartTime:=HighResolutionTimer.GetTime;
+ fLastTime:=0;
+ fOffsetTime:=fLastTime-fStartTime;
+end;
+
+procedure TPasMPProfiler.Start(const SuppressGaps:boolean=true);
+begin
+ if SuppressGaps then begin
+  fStartTime:=HighResolutionTimer.GetTime;
+  fOffsetTime:=fLastTime-fStartTime;
+ end;
+end;
+
+procedure TPasMPProfiler.Stop(const MaximalTimePeriodToKeep:TPasMPHighResolutionTime=-1);
+var Index:TPasMPInt32;
+begin
+ if fCount>0 then begin
+  Sort;
+  if fCount>PasMPProfilerHistoryRingBufferSize then begin
+   fCount:=PasMPProfilerHistoryRingBufferSize;
+  end;
+  fLastTime:=fHistory[(fCount-1) and PasMPProfilerHistoryRingBufferSizeMask].EndTime;
+  if MaximalTimePeriodToKeep>=0 then begin
+   for Index:=fCount-1 downto 0 do begin
+    if (fLastTime-fHistory[Index].StartTime)>=MaximalTimePeriodToKeep then begin
+     Move(fHistory[Index],fHistory[0],(fCount-Index)*SizeOf(TPasMPProfilerHistoryRingBufferItem));
+     TPasMPInterlocked.Sub(fCount,Index);
+     break;
+    end;
+   end;
+  end;
+ end else begin
+  fLastTime:=0;
+ end;
 end;
 
 function TPasMPProfiler.Acquire:PPasMPProfilerHistoryRingBufferItem;
@@ -10217,7 +10401,7 @@ begin
   ProfilerHistoryRingBufferItem:=fProfiler.Acquire;
   ProfilerHistoryRingBufferItem^.TaskTag:=TPasMP.DecodeTaskTagFromFlags(Job^.InternalData);
   ProfilerHistoryRingBufferItem^.ThreadIndex:=JobWorkerThread.ThreadIndex;
-  ProfilerHistoryRingBufferItem^.StartTime:=fProfiler.fHighResolutionTimer.GetTime-fProfiler.fStartTime;
+  ProfilerHistoryRingBufferItem^.StartTime:=fProfiler.fHighResolutionTimer.GetTime+fProfiler.fOffsetTime;
  end;
  if assigned(Job^.Method.Data) then begin
   if assigned(Job^.Method.Code) then begin
@@ -10231,7 +10415,7 @@ begin
   end;
  end;
  if assigned(fProfiler) then begin
-  ProfilerHistoryRingBufferItem^.EndTime:=fProfiler.fHighResolutionTimer.GetTime-fProfiler.fStartTime;
+  ProfilerHistoryRingBufferItem^.EndTime:=fProfiler.fHighResolutionTimer.GetTime+fProfiler.fOffsetTime;
  end;
  FinishJob(Job);
 end;
