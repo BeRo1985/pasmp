@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-03-18-29-0000                       *
+ *                        Version 2016-09-03-18-33-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2017,6 +2017,9 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function ParallelDirectMergeSort(const Items:pointer;const Left,Right,ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil):PPasMPJob;
        function ParallelIndirectMergeSort(const Items:pointer;const Left,Right:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil):PPasMPJob;
        property CountJobWorkerThreads:TPasMPInt32 read fCountJobWorkerThreads;
+{$ifdef PasMPProfiler}
+       property ProfilerHistory:PPasMPProfilerHistory read fPointerToProfilerHistory;
+{$endif}
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
