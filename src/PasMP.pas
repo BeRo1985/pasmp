@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-03-19-37-0000                       *
+ *                        Version 2016-09-03-20-21-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -9811,9 +9811,6 @@ end;
 procedure TPasMP.Reset;
 var Index:TPasMPInt32;
 begin
- if assigned(fProfiler) then begin
-  fProfiler.Reset;
- end;
  fJobAllocator.FreeJobs;
  for Index:=0 to fCountJobWorkerThreads-1 do begin
   fJobWorkerThreads[Index].fJobAllocator.FreeJobs;
