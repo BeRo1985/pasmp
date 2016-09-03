@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-03-18-00-0000                       *
+ *                        Version 2016-09-03-18-29-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1873,12 +1873,17 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$ifdef PasMPProfiler}
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      PPasMPProfilerHistoryRingBufferItem=^TPasMPProfilerHistoryRingBufferItem;
-     TPasMPProfilerHistoryRingBufferItem=record // 32 byte per item
-      TaskTag:TPasMPUInt32;
-      ThreadIndex:TPasMPUInt32;
-      Dummy:TPasMPUInt64;
-      StartTime:TPasMPHighResolutionTime;
-      EndTime:TPasMPHighResolutionTime;
+     TPasMPProfilerHistoryRingBufferItem=record
+      case TPasMPUInt32 of
+       0:(
+        TaskTag:TPasMPUInt32;
+        ThreadIndex:TPasMPUInt32;
+        StartTime:TPasMPHighResolutionTime;
+        EndTime:TPasMPHighResolutionTime;
+       );
+       1:(
+        CacheLineFillUp:array[0..PasMPCPUCacheLineSize-1] of TPasMPUInt8;
+       );
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
