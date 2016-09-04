@@ -1,7 +1,7 @@
 (******************************************************************************
- *                                   PasMP                                    *
+ *                          PasMPProfilerHistoryView                          *
  ******************************************************************************
- *                        Version 2016-09-04-15-50-0000                       *
+ *                        Version 2016-09-04-16-06-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -421,7 +421,7 @@ const ProfilerNotActivated='Profiler not activated';
         $ff80ff
        );
 var WorkCanvas:TCanvas;
-    CanvasWidth,CanvasHeight,ThreadIndex,HeightPerThread,HistorySize,HistoryIndex,x0,x1,y0,y1:TPasMPInt32;
+    CanvasWidth,CanvasHeight,ThreadIndex,HeightPerThread,HistoryIndex,x0,x1,y0,y1:TPasMPInt32;
     FirstTime:TPasMPHighResolutionTime;
     ProfilerHistoryRingBufferItem:PPasMPProfilerHistoryRingBufferItem;
     c:TColor;
@@ -503,8 +503,6 @@ begin
 end;
 
 procedure TPasMPProfilerHistoryView.TransferData;
-var Index:TPasMPInt32;
-    EndTime:TPasMPHighResolutionTime;
 begin
  fMultipleReaderSingleWriterLock.AcquireWrite;
  try
