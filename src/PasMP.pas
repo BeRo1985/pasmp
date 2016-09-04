@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-04-00-18-0000                       *
+ *                        Version 2016-09-04-15-50-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -483,6 +483,9 @@ const PasMPAllocatorPoolBucketBits=12;
       PasMPJobFlagHasOwnerWorkerThread=TPasMPUInt32(TPasMPUInt32(1) shl ((PasMPJobThreadIndexBits+PasMPJobThreadIndexBits)+1)); // Bit 25
       PasMPJobFlagReleaseOnFinish=TPasMPUInt32(TPasMPUInt32(1) shl ((PasMPJobThreadIndexBits+PasMPJobThreadIndexBits)+2));      // Bit 26
 
+      PasMPJobFlagActive=TPasMPUInt32(TPasMPUInt32(1) shl 31);
+      PasMPJobFlagActiveAndNotMask=TPasMPUInt32(not PasMPJobFlagActive);
+
       PasMPCPUCacheLineSize=64;
 
       PasMPProfilerHistoryRingBufferSizeBits=16;
@@ -651,6 +654,42 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$ifdef CPU64}
        class function Sub(var Destination:TPasMPInt64;const Value:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Sub(var Destination:TPasMPUInt64;const Value:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$endif}
+       class procedure BitwiseAnd(var Destination:TPasMPInt32;const Value:TPasMPInt32); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}{$ifend}
+       class procedure BitwiseAnd(var Destination:TPasMPUInt32;const Value:TPasMPUInt32); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}{$ifend}
+{$ifdef CPU64}
+       class procedure BitwiseAnd(var Destination:TPasMPInt64;const Value:TPasMPInt64); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(cpux86_64)}register;{$else}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}{$ifend}
+       class procedure BitwiseAnd(var Destination:TPasMPUInt64;const Value:TPasMPUInt64); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(cpux86_64)}register;{$else}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}{$ifend}
+{$endif}
+       class procedure BitwiseOr(var Destination:TPasMPInt32;const Value:TPasMPInt32); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}{$ifend}
+       class procedure BitwiseOr(var Destination:TPasMPUInt32;const Value:TPasMPUInt32); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}{$ifend}
+{$ifdef CPU64}
+       class procedure BitwiseOr(var Destination:TPasMPInt64;const Value:TPasMPInt64); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(cpux86_64)}register;{$else}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}{$ifend}
+       class procedure BitwiseOr(var Destination:TPasMPUInt64;const Value:TPasMPUInt64); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(cpux86_64)}register;{$else}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}{$ifend}
+{$endif}
+       class procedure BitwiseXor(var Destination:TPasMPInt32;const Value:TPasMPInt32); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}{$ifend}
+       class procedure BitwiseXor(var Destination:TPasMPUInt32;const Value:TPasMPUInt32); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}{$ifend}
+{$ifdef CPU64}
+       class procedure BitwiseXor(var Destination:TPasMPInt64;const Value:TPasMPInt64); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(cpux86_64)}register;{$else}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}{$ifend}
+       class procedure BitwiseXor(var Destination:TPasMPUInt64;const Value:TPasMPUInt64); overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(cpux86_64)}register;{$else}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}{$ifend}
+{$endif}
+       class function ExchangeBitwiseAnd(var Destination:TPasMPInt32;const Value:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function ExchangeBitwiseAnd(var Destination:TPasMPUInt32;const Value:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$ifdef CPU64}
+       class function ExchangeBitwiseAnd(var Destination:TPasMPInt64;const Value:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function ExchangeBitwiseAnd(var Destination:TPasMPUInt64;const Value:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$endif}
+       class function ExchangeBitwiseOr(var Destination:TPasMPInt32;const Value:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function ExchangeBitwiseOr(var Destination:TPasMPUInt32;const Value:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$ifdef CPU64}
+       class function ExchangeBitwiseOr(var Destination:TPasMPInt64;const Value:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function ExchangeBitwiseOr(var Destination:TPasMPUInt64;const Value:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$endif}
+       class function ExchangeBitwiseXor(var Destination:TPasMPInt32;const Value:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function ExchangeBitwiseXor(var Destination:TPasMPUInt32;const Value:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$ifdef CPU64}
+       class function ExchangeBitwiseXor(var Destination:TPasMPInt64;const Value:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function ExchangeBitwiseXor(var Destination:TPasMPUInt64;const Value:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$endif}
        class function Exchange(var Destination:TPasMPInt32;const Source:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Exchange(var Destination:TPasMPUInt32;const Source:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
@@ -1717,8 +1756,8 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        0:(                                          // 32 / 64 bit
         Method:TMethod;                             //  8 / 16 => 2x pointers
         ParentJob:PPasMPJob;                        //  4 /  8 => 1x pointer
-        InternalData:TPasMPUInt32;                  //  4 /  4 => 1x 32-bit unsigned integer (12 bits => owner worker thread index, 12 bits => task tag, remaining higher bits => flags)
-        State:TPasMPInt32;                          //  4 /  4 => 1x 32-bit signed integer (if it's below 0, then the job is completed, otherwise it's a 0-based unfinished job counter)
+        ChildrenJobs:TPasMPUInt32;                  //  4 /  4 => 1x 32-bit unsigned integer (children jobs)
+        InternalData:TPasMPUInt32;                  //  4 /  4 => 1x 32-bit unsigned integer (12 bits => owner worker thread index, 12 bits => task tag, remaining higher bits => flags, last high bit = done job bit)
         Data:pointer;                               // ------- => just a dummy variable as struct field offset anchor
        );                                           // 20 / 32
        1:(
@@ -1958,8 +1997,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function GlobalAllocateJob:PPasMPJob;
        procedure GlobalFreeJob(const Job:PPasMPJob);
        function AllocateJob(const MethodCode,MethodData,Data:pointer;const ParentJob:PPasMPJob;const Flags:TPasMPUInt32):PPasMPJob; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       procedure FinishJobRelease(Job:PPasMPJob); {$if defined(cpu386) or defined(cpux86_64)}register;{$ifend}
-       procedure FinishJob(Job:PPasMPJob); {$if defined(cpu386) or defined(cpux86_64)}register;{$ifend}
+       procedure WaitOnChildrenJobs(const Job:PPasMPJob);
        procedure ExecuteJobTask(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread;const ThreadIndex:TPasMPInt32); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef HAS_ANONYMOUS_METHODS}
@@ -3728,6 +3766,690 @@ begin
 {$else}
  result:=TPasMPUInt64(TPasMPInt64(InterlockedExchangeAdd64(TPasMPInt64(Destination),-TPasMPInt64(Value))));
 {$endif}
+end;
+{$endif}
+
+class procedure TPasMPInterlocked.BitwiseAnd(var Destination:TPasMPInt32;const Value:TPasMPInt32);
+{$if defined(cpu386)}
+asm
+{$ifdef HAS_STATIC}
+ lock and dword ptr [eax],edx
+{$else}
+ lock and dword ptr [edx],ecx
+{$endif}
+end;
+{$elseif defined(cpux86_64)}
+asm
+{$ifdef Windows}
+ // Win64 ABI
+ // rcx = Parameter 1
+ // rdx = Parameter 2
+ // r8 = Parameter 3
+{$ifdef HAS_STATIC}
+ lock and dword ptr [rcx],edx
+{$else}
+ lock and dword ptr [rdx],r8d
+{$endif}
+{$else}
+ // System V ABI
+ // rdi = self
+ // rsi = Job
+ // rdx = Temporary
+{$ifdef HAS_STATIC}
+ lock and dword ptr [rdi],esi
+{$else}
+ lock and dword ptr [rsi],edx
+{$endif}
+{$endif}
+end;
+{$else}
+var OldValue:TPasMPInt32;
+begin
+ repeat
+  OldValue:=Destination;
+{$ifdef HAS_ATOMICS}
+ until AtomicCmpExchange(Destination,OldValue and Value,OldValue)=OldValue;
+{$else}
+ until InterlockedCompareExchange(Destination,OldValue and Value,OldValue)=OldValue;
+{$endif}
+end;
+{$ifend}
+
+class procedure TPasMPInterlocked.BitwiseAnd(var Destination:TPasMPUInt32;const Value:TPasMPUInt32);
+{$if defined(cpu386)}
+asm
+{$ifdef HAS_STATIC}
+ lock and dword ptr [eax],edx
+{$else}
+ lock and dword ptr [edx],ecx
+{$endif}
+end;
+{$elseif defined(cpux86_64)}
+asm
+{$ifdef Windows}
+ // Win64 ABI
+ // rcx = Parameter 1
+ // rdx = Parameter 2
+ // r8 = Parameter 3
+{$ifdef HAS_STATIC}
+ lock and dword ptr [rcx],edx
+{$else}
+ lock and dword ptr [rdx],r8d
+{$endif}
+{$else}
+ // System V ABI
+ // rdi = self
+ // rsi = Job
+ // rdx = Temporary
+{$ifdef HAS_STATIC}
+ lock and dword ptr [rdi],esi
+{$else}
+ lock and dword ptr [rsi],edx
+{$endif}
+{$endif}
+end;
+{$else}
+var OldValue:TPasMPUInt32;
+begin
+ repeat
+  OldValue:=Destination;
+{$ifdef HAS_ATOMICS}
+ until TPasMPUInt32(TPasMPInt32(AtomicCmpExchange(TPasMPInt32(Destination),TPasMPInt32(OldValue and Value),TPasMPInt32(OldValue))))=OldValue;
+{$else}
+ until TPasMPUInt32(TPasMPInt32(InterlockedCompareExchange(TPasMPInt32(Destination),TPasMPInt32(OldValue and Value),TPasMPInt32(OldValue))))=OldValue;
+{$endif}
+end;
+{$ifend}
+
+{$ifdef CPU64}
+class procedure TPasMPInterlocked.BitwiseAnd(var Destination:TPasMPInt64;const Value:TPasMPInt64);
+{$if defined(cpux86_64)}
+asm
+{$ifdef Windows}
+ // Win64 ABI
+ // rcx = Parameter 1
+ // rdx = Parameter 2
+ // r8 = Parameter 3
+{$ifdef HAS_STATIC}
+ lock and qword ptr [rcx],rdx
+{$else}
+ lock and qword ptr [rdx],r8
+{$endif}
+{$else}
+ // System V ABI
+ // rdi = self
+ // rsi = Job
+ // rdx = Temporary
+{$ifdef HAS_STATIC}
+ lock and qword ptr [rdi],rsi
+{$else}
+ lock and qword ptr [rsi],rdx
+{$endif}
+{$endif}
+end;
+{$else}
+var OldValue:TPasMPInt64;
+begin
+ repeat
+  OldValue:=Destination;
+{$ifdef HAS_ATOMICS}
+ until AtomicCmpExchange(Destination,OldValue and Value,OldValue)=OldValue;
+{$else}
+ until InterlockedCompareExchange64(Destination,OldValue and Value,OldValue)=OldValue;
+{$endif}
+end;
+{$ifend}
+
+class procedure TPasMPInterlocked.BitwiseAnd(var Destination:TPasMPUInt64;const Value:TPasMPUInt64);
+{$if defined(cpux86_64)}
+asm
+{$ifdef Windows}
+ // Win64 ABI
+ // rcx = Parameter 1
+ // rdx = Parameter 2
+ // r8 = Parameter 3
+{$ifdef HAS_STATIC}
+ lock and qword ptr [rcx],rdx
+{$else}
+ lock and qword ptr [rdx],r8
+{$endif}
+{$else}
+ // System V ABI
+ // rdi = self
+ // rsi = Job
+ // rdx = Temporary
+{$ifdef HAS_STATIC}
+ lock and qword ptr [rdi],rsi
+{$else}
+ lock and qword ptr [rsi],rdx
+{$endif}
+{$endif}
+end;
+{$else}
+var OldValue:TPasMPInt64;
+begin
+ repeat
+  OldValue:=Destination;
+{$ifdef HAS_ATOMICS}
+ until TPasMPUInt64(TPasMPInt64(AtomicCmpExchange(TPasMPInt64(Destination),TPasMPInt64(OldValue and Value),TPasMPInt64(OldValue))))=OldValue;
+{$else}
+ until TPasMPUInt64(TPasMPInt64(InterlockedCompareExchange64(TPasMPInt64(Destination),TPasMPInt64(OldValue and Value),TPasMPInt64(OldValue))))=OldValue;
+{$endif}
+end;
+{$ifend}
+{$endif}
+
+class procedure TPasMPInterlocked.BitwiseOr(var Destination:TPasMPInt32;const Value:TPasMPInt32);
+{$if defined(cpu386)}
+asm
+{$ifdef HAS_STATIC}
+ lock or dword ptr [eax],edx
+{$else}
+ lock or dword ptr [edx],ecx
+{$endif}
+end;
+{$elseif defined(cpux86_64)}
+asm
+{$ifdef Windows}
+ // Win64 ABI
+ // rcx = Parameter 1
+ // rdx = Parameter 2
+ // r8 = Parameter 3
+{$ifdef HAS_STATIC}
+ lock or dword ptr [rcx],edx
+{$else}
+ lock or dword ptr [rdx],r8d
+{$endif}
+{$else}
+ // System V ABI
+ // rdi = self
+ // rsi = Job
+ // rdx = Temporary
+{$ifdef HAS_STATIC}
+ lock or dword ptr [rdi],esi
+{$else}
+ lock or dword ptr [rsi],edx
+{$endif}
+{$endif}
+end;
+{$else}
+var OldValue:TPasMPInt32;
+begin
+ repeat
+  OldValue:=Destination;
+{$ifdef HAS_ATOMICS}
+ until AtomicCmpExchange(Destination,OldValue or Value,OldValue)=OldValue;
+{$else}
+ until InterlockedCompareExchange(Destination,OldValue or Value,OldValue)=OldValue;
+{$endif}
+end;
+{$ifend}
+
+class procedure TPasMPInterlocked.BitwiseOr(var Destination:TPasMPUInt32;const Value:TPasMPUInt32);
+{$if defined(cpu386)}
+asm
+{$ifdef HAS_STATIC}
+ lock or dword ptr [eax],edx
+{$else}
+ lock or dword ptr [edx],ecx
+{$endif}
+end;
+{$elseif defined(cpux86_64)}
+asm
+{$ifdef Windows}
+ // Win64 ABI
+ // rcx = Parameter 1
+ // rdx = Parameter 2
+ // r8 = Parameter 3
+{$ifdef HAS_STATIC}
+ lock or dword ptr [rcx],edx
+{$else}
+ lock or dword ptr [rdx],r8d
+{$endif}
+{$else}
+ // System V ABI
+ // rdi = self
+ // rsi = Job
+ // rdx = Temporary
+{$ifdef HAS_STATIC}
+ lock or dword ptr [rdi],esi
+{$else}
+ lock or dword ptr [rsi],edx
+{$endif}
+{$endif}
+end;
+{$else}
+var OldValue:TPasMPUInt32;
+begin
+ repeat
+  OldValue:=Destination;
+{$ifdef HAS_ATOMICS}
+ until TPasMPUInt32(TPasMPInt32(AtomicCmpExchange(TPasMPInt32(Destination),TPasMPInt32(OldValue or Value),TPasMPInt32(OldValue))))=OldValue;
+{$else}
+ until TPasMPUInt32(TPasMPInt32(InterlockedCompareExchange(TPasMPInt32(Destination),TPasMPInt32(OldValue or Value),TPasMPInt32(OldValue))))=OldValue;
+{$endif}
+end;
+{$ifend}
+
+{$ifdef CPU64}
+class procedure TPasMPInterlocked.BitwiseOr(var Destination:TPasMPInt64;const Value:TPasMPInt64);
+{$if defined(cpux86_64)}
+asm
+{$ifdef Windows}
+ // Win64 ABI
+ // rcx = Parameter 1
+ // rdx = Parameter 2
+ // r8 = Parameter 3
+{$ifdef HAS_STATIC}
+ lock or qword ptr [rcx],rdx
+{$else}
+ lock or qword ptr [rdx],r8
+{$endif}
+{$else}
+ // System V ABI
+ // rdi = self
+ // rsi = Job
+ // rdx = Temporary
+{$ifdef HAS_STATIC}
+ lock or qword ptr [rdi],rsi
+{$else}
+ lock or qword ptr [rsi],rdx
+{$endif}
+{$endif}
+end;
+{$else}
+var OldValue:TPasMPInt64;
+begin
+ repeat
+  OldValue:=Destination;
+{$ifdef HAS_ATOMICS}
+ until AtomicCmpExchange(Destination,OldValue or Value,OldValue)=OldValue;
+{$else}
+ until InterlockedCompareExchange64(Destination,OldValue or Value,OldValue)=OldValue;
+{$endif}
+end;
+{$ifend}
+
+class procedure TPasMPInterlocked.BitwiseOr(var Destination:TPasMPUInt64;const Value:TPasMPUInt64);
+{$if defined(cpux86_64)}
+asm
+{$ifdef Windows}
+ // Win64 ABI
+ // rcx = Parameter 1
+ // rdx = Parameter 2
+ // r8 = Parameter 3
+{$ifdef HAS_STATIC}
+ lock or qword ptr [rcx],rdx
+{$else}
+ lock or qword ptr [rdx],r8
+{$endif}
+{$else}
+ // System V ABI
+ // rdi = self
+ // rsi = Job
+ // rdx = Temporary
+{$ifdef HAS_STATIC}
+ lock or qword ptr [rdi],rsi
+{$else}
+ lock or qword ptr [rsi],rdx
+{$endif}
+{$endif}
+end;
+{$else}
+var OldValue:TPasMPInt64;
+begin
+ repeat
+  OldValue:=Destination;
+{$ifdef HAS_ATOMICS}
+ until TPasMPUInt64(TPasMPInt64(AtomicCmpExchange(TPasMPInt64(Destination),TPasMPInt64(OldValue or Value),TPasMPInt64(OldValue))))=OldValue;
+{$else}
+ until TPasMPUInt64(TPasMPInt64(InterlockedCompareExchange64(TPasMPInt64(Destination),TPasMPInt64(OldValue or Value),TPasMPInt64(OldValue))))=OldValue;
+{$endif}
+end;
+{$ifend}
+{$endif}
+
+class procedure TPasMPInterlocked.BitwiseXor(var Destination:TPasMPInt32;const Value:TPasMPInt32);
+{$if defined(cpu386)}
+asm
+{$ifdef HAS_STATIC}
+ lock xor dword ptr [eax],edx
+{$else}
+ lock xor dword ptr [edx],ecx
+{$endif}
+end;
+{$elseif defined(cpux86_64)}
+asm
+{$ifdef Windows}
+ // Win64 ABI
+ // rcx = Parameter 1
+ // rdx = Parameter 2
+ // r8 = Parameter 3
+{$ifdef HAS_STATIC}
+ lock xor dword ptr [rcx],edx
+{$else}
+ lock xor dword ptr [rdx],r8d
+{$endif}
+{$else}
+ // System V ABI
+ // rdi = self
+ // rsi = Job
+ // rdx = Temporary
+{$ifdef HAS_STATIC}
+ lock xor dword ptr [rdi],esi
+{$else}
+ lock xor dword ptr [rsi],edx
+{$endif}
+{$endif}
+end;
+{$else}
+var OldValue:TPasMPInt32;
+begin
+ repeat
+  OldValue:=Destination;
+{$ifdef HAS_ATOMICS}
+ until AtomicCmpExchange(Destination,OldValue xor Value,OldValue)=OldValue;
+{$else}
+ until InterlockedCompareExchange(Destination,OldValue xor Value,OldValue)=OldValue;
+{$endif}
+end;
+{$ifend}
+
+class procedure TPasMPInterlocked.BitwiseXor(var Destination:TPasMPUInt32;const Value:TPasMPUInt32);
+{$if defined(cpu386)}
+asm
+{$ifdef HAS_STATIC}
+ lock xor dword ptr [eax],edx
+{$else}
+ lock xor dword ptr [edx],ecx
+{$endif}
+end;
+{$elseif defined(cpux86_64)}
+asm
+{$ifdef Windows}
+ // Win64 ABI
+ // rcx = Parameter 1
+ // rdx = Parameter 2
+ // r8 = Parameter 3
+{$ifdef HAS_STATIC}
+ lock xor dword ptr [rcx],edx
+{$else}
+ lock xor dword ptr [rdx],r8d
+{$endif}
+{$else}
+ // System V ABI
+ // rdi = self
+ // rsi = Job
+ // rdx = Temporary
+{$ifdef HAS_STATIC}
+ lock xor dword ptr [rdi],esi
+{$else}
+ lock xor dword ptr [rsi],edx
+{$endif}
+{$endif}
+end;
+{$else}
+var OldValue:TPasMPUInt32;
+begin
+ repeat
+  OldValue:=Destination;
+{$ifdef HAS_ATOMICS}
+ until TPasMPUInt32(TPasMPInt32(AtomicCmpExchange(TPasMPInt32(Destination),TPasMPInt32(OldValue xor Value),TPasMPInt32(OldValue))))=OldValue;
+{$else}
+ until TPasMPUInt32(TPasMPInt32(InterlockedCompareExchange(TPasMPInt32(Destination),TPasMPInt32(OldValue xor Value),TPasMPInt32(OldValue))))=OldValue;
+{$endif}
+end;
+{$ifend}
+
+{$ifdef CPU64}
+class procedure TPasMPInterlocked.BitwiseXor(var Destination:TPasMPInt64;const Value:TPasMPInt64);
+{$if defined(cpux86_64)}
+asm
+{$ifdef Windows}
+ // Win64 ABI
+ // rcx = Parameter 1
+ // rdx = Parameter 2
+ // r8 = Parameter 3
+{$ifdef HAS_STATIC}
+ lock xor qword ptr [rcx],rdx
+{$else}
+ lock xor qword ptr [rdx],r8
+{$endif}
+{$else}
+ // System V ABI
+ // rdi = self
+ // rsi = Job
+ // rdx = Temporary
+{$ifdef HAS_STATIC}
+ lock xor qword ptr [rdi],rsi
+{$else}
+ lock xor qword ptr [rsi],rdx
+{$endif}
+{$endif}
+end;
+{$else}
+var OldValue:TPasMPInt64;
+begin
+ repeat
+  OldValue:=Destination;
+{$ifdef HAS_ATOMICS}
+ until AtomicCmpExchange(Destination,OldValue xor Value,OldValue)=OldValue;
+{$else}
+ until InterlockedCompareExchange64(Destination,OldValue xor Value,OldValue)=OldValue;
+{$endif}
+end;
+{$ifend}
+
+class procedure TPasMPInterlocked.BitwiseXor(var Destination:TPasMPUInt64;const Value:TPasMPUInt64);
+{$if defined(cpux86_64)}
+asm
+{$ifdef Windows}
+ // Win64 ABI
+ // rcx = Parameter 1
+ // rdx = Parameter 2
+ // r8 = Parameter 3
+{$ifdef HAS_STATIC}
+ lock xor qword ptr [rcx],rdx
+{$else}
+ lock xor qword ptr [rdx],r8
+{$endif}
+{$else}
+ // System V ABI
+ // rdi = self
+ // rsi = Job
+ // rdx = Temporary
+{$ifdef HAS_STATIC}
+ lock xor qword ptr [rdi],rsi
+{$else}
+ lock xor qword ptr [rsi],rdx
+{$endif}
+{$endif}
+end;
+{$else}
+var OldValue:TPasMPInt64;
+begin
+ repeat
+  OldValue:=Destination;
+{$ifdef HAS_ATOMICS}
+ until TPasMPUInt64(TPasMPInt64(AtomicCmpExchange(TPasMPInt64(Destination),TPasMPInt64(OldValue xor Value),TPasMPInt64(OldValue))))=OldValue;
+{$else}
+ until TPasMPUInt64(TPasMPInt64(InterlockedCompareExchange64(TPasMPInt64(Destination),TPasMPInt64(OldValue xor Value),TPasMPInt64(OldValue))))=OldValue;
+{$endif}
+end;
+{$ifend}
+{$endif}
+
+class function TPasMPInterlocked.ExchangeBitwiseAnd(var Destination:TPasMPInt32;const Value:TPasMPInt32):TPasMPInt32;
+var OldValue,NewValue:TPasMPInt32;
+begin
+ repeat
+  OldValue:=Destination;
+  NewValue:=OldValue and Value;
+{$ifdef HAS_ATOMICS}
+  result:=AtomicCmpExchange(Destination,NewValue,OldValue);
+{$else}
+  result:=InterlockedCompareExchange(Destination,NewValue,OldValue);
+{$endif}
+ until result=OldValue;
+end;
+
+class function TPasMPInterlocked.ExchangeBitwiseAnd(var Destination:TPasMPUInt32;const Value:TPasMPUInt32):TPasMPUInt32;
+var OldValue,NewValue:TPasMPUInt32;
+begin
+ repeat
+  OldValue:=Destination;
+  NewValue:=OldValue and Value;
+{$ifdef HAS_ATOMICS}
+  result:=TPasMPUInt32(TPasMPInt32(AtomicCmpExchange(TPasMPInt32(Destination),TPasMPInt32(NewValue),TPasMPInt32(OldValue))));
+{$else}
+  result:=TPasMPUInt32(TPasMPInt32(InterlockedCompareExchange(TPasMPInt32(Destination),TPasMPInt32(NewValue),TPasMPInt32(OldValue))));
+{$endif}
+ until result=OldValue;
+end;
+
+{$ifdef CPU64}
+class function TPasMPInterlocked.ExchangeBitwiseAnd(var Destination:TPasMPInt64;const Value:TPasMPInt64):TPasMPInt64;
+var OldValue,NewValue:TPasMPInt64;
+begin
+ repeat
+  OldValue:=Destination;
+  NewValue:=OldValue and Value;
+{$ifdef HAS_ATOMICS}
+  result:=AtomicCmpExchange(Destination,NewValue,OldValue);
+{$else}
+  result:=InterlockedCompareExchange64(Destination,NewValue,OldValue);
+{$endif}
+ until result=OldValue;
+end;
+
+class function TPasMPInterlocked.ExchangeBitwiseAnd(var Destination:TPasMPUInt64;const Value:TPasMPUInt64):TPasMPUInt64;
+var OldValue,NewValue:TPasMPUInt64;
+begin
+ repeat
+  OldValue:=Destination;
+  NewValue:=OldValue and Value;
+{$ifdef HAS_ATOMICS}
+  result:=TPasMPUInt64(TPasMPInt64(AtomicCmpExchange(TPasMPInt64(Destination),TPasMPInt64(NewValue),TPasMPInt64(OldValue))));
+{$else}
+  result:=TPasMPUInt64(TPasMPInt64(InterlockedCompareExchange64(TPasMPInt64(Destination),TPasMPInt64(NewValue),TPasMPInt64(OldValue))));
+{$endif}
+ until result=OldValue;
+end;
+{$endif}
+
+class function TPasMPInterlocked.ExchangeBitwiseOr(var Destination:TPasMPInt32;const Value:TPasMPInt32):TPasMPInt32;
+var OldValue,NewValue:TPasMPInt32;
+begin
+ repeat
+  OldValue:=Destination;
+  NewValue:=OldValue or Value;
+{$ifdef HAS_ATOMICS}
+  result:=AtomicCmpExchange(Destination,NewValue,OldValue);
+{$else}
+  result:=InterlockedCompareExchange(Destination,NewValue,OldValue);
+{$endif}
+ until result=OldValue;
+end;
+
+class function TPasMPInterlocked.ExchangeBitwiseOr(var Destination:TPasMPUInt32;const Value:TPasMPUInt32):TPasMPUInt32;
+var OldValue,NewValue:TPasMPUInt32;
+begin
+ repeat
+  OldValue:=Destination;
+  NewValue:=OldValue or Value;
+{$ifdef HAS_ATOMICS}
+  result:=TPasMPUInt32(TPasMPInt32(AtomicCmpExchange(TPasMPInt32(Destination),TPasMPInt32(NewValue),TPasMPInt32(OldValue))));
+{$else}
+  result:=TPasMPUInt32(TPasMPInt32(InterlockedCompareExchange(TPasMPInt32(Destination),TPasMPInt32(NewValue),TPasMPInt32(OldValue))));
+{$endif}
+ until result=OldValue;
+end;
+
+{$ifdef CPU64}
+class function TPasMPInterlocked.ExchangeBitwiseOr(var Destination:TPasMPInt64;const Value:TPasMPInt64):TPasMPInt64;
+var OldValue,NewValue:TPasMPInt64;
+begin
+ repeat
+  OldValue:=Destination;
+  NewValue:=OldValue or Value;
+{$ifdef HAS_ATOMICS}
+  result:=AtomicCmpExchange(Destination,NewValue,OldValue);
+{$else}
+  result:=InterlockedCompareExchange64(Destination,NewValue,OldValue);
+{$endif}
+ until result=OldValue;
+end;
+
+class function TPasMPInterlocked.ExchangeBitwiseOr(var Destination:TPasMPUInt64;const Value:TPasMPUInt64):TPasMPUInt64;
+var OldValue,NewValue:TPasMPUInt64;
+begin
+ repeat
+  OldValue:=Destination;
+  NewValue:=OldValue or Value;
+{$ifdef HAS_ATOMICS}
+  result:=TPasMPUInt64(TPasMPInt64(AtomicCmpExchange(TPasMPInt64(Destination),TPasMPInt64(NewValue),TPasMPInt64(OldValue))));
+{$else}
+  result:=TPasMPUInt64(TPasMPInt64(InterlockedCompareExchange64(TPasMPInt64(Destination),TPasMPInt64(NewValue),TPasMPInt64(OldValue))));
+{$endif}
+ until result=OldValue;
+end;
+{$endif}
+
+class function TPasMPInterlocked.ExchangeBitwiseXor(var Destination:TPasMPInt32;const Value:TPasMPInt32):TPasMPInt32;
+var OldValue,NewValue:TPasMPInt32;
+begin
+ repeat
+  OldValue:=Destination;
+  NewValue:=OldValue xor Value;
+{$ifdef HAS_ATOMICS}
+  result:=AtomicCmpExchange(Destination,NewValue,OldValue);
+{$else}
+  result:=InterlockedCompareExchange(Destination,NewValue,OldValue);
+{$endif}
+ until result=OldValue;
+end;
+
+class function TPasMPInterlocked.ExchangeBitwiseXor(var Destination:TPasMPUInt32;const Value:TPasMPUInt32):TPasMPUInt32;
+var OldValue,NewValue:TPasMPUInt32;
+begin
+ repeat
+  OldValue:=Destination;
+  NewValue:=OldValue xor Value;
+{$ifdef HAS_ATOMICS}
+  result:=TPasMPUInt32(TPasMPInt32(AtomicCmpExchange(TPasMPInt32(Destination),TPasMPInt32(NewValue),TPasMPInt32(OldValue))));
+{$else}
+  result:=TPasMPUInt32(TPasMPInt32(InterlockedCompareExchange(TPasMPInt32(Destination),TPasMPInt32(NewValue),TPasMPInt32(OldValue))));
+{$endif}
+ until result=OldValue;
+end;
+
+{$ifdef CPU64}
+class function TPasMPInterlocked.ExchangeBitwiseXor(var Destination:TPasMPInt64;const Value:TPasMPInt64):TPasMPInt64;
+var OldValue,NewValue:TPasMPInt64;
+begin
+ repeat
+  OldValue:=Destination;
+  NewValue:=OldValue xor Value;
+{$ifdef HAS_ATOMICS}
+  result:=AtomicCmpExchange(Destination,NewValue,OldValue);
+{$else}
+  result:=InterlockedCompareExchange64(Destination,NewValue,OldValue);
+{$endif}
+ until result=OldValue;
+end;
+
+class function TPasMPInterlocked.ExchangeBitwiseXor(var Destination:TPasMPUInt64;const Value:TPasMPUInt64):TPasMPUInt64;
+var OldValue,NewValue:TPasMPUInt64;
+begin
+ repeat
+  OldValue:=Destination;
+  NewValue:=OldValue xor Value;
+{$ifdef HAS_ATOMICS}
+  result:=TPasMPUInt64(TPasMPInt64(AtomicCmpExchange(TPasMPInt64(Destination),TPasMPInt64(NewValue),TPasMPInt64(OldValue))));
+{$else}
+  result:=TPasMPUInt64(TPasMPInt64(InterlockedCompareExchange64(TPasMPInt64(Destination),TPasMPInt64(NewValue),TPasMPInt64(OldValue))));
+{$endif}
+ until result=OldValue;
 end;
 {$endif}
 
@@ -9236,7 +9958,7 @@ var XorShiftTemp:{$ifdef UseXorShift128}TPasMPUInt32{$else}{$ifdef CPU64}TPasMPU
 begin
 
  result:=fJobQueue.PopJob;
- if (not assigned(result)) or (result^.State<0) then begin
+ if (not assigned(result)) or ((result^.InternalData and PasMPJobFlagActive)=0) then begin
 
   // This is not a valid job because our own queue is empty, so try stealing from some other queue
 
@@ -9275,7 +9997,7 @@ begin
    result:=nil;
   end else begin
    result:=OtherJobWorkerThread.fJobQueue.StealJob;
-   if (not assigned(result)) or (result^.State<0) then begin
+   if (not assigned(result)) or ((result^.InternalData and PasMPJobFlagActive)=0) then begin
     // We couldn't steal a job from the other queue either
     result:=nil;
    end;
@@ -9284,7 +10006,7 @@ begin
   if not assigned(result) then begin
 
    result:=fPasMPInstance.fJobQueue.StealJob;
-   if (not assigned(result)) or (result^.State<0) then begin
+   if (not assigned(result)) or ((result^.InternalData and PasMPJobFlagActive)=0) then begin
     // We couldn't steal a job from the global queue
     result:=nil;
    end;
@@ -10008,12 +10730,12 @@ end;
 
 class function TPasMP.IsJobCompleted(const Job:PPasMPJob):boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 begin
- result:=assigned(Job) and (Job^.State<0);
+ result:=assigned(Job) and ((Job^.InternalData and PasMPJobFlagActive)=0);
 end;
 
 class function TPasMP.IsJobValid(const Job:PPasMPJob):boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 begin
- result:=assigned(Job) and (Job^.State>=0);
+ result:=assigned(Job) and ((Job^.InternalData and PasMPJobFlagActive)<>0);
 end;
 
 function TPasMP.GetJobWorkerThread:TPasMPJobWorkerThread; {$ifdef UseThreadLocalStorage}{$if defined(UseThreadLocalStorageX8632) or defined(UseThreadLocalStorageX8664)}assembler;{$ifend}{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
@@ -10148,12 +10870,15 @@ end;
 
 function TPasMP.AllocateJob(const MethodCode,MethodData,Data:pointer;const ParentJob:PPasMPJob;const Flags:TPasMPUInt32):PPasMPJob; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 var JobWorkerThread:TPasMPJobWorkerThread;
+    InternalData:TPasMPUInt32;
 begin
- if assigned(ParentJob) and (ParentJob^.State>=0) then begin
-  TPasMPInterlocked.Increment(ParentJob^.State);
+ if assigned(ParentJob) and ((ParentJob^.InternalData and PasMPJobFlagActive)<>0) then begin
+  TPasMPInterlocked.Increment(ParentJob^.ChildrenJobs);
  end;
  JobWorkerThread:=GetJobWorkerThread;
+ InternalData:=PasMPJobFlagActive or Flags;
  if assigned(JobWorkerThread) then begin
+  InternalData:=InternalData or (PasMPJobFlagHasOwnerWorkerThread or TPasMPUInt32(JobWorkerThread.fThreadIndex));
   result:=JobWorkerThread.fJobAllocator.AllocateJob;
  end else begin
   result:=GlobalAllocateJob;
@@ -10161,12 +10886,8 @@ begin
  result^.Method.Code:=MethodCode;
  result^.Method.Data:=MethodData;
  result^.ParentJob:=ParentJob;
- if assigned(JobWorkerThread) then begin                                                  
-  result^.InternalData:=TPasMPUInt32(JobWorkerThread.fThreadIndex) or (PasMPJobFlagHasOwnerWorkerThread or Flags);
- end else begin
-  result^.InternalData:=Flags;
- end;
- result^.State:=0;
+ result^.ChildrenJobs:=0;
+ result^.InternalData:=InternalData;
  result^.Data:=Data;
 end;
 
@@ -10242,115 +10963,6 @@ begin
  end;
 end;
 
-procedure TPasMP.FinishJobRelease(Job:PPasMPJob); {$if defined(cpu386) or defined(cpux86_64)}register;{$ifend}
-begin
- Release(Job);
-end;
-
-procedure TPasMP.FinishJob(Job:PPasMPJob); {$if defined(cpu386) or defined(cpux86_64)}assembler; register;{$ifend}
-{$if defined(cpu386)}
-asm
- // Object Pascal i386 register fastcall call convention
- // eax = self
- // edx = Job
- // ecx = Temporary
-@Loop:
- cmp dword ptr [edx+TPasMPJob.State],0
- jl @Done
- lock dec dword ptr [edx+TPasMPJob.State]
- jns @Done
- xor ecx,ecx
- lock xchg dword ptr [edx+TPasMPJob.ParentJob],ecx
- test dword ptr [edx+TPasMPJob.InternalData],PasMPJobFlagReleaseOnFinish
- jz @NoFreeOnRelease
- push ecx
- push edx
- call TPasMP.FinishJobRelease
- pop edx
- pop ecx
- @NoFreeOnRelease:
- mov edx,ecx
- test edx,edx
- jnz @Loop
-@Done:
-end;
-{$elseif defined(cpux86_64)}
-{$ifdef Windows}
-asm
- // Win64 ABI
- // rcx = self
- // rdx = Job
- // r8 = Temporary
- push rbp
-@Loop:
- cmp dword ptr [rdx+TPasMPJob.State],0
- jl @Done
- lock dec dword ptr [rdx+TPasMPJob.State]
- jns @Done
- xor r8,r8
- lock xchg qword ptr [rdx+TPasMPJob.ParentJob],r8
- test dword ptr [rdx+TPasMPJob.InternalData],PasMPJobFlagReleaseOnFinish
- jz @NoFreeOnRelease
- push r8
- push rdx
- // 2x 64-bit pushs => Stack stays 16 bytes aligned
- sub rsp,32 // Allocate shadow space
- call TPasMP.FinishJobRelease
- add rsp,32 // Deallocate shadow space
- pop rdx
- pop r8
-@NoFreeOnRelease:
- mov rdx,r8
- test rdx,rdx
- jnz @Loop
-@Done:
- pop rbp
-end;
-{$else}
-asm
- // System V ABI
- // rdi = self
- // rsi = Job
- // rdx = Temporary
- push rbp
-@Loop:
- cmp dword ptr [rsi+TPasMPJob.State],0
- jl @Done
- lock dec dword ptr [rsi+TPasMPJob.State]
- jns @Done
- xor edx,edx
- lock xchg qword ptr [rsi+TPasMPJob.ParentJob],rdx
- test dword ptr [rsi+TPasMPJob.InternalData],PasMPJobFlagReleaseOnFinish
- jz @NoFreeOnRelease
- push rdx
- push rsi
- // 2x 64-bit pushs => Stack stays 16 bytes aligned
- call TPasMP.FinishJobRelease
- pop rsi
- pop rdx
-@NoFreeOnRelease:
- mov rsi,rdx
- test rsi,rsi
- jnz @Loop
-@Done:
- pop rbp
-end;
-{$endif}
-{$else}
-var LastJob:PPasMPJob;
-begin
- while assigned(Job) and
-       (Job^.State>=0) and
-       (TPasMPInterlocked.Decrement(Job^.State)<0) do begin
-  LastJob:=Job;
-  Job:=TPasMPInterlocked.Exchange(pointer(Job^.ParentJob),nil);
-  if (LastJob^.InternalData and PasMPJobFlagReleaseOnFinish)<>0 then begin
-   FinishJobRelease(LastJob);
-  end;
- end;
-end;
-{$ifend}
-
 procedure TPasMP.ExecuteJobTask(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread;const ThreadIndex:TPasMPInt32); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 var JobTask,NewJobTask:TPasMPJobTask;
     NewJob:PPasMPJob;
@@ -10391,18 +11003,50 @@ begin
 
 end;
 
+procedure TPasMP.WaitOnChildrenJobs(const Job:PPasMPJob);
+var SpinCount,CountMaxSpinCount:TPasMPInt32;
+    NextJob:PPasMPJob;
+    JobWorkerThread:TPasMPJobWorkerThread;
+begin
+ if assigned(Job) then begin
+  JobWorkerThread:=GetJobWorkerThread;
+  SpinCount:=0;
+  CountMaxSpinCount:=128;
+  while Job^.ChildrenJobs>0 do begin
+   if assigned(JobWorkerThread) then begin
+    NextJob:=JobWorkerThread.GetJob;
+    if assigned(NextJob) then begin
+     ExecuteJob(NextJob,JobWorkerThread);
+     SpinCount:=0;
+    end else begin
+     if SpinCount<CountMaxSpinCount then begin
+      inc(SpinCount);
+     end else begin
+      TPasMP.Yield;
+     end;
+    end;
+   end else begin
+    TPasMP.Yield;
+   end;
+  end;
+ end;
+end;
+
 procedure TPasMP.ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 var ProfilerHistoryRingBufferItem:PPasMPProfilerHistoryRingBufferItem;
 begin
+
  if JobWorkerThread.fJobQueue.HasJobs then begin
   WakeUpAll;
  end;
+
  if assigned(fProfiler) then begin
   ProfilerHistoryRingBufferItem:=fProfiler.Acquire;
   ProfilerHistoryRingBufferItem^.TaskTag:=TPasMP.DecodeTaskTagFromFlags(Job^.InternalData);
   ProfilerHistoryRingBufferItem^.ThreadIndex:=JobWorkerThread.ThreadIndex;
   ProfilerHistoryRingBufferItem^.StartTime:=fProfiler.fHighResolutionTimer.GetTime+fProfiler.fOffsetTime;
  end;
+
  if assigned(Job^.Method.Data) then begin
   if assigned(Job^.Method.Code) then begin
    TPasMPJobMethod(Job^.Method)(Job,JobWorkerThread.ThreadIndex);
@@ -10414,10 +11058,25 @@ begin
    TPasMPJobProcedure(pointer(Job^.Method.Code))(Job,JobWorkerThread.ThreadIndex);
   end;
  end;
+
  if assigned(fProfiler) then begin
   ProfilerHistoryRingBufferItem^.EndTime:=fProfiler.fHighResolutionTimer.GetTime+fProfiler.fOffsetTime;
  end;
- FinishJob(Job);
+
+ if Job^.ChildrenJobs>0 then begin
+  WaitOnChildrenJobs(Job);
+ end;
+
+ if assigned(Job^.ParentJob) then begin
+  TPasMPInterlocked.Decrement(Job^.ParentJob^.ChildrenJobs);
+ end;
+
+ TPasMPInterlocked.BitwiseAnd(Job^.InternalData,PasMPJobFlagActiveAndNotMask);
+
+ if (Job^.InternalData and PasMPJobFlagReleaseOnFinish)<>0 then begin
+  Release(Job);
+ end;
+
 end;
 
 procedure TPasMP.Run(const Job:PPasMPJob); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
@@ -10462,7 +11121,7 @@ begin
   JobWorkerThread:=GetJobWorkerThread;
   SpinCount:=0;
   CountMaxSpinCount:=128;
-  while Job^.State>=0 do begin
+  while (Job^.InternalData and PasMPJobFlagActive)<>0 do begin
    if assigned(JobWorkerThread) then begin
     NextJob:=JobWorkerThread.GetJob;
     if assigned(NextJob) then begin
@@ -10497,7 +11156,7 @@ begin
    Done:=true;
    for JobIndex:=0 to CountJobs-1 do begin
     Job:=Jobs[JobIndex];
-    if assigned(Job) and (Job^.State>=0) then begin
+    if assigned(Job) and ((Job^.InternalData and PasMPJobFlagActive)<>0) then begin
      Done:=false;
      break;
     end;
