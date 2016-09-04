@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-04-17-26-0000                       *
+ *                        Version 2016-09-04-18-19-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1918,6 +1918,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
         ThreadIndexStackDepth:TPasMPUInt32;
         StartTime:TPasMPHighResolutionTime;
         EndTime:TPasMPHighResolutionTime;
+        Dummy:pointer;
        );
        1:(
         CacheLineFillUp:array[0..PasMPCPUCacheLineSize-1] of TPasMPUInt8;
@@ -10145,6 +10146,20 @@ type PItem=^TItem;
      TStackItem=record
       Left,Right,Depth:TPasMPInt32;
      end;
+ function Compare(const a,b:TPasMPProfilerHistoryRingBufferItem):TPasMPInt32;
+ begin
+  if a.StartTime<b.StartTime then begin
+   result:=-1;
+  end else if a.StartTime>b.StartTime then begin
+   result:=1;
+  end else if a.EndTime<b.EndTime then begin
+   result:=-1;
+  end else if a.EndTime>b.EndTime then begin
+   result:=1;
+  end else begin
+   result:=0;
+  end;
+ end;
 var Left,Right,Depth,i,j,Middle,Size,Parent,Child,Pivot,iA,iB,iC:TPasMPInt32;
     StackItem:PStackItem;
     Stack:array[0..31] of TStackItem;
@@ -10170,7 +10185,7 @@ begin
      iC:=iB;
      while (iA>=Left) and
            (iC>=Left) and
-           (fHistory[iA].StartTime>fHistory[iC].StartTime) do begin
+           (Compare(fHistory[iA],fHistory[iC])>0) do begin
       Temp:=fHistory[iA];
       fHistory[iA]:=fHistory[iC];
       fHistory[iC]:=Temp;
@@ -10201,10 +10216,10 @@ begin
       repeat
        Child:=(Parent*2)+1;
        if Child<Size then begin
-        if (Child<(Size-1)) and (fHistory[Left+Child].StartTime<fHistory[Left+Child+1].StartTime) then begin
+        if (Child<(Size-1)) and (Compare(fHistory[Left+Child],fHistory[Left+Child+1])<0) then begin
          inc(Child);
         end;
-        if fHistory[Left+Parent].StartTime<fHistory[Left+Child].StartTime then begin
+        if Compare(fHistory[Left+Parent],fHistory[Left+Child])<0 then begin
          Temp:=fHistory[Left+Parent];
          fHistory[Left+Parent]:=fHistory[Left+Child];
          fHistory[Left+Child]:=Temp;
@@ -10219,17 +10234,17 @@ begin
      // Quick sort width median-of-three optimization
      Middle:=Left+((Right-Left) shr 1);
      if (Right-Left)>3 then begin
-      if fHistory[Left].StartTime>fHistory[Middle].StartTime then begin
+      if Compare(fHistory[Left],fHistory[Middle])>0 then begin
        Temp:=fHistory[Left];
        fHistory[Left]:=fHistory[Middle];
        fHistory[Middle]:=Temp;
       end;
-      if fHistory[Left].StartTime>fHistory[Right].StartTime then begin
+      if Compare(fHistory[Left],fHistory[Right])>0 then begin
        Temp:=fHistory[Left];
        fHistory[Left]:=fHistory[Right];
        fHistory[Right]:=Temp;
       end;
-      if fHistory[Middle].StartTime>fHistory[Right].StartTime then begin
+      if Compare(fHistory[Middle],fHistory[Right])>0 then begin
        Temp:=fHistory[Middle];
        fHistory[Middle]:=fHistory[Right];
        fHistory[Right]:=Temp;
@@ -10239,10 +10254,10 @@ begin
      i:=Left;
      j:=Right;
      repeat
-      while (i<Right) and (fHistory[i].StartTime<fHistory[Pivot].StartTime) do begin
+      while (i<Right) and (Compare(fHistory[i],fHistory[Pivot])<0) do begin
        inc(i);
       end;
-      while (j>=i) and (fHistory[j].StartTime>fHistory[Pivot].StartTime) do begin
+      while (j>=i) and (Compare(fHistory[j],fHistory[Pivot])>0) do begin
        dec(j);
       end;
       if i>j then begin
@@ -10297,7 +10312,7 @@ begin
 end;
 
 procedure TPasMPProfiler.Stop(const MaximalTimePeriodToKeep:TPasMPHighResolutionTime=-1);
-var Index:TPasMPInt32;
+var Index,Counter:TPasMPInt32;
 begin
  if fCount>0 then begin
   Sort;
@@ -10306,13 +10321,16 @@ begin
   end;
   fLastTime:=fHistory[(fCount-1) and PasMPProfilerHistoryRingBufferSizeMask].EndTime;
   if MaximalTimePeriodToKeep>=0 then begin
-   for Index:=fCount-1 downto 0 do begin
-    if (fLastTime-fHistory[Index].StartTime)>=MaximalTimePeriodToKeep then begin
-     Move(fHistory[Index],fHistory[0],(fCount-Index)*SizeOf(TPasMPProfilerHistoryRingBufferItem));
-     TPasMPInterlocked.Sub(fCount,Index);
-     break;
+   Counter:=0;
+   for Index:=0 to fCount-1 do begin
+    if (fHistory[Index].StartTime<=fLastTime) and ((fLastTime-MaximalTimePeriodToKeep)<=fHistory[Index].EndTime) then begin
+     if Index<>Counter then begin
+      Move(fHistory[Index],fHistory[Counter],TPasMPPtrUInt(pointer(@PPasMPProfilerHistoryRingBufferItem(nil)^.Dummy)));
+     end;
+     inc(Counter);
     end;
    end;
+   fCount:=Counter;
   end;
  end else begin
   fLastTime:=0;
