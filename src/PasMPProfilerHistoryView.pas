@@ -1,7 +1,7 @@
 (******************************************************************************
  *                          PasMPProfilerHistoryView                          *
  ******************************************************************************
- *                        Version 2016-09-04-17-26-0000                       *
+ *                        Version 2016-09-04-17-28-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -525,7 +525,7 @@ begin
    end;
 
    WorkCanvas.Font.Color:=clBlack;
-   WorkCanvas.Font.Size:=16;
+   WorkCanvas.Font.Size:=12;
 
    for ThreadIndex:=0 to fPasMPInstance.CountJobWorkerThreads-1 do begin
     WorkCanvas.Brush.Color:=clWhite;
