@@ -1,7 +1,7 @@
 (******************************************************************************
  *                          PasMPProfilerHistoryView                          *
  ******************************************************************************
- *                        Version 2016-09-04-16-06-0000                       *
+ *                        Version 2016-09-04-17-26-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -359,6 +359,7 @@ type TPasMPProfilerHistoryView=class(TCustomControl)
        fBufferBitmap:TBitmap;
        fProfilerHistory:TPasMPProfilerHistory;
        fProfilerHistoryCount:TPasMPInt32;
+       fThreadMaxStackDepths:array of TPasMPInt32;
       protected
        procedure WMGetDlgCode(var Message:TWMNoParams); message WM_GETDLGCODE;
        procedure WMEraseBkgnd(var Message:TWMEraseBkgnd); message WM_ERASEBKGND;
@@ -388,10 +389,13 @@ begin
 
  fBufferBitmap:=TBitmap.Create;
 
+ fThreadMaxStackDepths:=nil;
+
 end;
 
 destructor TPasMPProfilerHistoryView.Destroy;
 begin
+ SetLength(fThreadMaxStackDepths,0);
  fBufferBitmap.Free;
  fMultipleReaderSingleWriterLock.Free;
  inherited Destroy;
@@ -420,11 +424,15 @@ const ProfilerNotActivated='Profiler not activated';
         $00ffff,
         $ff80ff
        );
+       FixedPointScale=16;
 var WorkCanvas:TCanvas;
-    CanvasWidth,CanvasHeight,ThreadIndex,HeightPerThread,HistoryIndex,x0,x1,y0,y1:TPasMPInt32;
+    CanvasWidth,CanvasHeight,ThreadIndex,StackDepth,
+    HistoryIndex,x0,x1,y0,y1:TPasMPInt32;
+    HeightPerThread:int64;
     FirstTime:TPasMPHighResolutionTime;
     ProfilerHistoryRingBufferItem:PPasMPProfilerHistoryRingBufferItem;
     c:TColor;
+    s:string;
 begin
  fMultipleReaderSingleWriterLock.AcquireRead;
  try
@@ -452,11 +460,34 @@ begin
 
   if assigned(fPasMPInstance.Profiler) then begin
 
-   HeightPerThread:=CanvasHeight div fPasMPInstance.CountJobWorkerThreads;
+   if length(fThreadMaxStackDepths)<fPasMPInstance.CountJobWorkerThreads then begin
+    SetLength(fThreadMaxStackDepths,fPasMPInstance.CountJobWorkerThreads);
+   end;
+
+   HeightPerThread:=(int64(CanvasHeight) shl FixedPointScale) div fPasMPInstance.CountJobWorkerThreads;
+
+   for ThreadIndex:=0 to fPasMPInstance.CountJobWorkerThreads-1 do begin
+    if (ThreadIndex and 1)<>0 then begin
+     WorkCanvas.Brush.Color:=$aaaaaa;
+    end else begin
+     WorkCanvas.Brush.Color:=$eeeeee;
+    end;
+    WorkCanvas.Brush.Style:=bsSolid;
+    WorkCanvas.Pen.Color:=clBlack;
+    WorkCanvas.Pen.Style:=psClear;
+    if ThreadIndex=(fPasMPInstance.CountJobWorkerThreads-1) then begin
+     WorkCanvas.Rectangle(0,(HeightPerThread*ThreadIndex) shr FixedPointScale,CanvasWidth,CanvasHeight);
+    end else begin
+     WorkCanvas.Rectangle(0,(HeightPerThread*ThreadIndex) shr FixedPointScale,CanvasWidth,(HeightPerThread*(ThreadIndex+1)) shr FixedPointScale);
+    end;
+   end;
 
    if fProfilerHistoryCount>0 then begin
     FirstTime:=Max(fProfilerHistory[0].StartTime,
                    fProfilerHistory[Min(fProfilerHistoryCount-1,PasMPProfilerHistoryRingBufferSizeMask)].EndTime-fVisibleTimePeriod);
+    for ThreadIndex:=0 to fPasMPInstance.CountJobWorkerThreads-1 do begin
+     fThreadMaxStackDepths[ThreadIndex]:=1;
+    end;
     for HistoryIndex:=0 to Min(fProfilerHistoryCount-1,PasMPProfilerHistoryRingBufferSizeMask) do begin
      ProfilerHistoryRingBufferItem:=@fProfilerHistory[HistoryIndex];
      x1:=((((ProfilerHistoryRingBufferItem^.EndTime-FirstTime)*CanvasWidth)+(fVisibleTimePeriod-1)) div fVisibleTimePeriod);
@@ -465,8 +496,23 @@ begin
       if x0>=CanvasWidth then begin
        break;
       end else begin
-       y0:=HeightPerThread*TPasMPInt32(ProfilerHistoryRingBufferItem.ThreadIndex);
-       y1:=y0+HeightPerThread;
+       ThreadIndex:=TPasMPInt32(ProfilerHistoryRingBufferItem.ThreadIndexStackDepth and $ffff);
+       fThreadMaxStackDepths[ThreadIndex]:=Max(fThreadMaxStackDepths[ThreadIndex],TPasMPInt32(ProfilerHistoryRingBufferItem.ThreadIndexStackDepth shr 16)+1);
+      end;
+     end;
+    end;
+    for HistoryIndex:=0 to Min(fProfilerHistoryCount-1,PasMPProfilerHistoryRingBufferSizeMask) do begin
+     ProfilerHistoryRingBufferItem:=@fProfilerHistory[HistoryIndex];
+     x1:=((((ProfilerHistoryRingBufferItem^.EndTime-FirstTime)*CanvasWidth)+(fVisibleTimePeriod-1)) div fVisibleTimePeriod);
+     if x1>=0 then begin
+      x0:=(((ProfilerHistoryRingBufferItem^.StartTime-FirstTime)*CanvasWidth) div fVisibleTimePeriod);
+      if x0>=CanvasWidth then begin
+       break;
+      end else begin
+       ThreadIndex:=TPasMPInt32(ProfilerHistoryRingBufferItem.ThreadIndexStackDepth and $ffff);
+       StackDepth:=TPasMPInt32(ProfilerHistoryRingBufferItem.ThreadIndexStackDepth shr 16);
+       y0:=((HeightPerThread*ThreadIndex)+((StackDepth*HeightPerThread) div fThreadMaxStackDepths[ThreadIndex])) shr FixedPointScale;
+       y1:=((HeightPerThread*ThreadIndex)+Min(((StackDepth+1)*HeightPerThread) div fThreadMaxStackDepths[ThreadIndex],HeightPerThread)) shr FixedPointScale;
        c:=Colors[ProfilerHistoryRingBufferItem^.TaskTag and 7];
        WorkCanvas.Brush.Color:=c;
        WorkCanvas.Brush.Style:=bsSolid;
@@ -478,13 +524,20 @@ begin
     end;
    end;
 
+   WorkCanvas.Font.Color:=clBlack;
+   WorkCanvas.Font.Size:=16;
+
    for ThreadIndex:=0 to fPasMPInstance.CountJobWorkerThreads-1 do begin
     WorkCanvas.Brush.Color:=clWhite;
     WorkCanvas.Brush.Style:=bsClear;
     WorkCanvas.Pen.Color:=clBlack;
     WorkCanvas.Pen.Style:=psSolid;
-    WorkCanvas.MoveTo(0,HeightPerThread*(ThreadIndex+1));
-    WorkCanvas.LineTo(CanvasWidth,HeightPerThread*(ThreadIndex+1));
+    WorkCanvas.MoveTo(0,((HeightPerThread*(ThreadIndex+1)) shr FixedPointScale)-1);
+    WorkCanvas.LineTo(CanvasWidth,((HeightPerThread*(ThreadIndex+1)) shr FixedPointScale)-1);
+    s:='Worker thread #'+IntToStr(ThreadIndex);
+    WorkCanvas.TextOut(WorkCanvas.TextWidth(' '), // (CanvasWidth-WorkCanvas.TextWidth(s)) div 2,
+                       ((HeightPerThread*ThreadIndex)+((HeightPerThread-(int64(WorkCanvas.TextHeight(s)) shl FixedPointScale)) div 2)) shr FixedPointScale,
+                       s);
    end;
 
   end else begin

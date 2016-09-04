@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-04-15-50-0000                       *
+ *                        Version 2016-09-04-17-26-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1859,6 +1859,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fPasMPInstance:TPasMP;
        fNext:TPasMPJobWorkerThread;
        fThreadIndex:TPasMPInt32;
+       fProfilerStackDepth:TPasMPUInt32;
 {$ifndef UseThreadLocalStorage}
        fThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif};
 {$endif}
@@ -1914,7 +1915,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       case TPasMPUInt32 of
        0:(
         TaskTag:TPasMPUInt32;
-        ThreadIndex:TPasMPUInt32;
+        ThreadIndexStackDepth:TPasMPUInt32;
         StartTime:TPasMPHighResolutionTime;
         EndTime:TPasMPHighResolutionTime;
        );
@@ -9850,6 +9851,7 @@ begin
  fJobQueue:=TPasMPJobQueue.Create(fPasMPInstance);
  fIsReadyEvent:=TPasMPEvent.Create(nil,false,false,'');
  fThreadIndex:=AThreadIndex;
+ fProfilerStackDepth:=0;
 {$ifdef UseXorShift128}
  fXorShift128x:=(TPasMPUInt32(AThreadIndex+1)*83492791) or 1;
  fXorShift128y:=(TPasMPUInt32(AThreadIndex+1)*19349669) or 1;
@@ -11043,8 +11045,9 @@ begin
  if assigned(fProfiler) then begin
   ProfilerHistoryRingBufferItem:=fProfiler.Acquire;
   ProfilerHistoryRingBufferItem^.TaskTag:=TPasMP.DecodeTaskTagFromFlags(Job^.InternalData);
-  ProfilerHistoryRingBufferItem^.ThreadIndex:=JobWorkerThread.ThreadIndex;
+  ProfilerHistoryRingBufferItem^.ThreadIndexStackDepth:=TPasMPUInt32(JobWorkerThread.fThreadIndex and $ffff) or (JobWorkerThread.fProfilerStackDepth shl 16);
   ProfilerHistoryRingBufferItem^.StartTime:=fProfiler.fHighResolutionTimer.GetTime+fProfiler.fOffsetTime;
+  inc(JobWorkerThread.fProfilerStackDepth);
  end;
 
  if assigned(Job^.Method.Data) then begin
@@ -11059,12 +11062,13 @@ begin
   end;
  end;
 
- if assigned(fProfiler) then begin
-  ProfilerHistoryRingBufferItem^.EndTime:=fProfiler.fHighResolutionTimer.GetTime+fProfiler.fOffsetTime;
- end;
-
  if Job^.ChildrenJobs>0 then begin
   WaitOnChildrenJobs(Job);
+ end;
+
+ if assigned(fProfiler) then begin
+  ProfilerHistoryRingBufferItem^.EndTime:=fProfiler.fHighResolutionTimer.GetTime+fProfiler.fOffsetTime;
+  dec(JobWorkerThread.fProfilerStackDepth);
  end;
 
  if assigned(Job^.ParentJob) then begin
