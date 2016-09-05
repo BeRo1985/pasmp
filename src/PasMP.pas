@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-05-10-46-0000                       *
+ *                        Version 2016-09-05-11-01-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -481,8 +481,8 @@ const PasMPAllocatorPoolBucketBits=12;
       PasMPJobTaskTagShift=PasMPJobThreadIndexBits;
       PasMPJobTaskTagShiftedMask=PasMPJobTaskTagMask shl PasMPJobTaskTagShift;
 
-      PasMPJobFlagHasOwnerWorkerThread=TPasMPUInt32(TPasMPUInt32(1) shl ((PasMPJobThreadIndexBits+PasMPJobThreadIndexBits)+1)); // Bit 25
-      PasMPJobFlagReleaseOnFinish=TPasMPUInt32(TPasMPUInt32(1) shl ((PasMPJobThreadIndexBits+PasMPJobThreadIndexBits)+2));      // Bit 26
+      PasMPJobFlagHasOwnerWorkerThread=TPasMPUInt32(TPasMPUInt32(1) shl ((PasMPJobThreadIndexBits+PasMPJobTaskTagBits)+1)); // Bit 25
+      PasMPJobFlagReleaseOnFinish=TPasMPUInt32(TPasMPUInt32(1) shl ((PasMPJobThreadIndexBits+PasMPJobTaskTagBits)+2));      // Bit 26
 
       PasMPJobFlagActive=TPasMPUInt32(TPasMPUInt32(1) shl 31);
       PasMPJobFlagActiveAndNotMask=TPasMPUInt32(not PasMPJobFlagActive);
@@ -10969,7 +10969,7 @@ begin
    TPasMPJobTask(pointer(Job^.Method.Data)).Free;
   end;
   if (Job^.InternalData and PasMPJobFlagHasOwnerWorkerThread)<>0 then begin
-   fJobWorkerThreads[Job^.InternalData and PasMPJobThreadIndexMask].fJobAllocator.FreeJob(Job);
+   fJobWorkerThreads[(Job^.InternalData shr PasMPJobThreadIndexShift) and PasMPJobThreadIndexMask].fJobAllocator.FreeJob(Job);
   end else begin
    GlobalFreeJob(Job);
   end;
@@ -10998,7 +10998,7 @@ begin
  end;
 
  if ((Job^.InternalData and PasMPJobFlagHasOwnerWorkerThread)<>0) and
-    (TPasMPInt32(Job^.InternalData and PasMPJobThreadIndexMask)<>ThreadIndex) then begin
+    (TPasMPInt32((Job^.InternalData shr PasMPJobThreadIndexShift) and PasMPJobThreadIndexMask)<>ThreadIndex) then begin
   // It's a stolen job => try Split
   NewJobTask:=JobTask.Split;
   if not assigned(NewJobTask) then begin
@@ -11316,7 +11316,7 @@ begin
    ParallelForJobReferenceProcedureProcess(Job,ThreadIndex);
   end else begin
    if ((Job^.InternalData and PasMPJobFlagHasOwnerWorkerThread)<>0) and
-      (TPasMPInt32(Job^.InternalData and PasMPJobThreadIndexMask)<>ThreadIndex) then begin
+      (TPasMPInt32((Job^.InternalData shr PasMPJobThreadIndexShift) and PasMPJobThreadIndexMask)<>ThreadIndex) then begin
     // It is a stolen job => split in two halfs
     begin
      NewJobs[0]:=Acquire(ParallelForJobReferenceProcedureFunction,nil,nil,Job^.InternalData and PasMPJobTaskTagShiftedMask);
@@ -11470,7 +11470,7 @@ begin
    ParallelForJobFunctionProcess(Job,ThreadIndex);
   end else begin
    if ((Job^.InternalData and PasMPJobFlagHasOwnerWorkerThread)<>0) and
-      (TPasMPInt32(Job^.InternalData and PasMPJobThreadIndexMask)<>ThreadIndex) then begin
+      (TPasMPInt32((Job^.InternalData shr PasMPJobThreadIndexShift) and PasMPJobThreadIndexMask)<>ThreadIndex) then begin
     // It is a stolen job => split in two halfs
     begin
      NewJobs[0]:=Acquire(ParallelForJobFunction,nil,nil,Job^.InternalData and PasMPJobTaskTagShiftedMask);
