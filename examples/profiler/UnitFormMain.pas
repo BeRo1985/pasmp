@@ -62,10 +62,10 @@ var Jobs:array[0..3] of PPasMPJob;
 begin
  PasMPInstance.Profiler.Start(CheckBoxSuppressGaps.Checked);
  try
-  Jobs[0]:=PasMPInstance.ParallelFor(nil,1,N,ParallelForJobFunction,4096,8,nil,1);
-  Jobs[1]:=PasMPInstance.ParallelFor(nil,1,N,ParallelForJobFunction,4096,8,nil,2);
-  Jobs[2]:=PasMPInstance.ParallelFor(nil,1,N,ParallelForJobFunction,4096,8,nil,3);
-  Jobs[3]:=PasMPInstance.ParallelFor(nil,1,N,ParallelForJobFunction,4096,8,nil,4);
+  Jobs[0]:=PasMPInstance.ParallelFor(nil,1,N,ParallelForJobFunction,4096,8,nil,TPasMP.EncodeTaskTagToFlags(1));
+  Jobs[1]:=PasMPInstance.ParallelFor(nil,1,N,ParallelForJobFunction,4096,8,nil,TPasMP.EncodeTaskTagToFlags(2));
+  Jobs[2]:=PasMPInstance.ParallelFor(nil,1,N,ParallelForJobFunction,4096,8,nil,TPasMP.EncodeTaskTagToFlags(3));
+  Jobs[3]:=PasMPInstance.ParallelFor(nil,1,N,ParallelForJobFunction,4096,8,nil,TPasMP.EncodeTaskTagToFlags(4));
   PasMPInstance.Invoke(Jobs);
  finally
   PasMPInstance.Profiler.Stop(ProfilerHistoryView.VisibleTimePeriod);
