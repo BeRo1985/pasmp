@@ -1,7 +1,7 @@
 (******************************************************************************
  *                          PasMPProfilerHistoryView                          *
  ******************************************************************************
- *                        Version 2016-09-05-10-46-0000                       *
+ *                        Version 2016-09-05-12-41-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -513,7 +513,7 @@ begin
        StackDepth:=TPasMPInt32(ProfilerHistoryRingBufferItem.ThreadIndexStackDepth shr 16);
        y0:=((HeightPerThread*ThreadIndex)+((StackDepth*HeightPerThread) div fThreadMaxStackDepths[ThreadIndex])) shr FixedPointScale;
        y1:=((HeightPerThread*ThreadIndex)+Min(((StackDepth+1)*HeightPerThread) div fThreadMaxStackDepths[ThreadIndex],HeightPerThread)) shr FixedPointScale;
-       c:=Colors[ProfilerHistoryRingBufferItem^.TaskTag and 7];
+       c:=Colors[ProfilerHistoryRingBufferItem^.JobTag and 7];
        WorkCanvas.Brush.Color:=c;
        WorkCanvas.Brush.Style:=bsSolid;
        WorkCanvas.Pen.Color:=(((c and $ff00ff) shr 1) and $ff00ff) or (((c and $00ff00) shr 1) and $00ff00);
