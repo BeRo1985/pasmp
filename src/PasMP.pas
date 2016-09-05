@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-05-12-40-0000                       *
+ *                        Version 2016-09-05-13-46-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -10968,7 +10968,7 @@ end;
 
 function TPasMP.CanSpread:boolean;
 var CurrentJobWorkerThread,JobWorkerThread:TPasMPJobWorkerThread;
-    ThreadIndex,Index,JobQueueIndex:TPasMPInt32;
+    ThreadIndex,Index:TPasMPInt32;
 begin
  result:=false;
  CurrentJobWorkerThread:=GetJobWorkerThread;
@@ -11176,8 +11176,7 @@ begin
 end;
 
 procedure TPasMP.ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-var JobQueueIndex:TPasMPInt32;
-    LastJobPriority:TPasMPUInt32;
+var LastJobPriority:TPasMPUInt32;
     ProfilerHistoryRingBufferItem:PPasMPProfilerHistoryRingBufferItem;
 begin
 
