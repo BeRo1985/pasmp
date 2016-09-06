@@ -29,7 +29,7 @@ implementation
 
 {$R *.dfm}
 
-const N=1 shl 27;
+const N=1 shl 28;
 
 procedure ParallelForJobFunction(const Job:PPasMPJob;const ThreadIndex:longint;const Data:pointer;const FromIndex,ToIndex:longint);
 var Index:longint;
@@ -62,10 +62,10 @@ var Jobs:array[0..3] of PPasMPJob;
 begin
  PasMPInstance.Profiler.Start(CheckBoxSuppressGaps.Checked);
  try
-  Jobs[0]:=PasMPInstance.ParallelFor(nil,1,N,ParallelForJobFunction,4096,8,nil,TPasMP.EncodeJobTagToJobFlags(1));
-  Jobs[1]:=PasMPInstance.ParallelFor(nil,1,N,ParallelForJobFunction,4096,8,nil,TPasMP.EncodeJobTagToJobFlags(2));
-  Jobs[2]:=PasMPInstance.ParallelFor(nil,1,N,ParallelForJobFunction,4096,8,nil,TPasMP.EncodeJobTagToJobFlags(3));
-  Jobs[3]:=PasMPInstance.ParallelFor(nil,1,N,ParallelForJobFunction,4096,8,nil,TPasMP.EncodeJobTagToJobFlags(4));
+  Jobs[0]:=PasMPInstance.ParallelFor(nil,1,N,ParallelForJobFunction,65536,8,nil,TPasMP.EncodeJobTagToJobFlags(1) or PasMPJobPriorityHigh);
+  Jobs[1]:=PasMPInstance.ParallelFor(nil,1,N,ParallelForJobFunction,65536,8,nil,TPasMP.EncodeJobTagToJobFlags(2) or PasMPJobPriorityNormal);
+  Jobs[2]:=PasMPInstance.ParallelFor(nil,1,N,ParallelForJobFunction,65536,8,nil,TPasMP.EncodeJobTagToJobFlags(3) or PasMPJobPriorityNormal);
+  Jobs[3]:=PasMPInstance.ParallelFor(nil,1,N,ParallelForJobFunction,65536,8,nil,TPasMP.EncodeJobTagToJobFlags(4) or PasMPJobPriorityLow);
   PasMPInstance.Invoke(Jobs);
  finally
   PasMPInstance.Profiler.Stop(ProfilerHistoryView.VisibleTimePeriod);
