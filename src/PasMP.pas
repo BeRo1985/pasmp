@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-05-13-46-0000                       *
+ *                        Version 2016-09-06-15-15-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -342,8 +342,6 @@ unit PasMP;
 {$longstrings on}
 {$openstrings on}
 
-{$undef UseXorShift128}
-
 {$undef UseThreadLocalStorage}
 {$undef UseThreadLocalStorageX8632}
 
@@ -506,9 +504,12 @@ const PasMPAllocatorPoolBucketBits=12;
 
       PasMPOnceInit={$ifdef Linux}PTHREAD_ONCE_INIT{$else}0{$endif};
 
-      PasMPJobQueuePriorityLow=1;
-      PasMPJobQueuePriorityNormal=2;
-      PasMPJobQueuePriorityHigh=3;
+      PasMPJobQueuePriorityLow=2;
+      PasMPJobQueuePriorityNormal=1;
+      PasMPJobQueuePriorityHigh=0;
+
+      PasMPJobQueuePriorityFirst=PasMPJobQueuePriorityHigh;
+      PasMPJobQueuePriorityLast=PasMPJobQueuePriorityLow;
 
       PasMPVersionMajor=1000000;
       PasMPVersionMinor=1000;
@@ -635,6 +636,9 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        class function CountTrailingZeros32(Value:TPasMPUInt32):TPasMPInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        class function CountTrailingZeros64(Value:TPasMPUInt64):TPasMPInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        class function CountTrailingZeros(Value:TPasMPPtrUInt):TPasMPInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
+       class function FindFirstSetBit32(Value:TPasMPUInt32):TPasMPInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
+       class function FindFirstSetBit64(Value:TPasMPUInt64):TPasMPInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
+       class function FindFirstSetBit(Value:TPasMPPtrUInt):TPasMPInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        class function RoundUpToPowerOfTwo32(Value:TPasMPUInt32):TPasMPUInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        class function RoundUpToPowerOfTwo64(Value:TPasMPUInt64):TPasMPUInt64; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        class function RoundUpToPowerOfTwo(Value:TPasMPPtrUInt):TPasMPPtrUInt; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
@@ -1867,9 +1871,9 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fQueueBottom:TPasMPInt32;
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fQueueTop:TPasMPInt32;
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fQueueJobs:TPasMPJobQueueJobs;
-       function HasJobs:boolean;
+       function HasJobs:boolean; {$ifdef CAN_INLINE}inline;{$endif}
        procedure Resize(const QueueBottom,QueueTop:TPasMPInt32);
-       procedure PushJob(const AJob:PPasMPJob);
+       procedure PushJob(const pJob:PPasMPJob);
        function PopJob:PPasMPJob;
        function StealJob:PPasMPJob;
       public
@@ -1878,7 +1882,8 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
-     TPasMPJobQueues=array[PasMPJobQueuePriorityLow..PasMPJobQueuePriorityHigh] of TPasMPJobQueue;
+     PPasMPJobQueues=^TPasMPJobQueues;
+     TPasMPJobQueues=array[PasMPJobQueuePriorityFirst..PasMPJobQueuePriorityLast] of TPasMPJobQueue;
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPJobWorkerThread=class
@@ -1895,18 +1900,9 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fIsReadyEvent:TPasMPEvent;
        fJobAllocator:TPasMPJobAllocator;
        fJobQueues:TPasMPJobQueues;
-{$ifdef UseXorShift128}
-       fXorShift128x:TPasMPUInt32;
-       fXorShift128y:TPasMPUInt32;
-       fXorShift128z:TPasMPUInt32;
-       fXorShift128w:TPasMPUInt32;
-{$else}
-{$ifdef CPU64}
-       fXorShift64:TPasMPUInt64;
-{$else}
+       fJobQueuesUsedBitmap:TPasMPUInt32;
+       fMaxPriorityJobQueueIndex:TPasMPUInt32;
        fXorShift32:TPasMPUInt32;
-{$endif}
-{$endif}
        procedure ThreadInitialization;
        function GetJob:PPasMPJob;
        function HasJobs:boolean; {$ifdef CAN_INLINE}inline;{$endif}
@@ -2014,6 +2010,9 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fJobAllocatorCriticalSection:TPasMPCriticalSection;
        fJobAllocator:TPasMPJobAllocator;
        fJobQueues:TPasMPJobQueues;
+       fJobQueuesUsedBitmap:TPasMPUInt32;
+       fJobQueuesLock:TPasMPSlimReaderWriterLock;
+       fGlobalJobQueuesUsedBitmap:TPasMPUInt32;
 {$ifndef UseThreadLocalStorage}
        fJobWorkerThreadHashTableCriticalSection:TPasMPCriticalSection;
        fJobWorkerThreadHashTable:TPasMPJobWorkerThreadHashTable;
@@ -2021,7 +2020,6 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fProfiler:TPasMPProfiler;
        class procedure DestroyGlobalInstance;
        class function GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif}):TPasMPUInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
-       class function GetJobQueueIndexFromJobFlags(const Flags:TPasMPUInt32):TPasMPInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        function GetJobWorkerThread:TPasMPJobWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
        procedure WaitForWakeUp;
        procedure WakeUpAll;
@@ -2032,6 +2030,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure WaitOnChildrenJobs(const Job:PPasMPJob);
        procedure ExecuteJobTask(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread;const ThreadIndex:TPasMPInt32); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure PushJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef HAS_ANONYMOUS_METHODS}
        procedure JobReferenceProcedureJobFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
        procedure ParallelForJobReferenceProcedureProcess(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
@@ -2146,27 +2145,27 @@ procedure FallbackMemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 
 {$if defined(cpu386)}
 {$ifndef fpc}
-function BSFDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register;
-function BSRDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register;
-function BSFQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall;
-function BSRQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall;
-function CTZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register;
-function CLZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register;
-function CTZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall;
-function CLZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall;
+function BSFDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register;
+function BSRDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register;
+function BSFQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; stdcall;
+function BSRQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; stdcall;
+function CTZDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register;
+function CLZDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register;
+function CTZQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; stdcall;
+function CLZQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; stdcall;
 function POPCNTDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register;
 function POPCNTQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; stdcall;
 {$endif}
 {$elseif defined(cpux86_64)}
 {$ifndef fpc}
-function BSFDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
-function BSRDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
-function BSFQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
-function BSRQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
-function CTZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
-function CLZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
-function CTZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
-function CLZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function BSFDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function BSRDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function BSFQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function BSRQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function CTZDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function CLZDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function CTZQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function CLZQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 function POPCNTDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 function POPCNTQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 {$endif}
@@ -2185,10 +2184,10 @@ function POPCNTQWord(Value:TPasMPUInt64):TPasMPInt32; {$ifdef CAN_INLINE}inline;
 {$ifend}
 
 {$ifdef fpc}
-function CTZDWord(Value:TPasMPUInt32):TPasMPUInt8; {$ifdef CAN_INLINE}inline;{$endif}
-function CLZDWord(Value:TPasMPUInt32):TPasMPUInt8; {$ifdef CAN_INLINE}inline;{$endif}
-function CTZQWord(Value:TPasMPUInt64):TPasMPUInt8; {$ifdef CAN_INLINE}inline;{$endif}
-function CLZQWord(Value:TPasMPUInt64):TPasMPUInt8; {$ifdef CAN_INLINE}inline;{$endif}
+function CTZDWord(Value:TPasMPUInt32):TPasMPUInt32; {$ifdef CAN_INLINE}inline;{$endif}
+function CLZDWord(Value:TPasMPUInt32):TPasMPUInt32; {$ifdef CAN_INLINE}inline;{$endif}
+function CTZQWord(Value:TPasMPUInt64):TPasMPUInt32; {$ifdef CAN_INLINE}inline;{$endif}
+function CLZQWord(Value:TPasMPUInt64):TPasMPUInt32; {$ifdef CAN_INLINE}inline;{$endif}
 {$endif}
 
 implementation
@@ -2310,7 +2309,7 @@ function pthread_rwlock_unlock(__rwlock:Ppthread_rwlock_t):TPasMPInt32; cdecl; e
 
 {$if defined(cpu386)}
 {$ifndef fpc}
-function BSFDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function BSFDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 asm
  bsf eax,eax
  jnz @Done
@@ -2318,7 +2317,7 @@ asm
 @Done:
 end;
 
-function BSRDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function BSRDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 asm
  bsr eax,eax
  jnz @Done
@@ -2326,7 +2325,7 @@ asm
 @Done:
 end;
 
-function BSFQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall; {$ifdef fpc}nostackframe;{$endif}
+function BSFQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; stdcall; {$ifdef fpc}nostackframe;{$endif}
 asm
  bsf eax,dword ptr [Value+0]
  jnz @Done
@@ -2339,7 +2338,7 @@ asm
 @Done:
 end;
 
-function BSRQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall; {$ifdef fpc}nostackframe;{$endif}
+function BSRQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; stdcall; {$ifdef fpc}nostackframe;{$endif}
 asm
  bsr eax,dword ptr [Value+4]
  jz @LowPart
@@ -2353,7 +2352,7 @@ asm
 @Done:
 end;
 
-function CTZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function CTZDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 asm
  bsf eax,eax
  jnz @Done
@@ -2361,7 +2360,7 @@ asm
 @Done:
 end;
 
-function CLZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function CLZDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 asm
  bsr edx,eax
  jnz @Done
@@ -2372,7 +2371,7 @@ asm
  sub eax,edx
 end;
 
-function CTZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall; {$ifdef fpc}nostackframe;{$endif}
+function CTZQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; stdcall; {$ifdef fpc}nostackframe;{$endif}
 asm
  bsf eax,dword ptr [Value+0]
  jnz @Done
@@ -2386,7 +2385,7 @@ asm
 @Done:
 end;
 
-function CLZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; stdcall; {$ifdef fpc}nostackframe;{$endif}
+function CLZQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; stdcall; {$ifdef fpc}nostackframe;{$endif}
 asm
  bsr edx,dword ptr [Value+4]
  jz @LowPart
@@ -2515,7 +2514,7 @@ end;
 {$elseif defined(cpux86_64)}
 
 {$ifndef fpc}
-function BSFDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function BSFDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 asm
 {$ifndef fpc}
  .NOFRAME
@@ -2530,7 +2529,7 @@ asm
 @Done:
 end;
 
-function BSRDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function BSRDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 asm
 {$ifndef fpc}
  .NOFRAME
@@ -2545,7 +2544,7 @@ asm
 @Done:
 end;
 
-function BSFQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function BSFQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 asm
 {$ifndef fpc}
  .NOFRAME
@@ -2560,7 +2559,7 @@ asm
 @Done:
 end;
 
-function BSRQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function BSRQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 asm
 {$ifndef fpc}
  .NOFRAME
@@ -2575,7 +2574,7 @@ asm
 @Done:
 end;
 
-function CTZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function CTZDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 asm
 {$ifndef fpc}
  .NOFRAME
@@ -2590,7 +2589,7 @@ asm
 @Done:
 end;
 
-function CLZDWord(Value:TPasMPUInt32):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function CLZDWord(Value:TPasMPUInt32):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 asm
 {$ifndef fpc}
  .NOFRAME
@@ -2614,7 +2613,7 @@ asm
 {$endif}
 end;
 
-function CTZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function CTZQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 asm
 {$ifndef fpc}
  .NOFRAME
@@ -2629,7 +2628,7 @@ asm
 @Done:
 end;
 
-function CLZQWord(Value:TPasMPUInt64):TPasMPUInt8; assembler; register; {$ifdef fpc}nostackframe;{$endif}
+function CLZQWord(Value:TPasMPUInt64):TPasMPUInt32; assembler; register; {$ifdef fpc}nostackframe;{$endif}
 asm
 {$ifndef fpc}
  .NOFRAME
@@ -2910,7 +2909,7 @@ end;
 {$ifend}
 
 {$ifdef fpc}
-function CTZDWord(Value:TPasMPUInt32):TPasMPUInt8; {$ifdef CAN_INLINE}inline;{$endif}
+function CTZDWord(Value:TPasMPUInt32):TPasMPUInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  if Value=0 then begin
   result:=32;
@@ -2919,7 +2918,7 @@ begin
  end;
 end;
 
-function CLZDWord(Value:TPasMPUInt32):TPasMPUInt8; {$ifdef CAN_INLINE}inline;{$endif}
+function CLZDWord(Value:TPasMPUInt32):TPasMPUInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  if Value=0 then begin
   result:=0;
@@ -2928,7 +2927,7 @@ begin
  end;
 end;
 
-function CTZQWord(Value:TPasMPUInt64):TPasMPUInt8; {$ifdef CAN_INLINE}inline;{$endif}
+function CTZQWord(Value:TPasMPUInt64):TPasMPUInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  if Value=0 then begin
   result:=64;
@@ -2937,7 +2936,7 @@ begin
  end;
 end;
 
-function CLZQWord(Value:TPasMPUInt64):TPasMPUInt8; {$ifdef CAN_INLINE}inline;{$endif}
+function CLZQWord(Value:TPasMPUInt64):TPasMPUInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  if Value=0 then begin
   result:=0;
@@ -3526,6 +3525,37 @@ begin
 {$endif}
 end;
 
+class function TPasMPMath.FindFirstSetBit32(Value:TPasMPUInt32):TPasMPInt32;
+begin
+ if Value=0 then begin
+  result:=-1;
+ end else begin
+  result:=BSFDWord(Value);
+ end;
+end;
+
+class function TPasMPMath.FindFirstSetBit64(Value:TPasMPUInt64):TPasMPInt32;
+begin
+ if Value=0 then begin
+  result:=-1;
+ end else begin
+  result:=BSFQWord(Value);
+ end;
+end;
+
+class function TPasMPMath.FindFirstSetBit(Value:TPasMPPtrUInt):TPasMPInt32;
+begin
+ if Value=0 then begin
+  result:=-1;
+ end else begin
+{$ifdef CPU64}
+  result:=BSFQWord(Value);
+{$else}
+  result:=BSFDWord(Value);
+{$endif}
+ end;
+end;
+
 class function TPasMPMath.RoundUpToPowerOfTwo32(Value:TPasMPUInt32):TPasMPUInt32;
 begin
  dec(Value);
@@ -3593,25 +3623,6 @@ end;
 class function TPasMP.GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif}):TPasMPUInt32;
 begin
  result:=(ThreadID*83492791) xor ((ThreadID shr 24)*19349669) xor ((ThreadID shr 16)*73856093) xor ((ThreadID shr 8)*50331653);
-end;
-
-class function TPasMP.GetJobQueueIndexFromJobFlags(const Flags:TPasMPUInt32):TPasMPInt32;
-begin
- result:=(((Flags-PasMPJobPriorityLow) and PasMPJobPriorityMask) shr PasMPJobPriorityShift)+PasMPJobQueuePriorityLow;
-{case Flags and PasMPJobPriorityMask of
-  PasMPJobPriorityLow:begin
-   result:=PasMPJobQueuePriorityLow;
-  end;
-  PasMPJobPriorityNormal:begin
-   result:=PasMPJobQueuePriorityNormal;
-  end;
-  PasMPJobPriorityHigh:begin
-   result:=PasMPJobQueuePriorityHigh;
-  end;
-  else begin
-   result:=PasMPJobQueuePriorityLow;
-  end;
- end;}
 end;
 
 class function TPasMP.EncodeJobPriorityToJobFlags(const JobPriority:TPasMPJobPriority):TPasMPUInt32;
@@ -9789,7 +9800,7 @@ begin
 {$ifend}
 end;
 
-procedure TPasMPJobQueue.PushJob(const AJob:PPasMPJob);
+procedure TPasMPJobQueue.PushJob(const pJob:PPasMPJob);
 var QueueBottom,QueueTop:TPasMPInt32;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -9811,7 +9822,7 @@ begin
   // Full queue => non-lock-free resize
   Resize(QueueBottom,QueueTop);
  end;
- fQueueJobs[QueueBottom and fQueueMask]:=AJob;
+ fQueueJobs[QueueBottom and fQueueMask]:=pJob;
 {$ifdef CPU386}
  asm
   mfence
@@ -9929,9 +9940,6 @@ begin
 end;
 
 constructor TPasMPJobWorkerThread.Create(const APasMPInstance:TPasMP;const AThreadIndex:TPasMPInt32);
-{$ifdef CPU64}
-const XorShift64Mul:TPasMPUInt64=TPasMPUInt64(10116239910488455739);
-{$endif}
 var JobQueueIndex:TPasMPInt32;
 begin
  inherited Create;
@@ -9940,23 +9948,13 @@ begin
  for JobQueueIndex:=low(TPasMPJobQueues) to high(TPasMPJobQueues) do begin
   fJobQueues[JobQueueIndex]:=TPasMPJobQueue.Create(fPasMPInstance);
  end;
+ fJobQueuesUsedBitmap:=0;
+ fMaxPriorityJobQueueIndex:=PasMPJobQueuePriorityHigh;
  fIsReadyEvent:=TPasMPEvent.Create(nil,false,false,'');
  fThreadIndex:=AThreadIndex;
  fCurrentJobPriority:=PasMPJobPriorityNormal;
  fProfilerStackDepth:=0;
-{$ifdef UseXorShift128}
- fXorShift128x:=(TPasMPUInt32(AThreadIndex+1)*83492791) or 1;
- fXorShift128y:=(TPasMPUInt32(AThreadIndex+1)*19349669) or 1;
- fXorShift128z:=(TPasMPUInt32(AThreadIndex+1)*50331653) or 1;
- fXorShift128w:=(TPasMPUInt32(AThreadIndex+1)*73856093) or 1;
-{$else}
-{$ifdef CPU64}
- fXorShift64:=(TPasMPUInt32(AThreadIndex+1)*XorShift64Mul) or 1;
-//fXorShift64:=(TPasMPUInt32(AThreadIndex+1)*TPasMPUInt64(10116239910488455739)) or 1;
-{$else}
  fXorShift32:=(TPasMPUInt32(AThreadIndex+1)*83492791) or 1;
-{$endif}
-{$endif}
  if fThreadIndex>0 then begin
   fSystemThread:=TPasMPWorkerSystemThread.Create(self);
  end else begin
@@ -10047,98 +10045,274 @@ begin
 
 end;
 
+{//$define AlternativeGetJobVariant}
+{$ifdef AlternativeGetJobVariant}
+// A prioritized GetJob implementation variant, which is based on the paper "Load Balancing Prioritized Tasks via Work-Stealing"
+// by Shams Imam and Vivek Sarkar
+// Optimized here by me (Benjamin Rosseaux) by replacing the boolean-arrays with uint32-variables for more effective atomic
+// operations and better faster bit scan possibilities for to find the next active priority index, for example with the BSF and
+// BSR machine instructions on the x86 CPU architecture
 function TPasMPJobWorkerThread.GetJob:PPasMPJob;
-const XorShiftBitShift={$ifdef UseXorShift128}16{$else}{$ifdef CPU64}48{$else}16{$endif}{$endif};
-var JobQueueIndex:TPasMPInt32;
-    JobQueue:TPasMPJobQueue;
-    XorShiftTemp:{$ifdef UseXorShift128}TPasMPUInt32{$else}{$ifdef CPU64}TPasMPUInt64{$else}TPasMPUInt32{$endif}{$endif};
-    OtherJobWorkerThreadIndex:TPasMPUInt32;
+var FoundPriorityIndex,JobQueuePriorityIndex,OtherJobWorkerThreadIndex,OtherJobWorkerThreadCounter:TPasMPInt32;
+    XorShiftTemp,PriorityJobQueueBitMask,CurrentBitmap:TPasMPUInt32;
     OtherJobWorkerThread:TPasMPJobWorkerThread;
+    CandidateJob:PPasMPJob;
 begin
 
- for JobQueueIndex:=high(TPasMPJobQueues) downto low(TPasMPJobQueues) do begin
+ // First search for highest priority job
+ if (fJobQueuesUsedBitmap and TPasMPUInt32(TPasMPUInt32(1) shl PasMPJobQueuePriorityHigh))<>0 then begin
+  // Our local bitmap claim we have a job with highest priority!
+  CandidateJob:=fJobQueues[PasMPJobQueuePriorityHigh].PopJob;
+  if assigned(CandidateJob) and ((CandidateJob^.InternalData and PasMPJobFlagActive)<>0) then begin
+   // Found a local job to execute with highest priority
+   fMaxPriorityJobQueueIndex:=PasMPJobQueuePriorityHigh;
+   result:=CandidateJob;
+   exit;
+  end else begin
+   fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap and not TPasMPUInt32(TPasMPUInt32(1) shl PasMPJobQueuePriorityHigh);
+  end;
+ end;
 
-  JobQueue:=fJobQueues[JobQueueIndex];
+ // Ensure we don't have any local job with a higher priority (in case global state is out of sync)
+ CurrentBitmap:=fPasMPInstance.fGlobalJobQueuesUsedBitmap;
+ if CurrentBitmap=0 then begin
+  FoundPriorityIndex:=0;
+ end else begin
+  FoundPriorityIndex:=TPasMPMath.BitScanForward32(CurrentBitmap);
+ end;
+ for JobQueuePriorityIndex:=fMaxPriorityJobQueueIndex to FoundPriorityIndex-1 do begin
+  PriorityJobQueueBitMask:=TPasMPUInt32(1) shl TPasMPUInt32(JobQueuePriorityIndex);
+  if (fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
+   // Our local bitmap claim we have a job with higher priority!
+   CandidateJob:=fJobQueues[JobQueuePriorityIndex].PopJob;
+   if assigned(CandidateJob) and ((CandidateJob^.InternalData and PasMPJobFlagActive)<>0) then begin
+    // Found a local job to execute with higher priority
+    if fJobQueues[JobQueuePriorityIndex].HasJobs then begin
+     TPasMPInterlocked.BitwiseOr(fPasMPInstance.fGlobalJobQueuesUsedBitmap,PriorityJobQueueBitMask);
+     fMaxPriorityJobQueueIndex:=PasMPJobQueuePriorityHigh;
+    end else begin
+     fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
+    end;
+    result:=CandidateJob;
+    exit;
+   end else begin
+    fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
+   end;
+  end;
+ end;
 
-  result:=JobQueue.PopJob;
-  if (not assigned(result)) or ((result^.InternalData and PasMPJobFlagActive)=0) then begin
+ // Exhaustively search local and global pools, attempting steals
+ JobQueuePriorityIndex:=FoundPriorityIndex;
+ while JobQueuePriorityIndex<=PasMPJobQueuePriorityLast do begin
 
-   // This is not a valid job because our own queue is empty, so try stealing from some other queue
+  PriorityJobQueueBitMask:=TPasMPUInt32(1) shl TPasMPUInt32(JobQueuePriorityIndex);
 
-{$if defined(UseXorShift128)}
-   XorShiftTemp:=fXorShift128x xor (fXorShift128x shl 11);
-   fXorShift128x:=fXorShift128y;
-   fXorShift128y:=fXorShift128z;
-   fXorShift128z:=fXorShift128w;
-   fXorShift128w:=((fXorShift128w xor (fXorShift128w shr 19)) xor XorShiftTemp) xor (XorShiftTemp shr 8);
-   XorShiftTemp:=XorShiftTemp;
-{$elseif defined(CPU64)}
-   XorShiftTemp:=fXorShift64;
-   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 21);
-   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shr 35);
-   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 4);
-   fXorShift64:=XorShiftTemp;
- { XorShiftTemp:=fXorShift64;
-   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 13);
-   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shr 7);
-   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 17);
-   fXorShift64:=XorShiftTemp;{}
+  if (fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
+   // Our local bitmap claim we have a job
+   CandidateJob:=fJobQueues[JobQueuePriorityIndex].PopJob;
+   if assigned(CandidateJob) and ((CandidateJob^.InternalData and PasMPJobFlagActive)<>0) then begin
+    // Found a local job to execute
+    fMaxPriorityJobQueueIndex:=JobQueuePriorityIndex;
+    result:=CandidateJob;
+    exit;
+   end;
+  end;
+
+  // When it is not a valid job or our own queue is empty, so try stealing from some other queue
+  // Find victim index and try to steal from there
+  XorShiftTemp:=fXorShift32;
+  XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 13);
+  XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shr 17);
+  XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 5);
+  fXorShift32:=XorShiftTemp;
+  OtherJobWorkerThreadIndex:=((XorShiftTemp shr 16)*TPasMPUInt32(fPasMPInstance.fCountJobWorkerThreads)) shr 16;
+  for OtherJobWorkerThreadCounter:=0 to fPasMPInstance.fCountJobWorkerThreads-1 do begin
+   OtherJobWorkerThread:=fPasMPInstance.fJobWorkerThreads[OtherJobWorkerThreadIndex];
+   if (OtherJobWorkerThread<>self) and
+      ((OtherJobWorkerThread.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0) then begin
+    // The victim bitmap claim we have a job
+    CandidateJob:=OtherJobWorkerThread.fJobQueues[JobQueuePriorityIndex].StealJob;
+    if assigned(CandidateJob) and ((CandidateJob^.InternalData and PasMPJobFlagActive)<>0) then begin
+     // Found a stolen job to execute
+     result:=CandidateJob;
+     exit;
+    end;
+   end;
+   inc(OtherJobWorkerThreadIndex);
+   if OtherJobWorkerThreadIndex>=fPasMPInstance.fCountJobWorkerThreads then begin
+    OtherJobWorkerThreadIndex:=0;
+   end;
+  end;
+
+  // Otherwise try stealing from the global queue
+  if (fPasMPInstance.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
+   fPasMPInstance.fJobQueuesLock.Acquire;
+   try
+{$if defined(cpu386) or defined(cpux86_64)}
+    TPasMPMemoryBarrier.ReadDependency;
 {$else}
+    TPasMPMemoryBarrier.Read;
+{$ifend}
+    if (fPasMPInstance.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
+     // The global bitmap claim we have a job
+     CandidateJob:=fPasMPInstance.fJobQueues[JobQueuePriorityIndex].StealJob;
+     if assigned(CandidateJob) and ((CandidateJob^.InternalData and PasMPJobFlagActive)<>0) then begin
+      // Found a stolen global job to execute
+      result:=CandidateJob;
+      exit;
+     end else begin
+      fPasMPInstance.fJobQueuesUsedBitmap:=fPasMPInstance.fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
+      TPasMPMemoryBarrier.ReadWrite;
+     end;
+    end;
+   finally
+    fPasMPInstance.fJobQueuesLock.Release;
+   end;
+  end;
+
+  // No job with specified priority found, attempt to update global state
+  TPasMPInterlocked.BitWiseAnd(fPasMPInstance.fGlobalJobQueuesUsedBitmap,not PriorityJobQueueBitMask);
+
+  // Try and search for task with next available priority
+  CurrentBitmap:=fPasMPInstance.fGlobalJobQueuesUsedBitmap and not ((PriorityJobQueueBitMask shl 1)-1);
+  if CurrentBitmap=0 then begin
+   inc(JobQueuePriorityIndex);
+  end else begin
+   JobQueuePriorityIndex:=TPasMPMath.BitScanForward32(CurrentBitmap);
+  end;
+
+ end;
+
+ result:=nil;
+end;
+{$else}
+// A prioritized GetJob implementation variant, which is based completety on my own ideas, which is better structured,
+// easier to understand and more pretty than the implementation above, in my opinion.
+function TPasMPJobWorkerThread.GetJob:PPasMPJob;
+var FoundPriorityIndex,JobQueuePriorityIndex,OtherJobWorkerThreadIndex,OtherJobWorkerThreadCounter:TPasMPInt32;
+    XorShiftTemp,PriorityJobQueueBitMask,CurrentBitmap:TPasMPUInt32;
+    OtherJobWorkerThread:TPasMPJobWorkerThread;
+    CandidateJob:PPasMPJob;
+    FirstTry:boolean;
+begin
+
+{$if not (defined(cpu386) or defined(cpux86_64))}
+ TPasMPMemoryBarrier.ReadWrite;
+{$ifend}
+ CurrentBitmap:=fPasMPInstance.fGlobalJobQueuesUsedBitmap;
+{$if not (defined(cpu386) or defined(cpux86_64))}
+ TPasMPMemoryBarrier.Read;
+{$ifend}
+
+ FirstTry:=true;
+
+ repeat
+
+  // Ensure that the local bitmap content is inside the global bitmap content
+  if (CurrentBitmap and fJobQueuesUsedBitmap)<>fJobQueuesUsedBitmap then begin
+   CurrentBitmap:=TPasMPInterlocked.ExchangeBitWiseOr(fPasMPInstance.fGlobalJobQueuesUsedBitmap,fJobQueuesUsedBitmap) or fJobQueuesUsedBitmap;
+  end;
+
+  while CurrentBitmap<>0 do begin
+
+   JobQueuePriorityIndex:=TPasMPMath.BitScanForward32(CurrentBitmap);
+
+   PriorityJobQueueBitMask:=TPasMPUInt32(1) shl TPasMPUInt32(JobQueuePriorityIndex);
+
+   // Try getting a job from our own queue first
+   if (fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
+    CandidateJob:=fJobQueues[JobQueuePriorityIndex].PopJob;
+    if assigned(CandidateJob) and ((CandidateJob^.InternalData and PasMPJobFlagActive)<>0) then begin
+     result:=CandidateJob;
+     exit;
+    end else begin
+     fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
+    end;
+   end;
+
+   // When it is not a valid job or our own queue is empty, so try stealing from some other queue
    XorShiftTemp:=fXorShift32;
    XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 13);
    XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shr 17);
    XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 5);
    fXorShift32:=XorShiftTemp;
+   OtherJobWorkerThreadIndex:=((XorShiftTemp shr 16)*TPasMPUInt32(fPasMPInstance.fCountJobWorkerThreads)) shr 16;
+   for OtherJobWorkerThreadCounter:=0 to fPasMPInstance.fCountJobWorkerThreads-1 do begin
+    OtherJobWorkerThread:=fPasMPInstance.fJobWorkerThreads[OtherJobWorkerThreadIndex];
+    if (OtherJobWorkerThread<>self) and
+       ((OtherJobWorkerThread.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0) then begin
+     CandidateJob:=OtherJobWorkerThread.fJobQueues[JobQueuePriorityIndex].StealJob;
+     if assigned(CandidateJob) and ((CandidateJob^.InternalData and PasMPJobFlagActive)<>0) then begin
+      result:=CandidateJob;
+      exit;
+     end;
+    end;
+    inc(OtherJobWorkerThreadIndex);
+    if OtherJobWorkerThreadIndex>=fPasMPInstance.fCountJobWorkerThreads then begin
+     OtherJobWorkerThreadIndex:=0;
+    end;
+   end;
+
+   // Otherwise try stealing from the global queue
+   if (fPasMPInstance.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
+    fPasMPInstance.fJobQueuesLock.Acquire;
+    try
+{$if defined(cpu386) or defined(cpux86_64)}
+     TPasMPMemoryBarrier.ReadDependency;
+{$else}
+     TPasMPMemoryBarrier.Read;
 {$ifend}
-
-   OtherJobWorkerThreadIndex:=((XorShiftTemp shr XorShiftBitShift)*TPasMPUInt32(fPasMPInstance.fCountJobWorkerThreads)) shr 16;
-   OtherJobWorkerThread:=fPasMPInstance.fJobWorkerThreads[OtherJobWorkerThreadIndex];
-   if OtherJobWorkerThread=self then begin
-    // Don't try to steal from ourselves
-    result:=nil;
-   end else begin
-    result:=OtherJobWorkerThread.fJobQueues[JobQueueIndex].StealJob;
-    if (not assigned(result)) or ((result^.InternalData and PasMPJobFlagActive)=0) then begin
-     // We couldn't steal a job from the other queue either
-     result:=nil;
+     if (fPasMPInstance.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
+      CandidateJob:=fPasMPInstance.fJobQueues[JobQueuePriorityIndex].StealJob;
+      if assigned(CandidateJob) and ((CandidateJob^.InternalData and PasMPJobFlagActive)<>0) then begin
+       // Yay, we've stolen a job!
+       result:=CandidateJob;
+       exit;
+      end else begin
+       fPasMPInstance.fJobQueuesUsedBitmap:=fPasMPInstance.fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
+       TPasMPMemoryBarrier.ReadWrite;
+      end;
+     end;
+    finally
+     fPasMPInstance.fJobQueuesLock.Release;
     end;
    end;
 
-   if not assigned(result) then begin
+   // Update the global used priority queue bit mask to signal no jobs of the specified priority were available
+   TPasMPInterlocked.BitWiseAnd(fPasMPInstance.fGlobalJobQueuesUsedBitmap,not PriorityJobQueueBitMask);
 
-    result:=fPasMPInstance.fJobQueues[JobQueueIndex].StealJob;
-    if (not assigned(result)) or ((result^.InternalData and PasMPJobFlagActive)=0) then begin
-     // We couldn't steal a job from the global queue
-     result:=nil;
-    end;
+   // Mask out first set bit
+   CurrentBitmap:=CurrentBitmap and (CurrentBitmap-1);
 
+  end;
+
+  // We now realize that the global used priority queue bit mask is out of sync as none of the victims including ourself could provide a job,
+  // so we should update the global used priority queue bit mask with our local used priority queue bit mask and so on
+  if FirstTry then begin
+   FirstTry:=false;
+   CurrentBitmap:=fJobQueuesUsedBitmap or fPasMPInstance.fJobQueuesUsedBitmap;
+   CurrentBitmap:=TPasMPInterlocked.ExchangeBitWiseOr(fPasMPInstance.fGlobalJobQueuesUsedBitmap,CurrentBitmap) or CurrentBitmap;
+   if CurrentBitmap<>0 then begin
+    // Time for a second try
+    continue;
    end;
-
   end;
 
-  if assigned(result) then begin
-   break;
-  end;
+  // Otherwise, when everything had no success, we should give up
+  break;
 
- end;
+ until false;
 
- if not assigned(result) then begin
-  // If we couldn't steal a job from any queue either, so we just yield our time slice for now
-  TPasMP.Yield;
- end;
+ result:=nil;
 
 end;
+{$endif}
 
 function TPasMPJobWorkerThread.HasJobs:boolean;
-var JobQueueIndex:TPasMPInt32;
 begin
- for JobQueueIndex:=low(TPasMPJobQueues) to high(TPasMPJobQueues) do begin
-  if fJobQueues[JobQueueIndex].HasJobs then begin
-   result:=true;
-   exit;
-  end;
- end;
- result:=false;
+ result:=fJobQueues[PasMPJobQueuePriorityHigh].HasJobs or
+         fJobQueues[PasMPJobQueuePriorityNormal].HasJobs or
+         fJobQueues[PasMPJobQueuePriorityLow].HasJobs;
 end;
 
 procedure TPasMPJobWorkerThread.ThreadProc;
@@ -10471,7 +10645,7 @@ begin
  fAvailableCPUCores:=nil;
 
  fDoCPUCorePinning:=DoCPUCorePinning;
- 
+
  fSleepingOnIdle:=SleepingOnIdle;
 
  if Profiling then begin
@@ -10515,6 +10689,12 @@ begin
  for Index:=low(TPasMPJobQueues) to high(TPasMPJobQueues) do begin
   fJobQueues[Index]:=TPasMPJobQueue.Create(self);
  end;
+
+ fJobQueuesUsedBitmap:=0;
+
+ fJobQueuesLock:=TPasMPSlimReaderWriterLock.Create;
+
+ fGlobalJobQueuesUsedBitmap:=0;
 
 {$ifndef UseThreadLocalStorage}
  fJobWorkerThreadHashTableCriticalSection:=TPasMPCriticalSection.Create;
@@ -10566,6 +10746,7 @@ begin
  for Index:=low(TPasMPJobQueues) to high(TPasMPJobQueues) do begin
   fJobQueues[Index].Free;
  end;
+ fJobQueuesLock.Free;
  fJobAllocator.Free;
  fJobAllocatorCriticalSection.Free;
  fSystemIsReadyEvent.Free;
@@ -11232,37 +11413,57 @@ begin
 
 end;
 
+procedure TPasMP.PushJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+var JobQueueIndex,PriorityJobQueueBitMask:TPasMPUInt32;
+begin
+ JobQueueIndex:=PasMPJobQueuePriorityLast-(((Job^.InternalData and PasMPJobPriorityShiftedMask) shr PasMPJobPriorityShift)-(PasMPJobPriorityLow shr PasMPJobPriorityShift));
+ PriorityJobQueueBitMask:=TPasMPUInt32(1) shl TPasMPUInt32(JobQueueIndex);
+ if assigned(JobWorkerThread) then begin
+  JobWorkerThread.fJobQueues[JobQueueIndex].PushJob(Job);
+  if (JobWorkerThread.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)=0 then begin
+   JobWorkerThread.fJobQueuesUsedBitmap:=JobWorkerThread.fJobQueuesUsedBitmap or PriorityJobQueueBitMask;
+   TPasMPInterlocked.BitwiseOr(fGlobalJobQueuesUsedBitmap,PriorityJobQueueBitMask);
+  end;
+ end else begin
+  fJobQueuesLock.Acquire;
+  try
+   fJobQueues[JobQueueIndex].PushJob(Job);
+{$if defined(cpu386) or defined(cpux86_64)}
+   TPasMPMemoryBarrier.ReadDependency;
+{$else}
+   TPasMPMemoryBarrier.Read;
+{$ifend}
+   if (fJobQueuesUsedBitmap and PriorityJobQueueBitMask)=0 then begin
+    fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap or PriorityJobQueueBitMask;
+    TPasMPMemoryBarrier.ReadWrite;
+    TPasMPInterlocked.BitwiseOr(fGlobalJobQueuesUsedBitmap,PriorityJobQueueBitMask);
+   end;
+  finally
+   fJobQueuesLock.Release;
+  end;
+ end;
+end;
+
 procedure TPasMP.Run(const Job:PPasMPJob); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 var JobWorkerThread:TPasMPJobWorkerThread;
-    JobQueueIndex:TPasMPInt32;
 begin
  if assigned(Job) then begin
   JobWorkerThread:=GetJobWorkerThread;
-  JobQueueIndex:=TPasMP.GetJobQueueIndexFromJobFlags(Job^.InternalData);
-  if assigned(JobWorkerThread) then begin
-   JobWorkerThread.fJobQueues[JobQueueIndex].PushJob(Job);
-  end else begin
-   fJobQueues[JobQueueIndex].PushJob(Job);
-  end;
+  PushJob(Job,JobWorkerThread);
   WakeUpAll;
  end;
 end;
 
 procedure TPasMP.Run(const Jobs:array of PPasMPJob);
 var JobWorkerThread:TPasMPJobWorkerThread;
-    JobIndex,JobQueueIndex:TPasMPInt32;
+    JobIndex:TPasMPInt32;
     Job:PPasMPJob;
 begin
  JobWorkerThread:=GetJobWorkerThread;
  for JobIndex:=0 to length(Jobs)-1 do begin
   Job:=Jobs[JobIndex];
   if assigned(Job) then begin
-   JobQueueIndex:=TPasMP.GetJobQueueIndexFromJobFlags(Job^.InternalData);
-   if assigned(JobWorkerThread) then begin
-    JobWorkerThread.fJobQueues[JobQueueIndex].PushJob(Job);
-   end else begin
-    fJobQueues[JobQueueIndex].PushJob(Job);
-   end;
+   PushJob(Job,JobWorkerThread);
   end;
  end;
  WakeUpAll;
