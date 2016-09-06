@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-06-15-15-0000                       *
+ *                        Version 2016-09-06-21-18-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -10056,17 +10056,15 @@ function TPasMPJobWorkerThread.GetJob:PPasMPJob;
 var FoundPriorityIndex,JobQueuePriorityIndex,OtherJobWorkerThreadIndex,OtherJobWorkerThreadCounter:TPasMPInt32;
     XorShiftTemp,PriorityJobQueueBitMask,CurrentBitmap:TPasMPUInt32;
     OtherJobWorkerThread:TPasMPJobWorkerThread;
-    CandidateJob:PPasMPJob;
 begin
 
  // First search for highest priority job
  if (fJobQueuesUsedBitmap and TPasMPUInt32(TPasMPUInt32(1) shl PasMPJobQueuePriorityHigh))<>0 then begin
   // Our local bitmap claim we have a job with highest priority!
-  CandidateJob:=fJobQueues[PasMPJobQueuePriorityHigh].PopJob;
-  if assigned(CandidateJob) and ((CandidateJob^.InternalData and PasMPJobFlagActive)<>0) then begin
+  result:=fJobQueues[PasMPJobQueuePriorityHigh].PopJob;
+  if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
    // Found a local job to execute with highest priority
    fMaxPriorityJobQueueIndex:=PasMPJobQueuePriorityHigh;
-   result:=CandidateJob;
    exit;
   end else begin
    fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap and not TPasMPUInt32(TPasMPUInt32(1) shl PasMPJobQueuePriorityHigh);
@@ -10084,16 +10082,14 @@ begin
   PriorityJobQueueBitMask:=TPasMPUInt32(1) shl TPasMPUInt32(JobQueuePriorityIndex);
   if (fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
    // Our local bitmap claim we have a job with higher priority!
-   CandidateJob:=fJobQueues[JobQueuePriorityIndex].PopJob;
-   if assigned(CandidateJob) and ((CandidateJob^.InternalData and PasMPJobFlagActive)<>0) then begin
-    // Found a local job to execute with higher priority
+   result:=fJobQueues[JobQueuePriorityIndex].PopJob;
+   if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
     if fJobQueues[JobQueuePriorityIndex].HasJobs then begin
      TPasMPInterlocked.BitwiseOr(fPasMPInstance.fGlobalJobQueuesUsedBitmap,PriorityJobQueueBitMask);
      fMaxPriorityJobQueueIndex:=PasMPJobQueuePriorityHigh;
     end else begin
      fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
     end;
-    result:=CandidateJob;
     exit;
    end else begin
     fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
@@ -10109,11 +10105,10 @@ begin
 
   if (fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
    // Our local bitmap claim we have a job
-   CandidateJob:=fJobQueues[JobQueuePriorityIndex].PopJob;
-   if assigned(CandidateJob) and ((CandidateJob^.InternalData and PasMPJobFlagActive)<>0) then begin
+   result:=fJobQueues[JobQueuePriorityIndex].PopJob;
+   if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
     // Found a local job to execute
     fMaxPriorityJobQueueIndex:=JobQueuePriorityIndex;
-    result:=CandidateJob;
     exit;
    end;
   end;
@@ -10131,10 +10126,9 @@ begin
    if (OtherJobWorkerThread<>self) and
       ((OtherJobWorkerThread.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0) then begin
     // The victim bitmap claim we have a job
-    CandidateJob:=OtherJobWorkerThread.fJobQueues[JobQueuePriorityIndex].StealJob;
-    if assigned(CandidateJob) and ((CandidateJob^.InternalData and PasMPJobFlagActive)<>0) then begin
+    result:=OtherJobWorkerThread.fJobQueues[JobQueuePriorityIndex].StealJob;
+    if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
      // Found a stolen job to execute
-     result:=CandidateJob;
      exit;
     end;
    end;
@@ -10155,10 +10149,9 @@ begin
 {$ifend}
     if (fPasMPInstance.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
      // The global bitmap claim we have a job
-     CandidateJob:=fPasMPInstance.fJobQueues[JobQueuePriorityIndex].StealJob;
-     if assigned(CandidateJob) and ((CandidateJob^.InternalData and PasMPJobFlagActive)<>0) then begin
+     result:=fPasMPInstance.fJobQueues[JobQueuePriorityIndex].StealJob;
+     if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
       // Found a stolen global job to execute
-      result:=CandidateJob;
       exit;
      end else begin
       fPasMPInstance.fJobQueuesUsedBitmap:=fPasMPInstance.fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
@@ -10192,7 +10185,6 @@ function TPasMPJobWorkerThread.GetJob:PPasMPJob;
 var FoundPriorityIndex,JobQueuePriorityIndex,OtherJobWorkerThreadIndex,OtherJobWorkerThreadCounter:TPasMPInt32;
     XorShiftTemp,PriorityJobQueueBitMask,CurrentBitmap:TPasMPUInt32;
     OtherJobWorkerThread:TPasMPJobWorkerThread;
-    CandidateJob:PPasMPJob;
     FirstTry:boolean;
 begin
 
@@ -10221,9 +10213,8 @@ begin
 
    // Try getting a job from our own queue first
    if (fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
-    CandidateJob:=fJobQueues[JobQueuePriorityIndex].PopJob;
-    if assigned(CandidateJob) and ((CandidateJob^.InternalData and PasMPJobFlagActive)<>0) then begin
-     result:=CandidateJob;
+    result:=fJobQueues[JobQueuePriorityIndex].PopJob;
+    if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
      exit;
     end else begin
      fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
@@ -10241,9 +10232,8 @@ begin
     OtherJobWorkerThread:=fPasMPInstance.fJobWorkerThreads[OtherJobWorkerThreadIndex];
     if (OtherJobWorkerThread<>self) and
        ((OtherJobWorkerThread.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0) then begin
-     CandidateJob:=OtherJobWorkerThread.fJobQueues[JobQueuePriorityIndex].StealJob;
-     if assigned(CandidateJob) and ((CandidateJob^.InternalData and PasMPJobFlagActive)<>0) then begin
-      result:=CandidateJob;
+     result:=OtherJobWorkerThread.fJobQueues[JobQueuePriorityIndex].StealJob;
+     if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
       exit;
      end;
     end;
@@ -10263,10 +10253,9 @@ begin
      TPasMPMemoryBarrier.Read;
 {$ifend}
      if (fPasMPInstance.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
-      CandidateJob:=fPasMPInstance.fJobQueues[JobQueuePriorityIndex].StealJob;
-      if assigned(CandidateJob) and ((CandidateJob^.InternalData and PasMPJobFlagActive)<>0) then begin
+      result:=fPasMPInstance.fJobQueues[JobQueuePriorityIndex].StealJob;
+      if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
        // Yay, we've stolen a job!
-       result:=CandidateJob;
        exit;
       end else begin
        fPasMPInstance.fJobQueuesUsedBitmap:=fPasMPInstance.fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
