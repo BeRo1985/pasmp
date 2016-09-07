@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-06-21-18-0000                       *
+ *                        Version 2016-09-07-03-20-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -10182,7 +10182,7 @@ end;
 // A prioritized GetJob implementation variant, which is based completety on my own ideas, which is better structured,
 // easier to understand and more pretty than the implementation above, in my opinion.
 function TPasMPJobWorkerThread.GetJob:PPasMPJob;
-var FoundPriorityIndex,JobQueuePriorityIndex,OtherJobWorkerThreadIndex,OtherJobWorkerThreadCounter:TPasMPInt32;
+var JobQueuePriorityIndex,OtherJobWorkerThreadIndex,OtherJobWorkerThreadCounter:TPasMPInt32;
     XorShiftTemp,PriorityJobQueueBitMask,CurrentBitmap:TPasMPUInt32;
     OtherJobWorkerThread:TPasMPJobWorkerThread;
     FirstTry:boolean;
