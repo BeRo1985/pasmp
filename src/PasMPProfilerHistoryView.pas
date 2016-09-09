@@ -1,7 +1,7 @@
 (******************************************************************************
  *                          PasMPProfilerHistoryView                          *
  ******************************************************************************
- *                        Version 2016-09-10-00-49-0000                       *
+ *                        Version 2016-09-10-00-54-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -367,7 +367,9 @@ type TPasMPProfilerHistoryView=class(TCustomControl)
       public
        constructor Create(AOwner:TComponent); override;
        destructor Destroy; override;
+{$ifdef fpc}
        procedure EraseBackground(DC:HDC); override;
+{$endif}
        procedure TransferData;
        property PasMPInstance:TPasMP read fPasMPInstance write fPasMPInstance;
        property VisibleTimePeriod:TPasMPHighResolutionTime read fVisibleTimePeriod write fVisibleTimePeriod;
@@ -412,9 +414,11 @@ begin
  Message.Result:=1;
 end;
 
+{$ifdef fpc}
 procedure TPasMPProfilerHistoryView.EraseBackground(DC:HDC);
 begin
 end;
+{$endif}
 
 procedure TPasMPProfilerHistoryView.Paint;
 const ProfilerNotActivated='Profiler not activated';
