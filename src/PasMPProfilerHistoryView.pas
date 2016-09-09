@@ -1,7 +1,7 @@
 (******************************************************************************
  *                          PasMPProfilerHistoryView                          *
  ******************************************************************************
- *                        Version 2016-09-05-12-41-0000                       *
+ *                        Version 2016-09-10-00-49-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -367,6 +367,7 @@ type TPasMPProfilerHistoryView=class(TCustomControl)
       public
        constructor Create(AOwner:TComponent); override;
        destructor Destroy; override;
+       procedure EraseBackground(DC:HDC); override;
        procedure TransferData;
        property PasMPInstance:TPasMP read fPasMPInstance write fPasMPInstance;
        property VisibleTimePeriod:TPasMPHighResolutionTime read fVisibleTimePeriod write fVisibleTimePeriod;
@@ -411,6 +412,10 @@ begin
  Message.Result:=1;
 end;
 
+procedure TPasMPProfilerHistoryView.EraseBackground(DC:HDC);
+begin
+end;
+
 procedure TPasMPProfilerHistoryView.Paint;
 const ProfilerNotActivated='Profiler not activated';
       Colors:array[0..7] of TColor=
@@ -437,11 +442,12 @@ begin
  fMultipleReaderSingleWriterLock.AcquireRead;
  try
 
-  CanvasWidth:=ClientWidth;
-  CanvasHeight:=ClientHeight;
+  CanvasWidth:=ClientWidth+1;
+  CanvasHeight:=ClientHeight+1;
 
   if (fBufferBitmap.Width<>CanvasWidth) or (fBufferBitmap.Height<>CanvasHeight) or
      (fBufferBitmap.PixelFormat<>pf32Bit) {$ifndef fpc}or (fBufferBitmap.HandleType<>bmDDB){$endif} then begin
+   fBufferBitmap.Height:=0;
    fBufferBitmap.Width:=CanvasWidth;
    fBufferBitmap.Height:=CanvasHeight;
    fBufferBitmap.PixelFormat:=pf32Bit;
