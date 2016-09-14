@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-07-03-20-0000                       *
+ *                        Version 2016-09-14-19-46-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -455,6 +455,12 @@ type PPasMPInt8=^TPasMPInt8;
      TPasMPPtrInt=TPasMPInt32;
   {$endif}
 {$endif}
+
+     PPasMPNativeUInt=^TPasMPNativeUInt;
+     TPasMPNativeUInt=TPasMPPtrUInt;
+
+     PPasMPNativeInt=^TPasMPNativeInt;
+     TPasMPNativeInt=TPasMPPtrInt;
 
 const PasMPAllocatorPoolBucketBits=12;
       PasMPAllocatorPoolBucketSize=1 shl PasMPAllocatorPoolBucketBits;
@@ -2088,10 +2094,10 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$endif}
        function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPInt32;const ParallelForProcedure:TPasMPParallelForProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob; overload;
        function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPInt32;const ParallelForMethod:TPasMPParallelForMethod;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob; overload;
-       function ParallelDirectIntroSort(const Items:pointer;const Left,Right,ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
-       function ParallelIndirectIntroSort(const Items:pointer;const Left,Right:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
-       function ParallelDirectMergeSort(const Items:pointer;const Left,Right,ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
-       function ParallelIndirectMergeSort(const Items:pointer;const Left,Right:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
+       function ParallelDirectIntroSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
+       function ParallelIndirectIntroSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
+       function ParallelDirectMergeSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
+       function ParallelIndirectMergeSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
        property CountJobWorkerThreads:TPasMPInt32 read fCountJobWorkerThreads;
        property Profiler:TPasMPProfiler read fProfiler;
      end;
@@ -3359,42 +3365,6 @@ begin
 {$endif}
 end;
 {$ifend}
-{$endif}
-
-function IntLog2(x:TPasMPUInt32):TPasMPUInt32; {$ifdef CPU386}assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-asm
- test eax,eax
- jz @Done
- bsr eax,eax
- @Done:
-end;{$else}{$ifdef CPUx86_64}assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-asm
-{$ifdef Windows}
- mov eax,ecx
-{$else}
- mov eax,edi
-{$endif}
- test eax,eax
- jz @Done
- bsr eax,eax
- @Done:
-end;
-{$else}
-begin
- x:=x or (x shr 1);
- x:=x or (x shr 2);
- x:=x or (x shr 4);
- x:=x or (x shr 8);
- x:=x or (x shr 16);
- x:=x shr 1;
- x:=x-((x shr 1) and $55555555);
- x:=((x shr 2) and $33333333)+(x and $33333333);
- x:=((x shr 4)+x) and $0f0f0f0f;
- x:=x+(x shr 8);
- x:=x+(x shr 16);
- result:=x and $3f;
-end;
-{$endif}
 {$endif}
 
 procedure MemorySwap(a,b:pointer;Size:TPasMPInt32);
@@ -7129,7 +7099,11 @@ begin
  fFirstState^.Version:=0;
  fFirstState^.Size:=TPasMPMath.RoundUpToPowerOfTwo(Max(16,4096 div fInternalItemSize));
  fFirstState^.Mask:=fFirstState^.Size-1;
- fFirstState^.LogSize:=IntLog2(fFirstState^.Size);
+ if fFirstState^.LogSize=0 then begin
+  fFirstState^.LogSize:=0;
+ end else begin
+  fFirstState^.LogSize:=TPasMPMath.BitScanReverse32(fFirstState^.Size);
+ end;
  fFirstState^.Count:=0;
  TPasMPMemory.AllocateAlignedMemory(fFirstState^.Items,fFirstState^.Size*fInternalItemSize,PasMPCPUCacheLineSize);
  FillChar(fFirstState^.Items^,fFirstState^.Size*fInternalItemSize,#0);
@@ -11922,8 +11896,8 @@ end;
 type PPasMPParallelDirectIntroSortJobData=^TPasMPParallelDirectIntroSortJobData;
      TPasMPParallelDirectIntroSortJobData=record
       Items:pointer;
-      Left:TPasMPInt32;
-      Right:TPasMPInt32;
+      Left:TPasMPNativeInt;
+      Right:TPasMPNativeInt;
       Depth:TPasMPInt32;
       ElementSize:TPasMPInt32;
       Granularity:TPasMPInt32;
@@ -11935,7 +11909,8 @@ type PByteArray=^TByteArray;
      TByteArray=array[0..$3fffffff] of TPasMPUInt8;
 var NewJobs:array[0..1] of PPasMPJob;
     JobData,NewJobData:PPasMPParallelDirectIntroSortJobData;
-    Left,Right,ElementSize,Size,Parent,Child,Middle,Pivot,i,j,iA,iB,iC:TPasMPInt32;
+    Left,Right,Size,Parent,Child,Middle,Pivot,i,j,iA,iB,iC:TPasMPNativeInt;
+    ElementSize:TPasMPInt32;
     CompareFunc:TPasMPParallelSortCompareFunction;
     Items{$ifdef PasMPAlternativeDirectHeapSort},Temp{$endif}:pointer;
 begin
@@ -12103,7 +12078,7 @@ begin
  end;
 end;
 
-function TPasMP.ParallelDirectIntroSort(const Items:pointer;const Left,Right,ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
+function TPasMP.ParallelDirectIntroSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
 var JobData:PPasMPParallelDirectIntroSortJobData;
 begin
  result:=Acquire(ParallelDirectIntroSortJobFunction,nil,ParentJob,Flags);
@@ -12112,7 +12087,7 @@ begin
  JobData^.Left:=Left;
  JobData^.Right:=Right;
  if Left<Right then begin
-  JobData^.Depth:=IntLog2((Right-Left)+1) shl 1;
+  JobData^.Depth:=TPasMPMath.BitScanReverse((Right-Left)+1) shl 1;
   if JobData^.Depth>Depth then begin
    JobData^.Depth:=Depth;
   end;
@@ -12127,8 +12102,8 @@ end;
 type PPasMPParallelIndirectIntroSortJobData=^TPasMPParallelIndirectIntroSortJobData;
      TPasMPParallelIndirectIntroSortJobData=record
       Items:pointer;
-      Left:TPasMPInt32;
-      Right:TPasMPInt32;
+      Left:TPasMPNativeInt;
+      Right:TPasMPNativeInt;
       Depth:TPasMPInt32;
       Granularity:TPasMPInt32;
       CompareFunc:TPasMPParallelSortCompareFunction;
@@ -12139,7 +12114,7 @@ type PPointers=^TPointers;
      TPointers=array[0..($7fffffff div SizeOf(pointer))-1] of pointer;
 var NewJobs:array[0..1] of PPasMPJob;
     JobData,NewJobData:PPasMPParallelIndirectIntroSortJobData;
-    Left,Right,Size,Parent,Child,Middle,i,j:TPasMPInt32;
+    Left,Right,Size,Parent,Child,Middle,i,j:TPasMPNativeInt;
     CompareFunc:TPasMPParallelSortCompareFunction;
     Items,Temp,Pivot:pointer;
 begin
@@ -12304,7 +12279,7 @@ begin
  end;
 end;
 
-function TPasMP.ParallelIndirectIntroSort(const Items:pointer;const Left,Right:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
+function TPasMP.ParallelIndirectIntroSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
 var JobData:PPasMPParallelIndirectIntroSortJobData;
 begin
  result:=Acquire(ParallelIndirectIntroSortJobFunction,nil,ParentJob,Flags);
@@ -12313,7 +12288,7 @@ begin
  JobData^.Left:=Left;
  JobData^.Right:=Right;
  if Left<Right then begin
-  JobData^.Depth:=IntLog2((Right-Left)+1) shl 1;
+  JobData^.Depth:=TPasMPMath.BitScanReverse((Right-Left)+1) shl 1;
   if JobData^.Depth>Depth then begin
    JobData^.Depth:=Depth;
   end;
@@ -12336,8 +12311,8 @@ type PPasMPParallelDirectMergeSortData=^TPasMPParallelDirectMergeSortData;
      PPasMPParallelDirectMergeSortJobData=^TPasMPParallelDirectMergeSortJobData;
      TPasMPParallelDirectMergeSortJobData=record
       Data:PPasMPParallelDirectMergeSortData;
-      Left:TPasMPInt32;
-      Right:TPasMPInt32;
+      Left:TPasMPNativeInt;
+      Right:TPasMPNativeInt;
       Depth:TPasMPInt32;
      end;
 
@@ -12346,7 +12321,8 @@ type PByteArray=^TByteArray;
      TByteArray=array[0..$3fffffff] of TPasMPUInt8;
 var NewJobs:array[0..1] of PPasMPJob;
     JobData,NewJobData:PPasMPParallelDirectMergeSortJobData;
-    Left,Right,ElementSize,Size,Middle,iA,iB,iC,Count:TPasMPInt32;
+    Left,Right,Size,Middle,iA,iB,iC,Count:TPasMPNativeInt;
+    ElementSize:TPasMPInt32;
     CompareFunc:TPasMPParallelSortCompareFunction;
     Items,Temp:pointer;
     Data:PPasMPParallelDirectMergeSortData;
@@ -12497,8 +12473,8 @@ end;
 type PPasMPParallelDirectMergeSortRootJobData=^TPasMPParallelDirectMergeSortRootJobData;
      TPasMPParallelDirectMergeSortRootJobData=record
       Items:pointer;
-      Left:TPasMPInt32;
-      Right:TPasMPInt32;
+      Left:TPasMPNativeInt;
+      Right:TPasMPNativeInt;
       Depth:TPasMPInt32;
       ElementSize:TPasMPInt32;
       Granularity:TPasMPInt32;
@@ -12530,7 +12506,7 @@ begin
  end;
 end;
 
-function TPasMP.ParallelDirectMergeSort(const Items:pointer;const Left,Right,ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
+function TPasMP.ParallelDirectMergeSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
 var JobData:PPasMPParallelDirectMergeSortRootJobData;
 begin
  if ((Left+1)<Right) and (ElementSize>0) then begin
@@ -12543,7 +12519,7 @@ begin
   JobData^.Granularity:=Granularity;
   JobData^.CompareFunc:=CompareFunc;
   if Left<Right then begin
-   JobData^.Depth:=IntLog2((Right-Left)+1);
+   JobData^.Depth:=TPasMPMath.BitScanReverse((Right-Left)+1);
    if JobData^.Depth>Depth then begin
     JobData^.Depth:=Depth;
    end;
@@ -12566,8 +12542,8 @@ type PPasMPParallelIndirectMergeSortData=^TPasMPParallelIndirectMergeSortData;
      PPasMPParallelIndirectMergeSortJobData=^TPasMPParallelIndirectMergeSortJobData;
      TPasMPParallelIndirectMergeSortJobData=record
       Data:PPasMPParallelIndirectMergeSortData;
-      Left:TPasMPInt32;
-      Right:TPasMPInt32;
+      Left:TPasMPNativeInt;
+      Right:TPasMPNativeInt;
       Depth:TPasMPInt32;
      end;
 
@@ -12576,7 +12552,7 @@ type PPointers=^TPointers;
      TPointers=array[0..($7fffffff div SizeOf(pointer))-1] of pointer;
 var ChildJobs:array[0..1] of PPasMPJob;
     JobData,ChildJobData:PPasMPParallelIndirectMergeSortJobData;
-    Left,Right,Size,Middle,i,j,iA,iB,iC,Count:TPasMPInt32;
+    Left,Right,Size,Middle,i,j,iA,iB,iC,Count:TPasMPNativeInt;
     CompareFunc:TPasMPParallelSortCompareFunction;
     Items,Temp:pointer;
     Data:PPasMPParallelIndirectMergeSortData;
@@ -12717,8 +12693,8 @@ end;
 type PPasMPParallelIndirectMergeSortRootJobData=^TPasMPParallelIndirectMergeSortRootJobData;
      TPasMPParallelIndirectMergeSortRootJobData=record
       Items:pointer;
-      Left:TPasMPInt32;
-      Right:TPasMPInt32;
+      Left:TPasMPNativeInt;
+      Right:TPasMPNativeInt;
       Depth:TPasMPInt32;
       Granularity:TPasMPInt32;
       CompareFunc:TPasMPParallelSortCompareFunction;
@@ -12748,7 +12724,7 @@ begin
  end;
 end;
 
-function TPasMP.ParallelIndirectMergeSort(const Items:pointer;const Left,Right:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
+function TPasMP.ParallelIndirectMergeSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
 var JobData:PPasMPParallelIndirectMergeSortRootJobData;
 begin
  if (Left+1)<Right then begin
@@ -12760,7 +12736,7 @@ begin
   JobData^.Granularity:=Granularity;
   JobData^.CompareFunc:=CompareFunc;
   if Left<Right then begin
-   JobData^.Depth:=IntLog2((Right-Left)+1);
+   JobData^.Depth:=TPasMPMath.BitScanReverse((Right-Left)+1);
    if JobData^.Depth>Depth then begin
     JobData^.Depth:=Depth;
    end;
