@@ -31,7 +31,7 @@ implementation
 
 const N=1 shl 28;
 
-procedure ParallelForJobFunction(const Job:PPasMPJob;const ThreadIndex:longint;const Data:pointer;const FromIndex,ToIndex:longint);
+procedure ParallelForJobFunction(const Job:PPasMPJob;const ThreadIndex:longint;const Data:pointer;const FromIndex,ToIndex:TPasMPNativeInt);
 var Index:longint;
 begin
  for Index:=FromIndex to ToIndex do begin

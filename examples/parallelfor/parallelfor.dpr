@@ -26,7 +26,7 @@ var FakeAtomicOperationMutex:TPasMPMutex;
 
 {$ifndef fpc}
 {$if not ((CompilerVersion>=20) and not defined(fpc))}
-procedure ParallelForJobFunction(const Job:PPasMPJob;const ThreadIndex:longint;const Data:pointer;const FromIndex,ToIndex:longint);
+procedure ParallelForJobFunction(const Job:PPasMPJob;const ThreadIndex:longint;const Data:pointer;const FromIndex,ToIndex:TPasMPNativeInt);
 var Index:longint;
 begin
  FakeAtomicOperationMutex.Acquire;
@@ -43,7 +43,7 @@ begin
 end;
 {$ifend}
 {$else}
-procedure ParallelForJobFunction(const Job:PPasMPJob;const ThreadIndex:longint;const Data:pointer;const FromIndex,ToIndex:longint);
+procedure ParallelForJobFunction(const Job:PPasMPJob;const ThreadIndex:longint;const Data:pointer;const FromIndex,ToIndex:TPasMPNativeInt);
 var Index:longint;
 begin
  FakeAtomicOperationMutex.Acquire;
@@ -75,7 +75,7 @@ begin
   GlobalPasMP.Invoke(GlobalPasMP.ParallelFor(@Cells,
                                              1,
                                              N,
-                                             procedure(const Job:PPasMPJob;const ThreadIndex:longint;const Data:pointer;const FromIndex,ToIndex:longint)
+                                             procedure(const Job:PPasMPJob;const ThreadIndex:longint;const Data:pointer;const FromIndex,ToIndex:TPasMPNativeInt)
                                              var Index:longint;
                                              begin
                                               FakeAtomicOperationMutex.Acquire;

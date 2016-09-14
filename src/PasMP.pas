@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-14-19-46-0000                       *
+ *                        Version 2016-09-14-19-56-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1775,12 +1775,12 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
      TPasMPJobMethod=procedure(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32) of object;
 
 {$ifdef HAS_ANONYMOUS_METHODS}
-     TPasMPParallelForReferenceProcedure=reference to procedure(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32;const Data:pointer;const FromIndex,ToIndex:TPasMPInt32);
+     TPasMPParallelForReferenceProcedure=reference to procedure(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32;const Data:pointer;const FromIndex,ToIndex:TPasMPNativeInt);
 {$endif}
 
-     TPasMPParallelForProcedure=procedure(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32;const Data:pointer;const FromIndex,ToIndex:TPasMPInt32);
+     TPasMPParallelForProcedure=procedure(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32;const Data:pointer;const FromIndex,ToIndex:TPasMPNativeInt);
 
-     TPasMPParallelForMethod=procedure(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32;const Data:pointer;const FromIndex,ToIndex:TPasMPInt32) of object;
+     TPasMPParallelForMethod=procedure(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32;const Data:pointer;const FromIndex,ToIndex:TPasMPNativeInt) of object;
 
      TPasMPParallelSortCompareFunction=function(const a,b:pointer):TPasMPInt32;
 
@@ -2090,10 +2090,10 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure Invoke(const JobTask:TPasMPJobTask); overload; {$ifdef CAN_INLINE}inline;{$endif}
        procedure Invoke(const JobTasks:array of TPasMPJobTask); overload;
 {$ifdef HAS_ANONYMOUS_METHODS}
-       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPInt32;const ParallelForReferenceProcedure:TPasMPParallelForReferenceProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob; overload;
+       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForReferenceProcedure:TPasMPParallelForReferenceProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob; overload;
 {$endif}
-       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPInt32;const ParallelForProcedure:TPasMPParallelForProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob; overload;
-       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPInt32;const ParallelForMethod:TPasMPParallelForMethod;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob; overload;
+       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForProcedure:TPasMPParallelForProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob; overload;
+       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForMethod:TPasMPParallelForMethod;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob; overload;
        function ParallelDirectIntroSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
        function ParallelIndirectIntroSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
        function ParallelDirectMergeSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
@@ -11575,8 +11575,8 @@ type PPasMPParallelForReferenceProcedureStartJobData=^TPasMPParallelForReference
      TPasMPParallelForReferenceProcedureStartJobData=record
       ParallelForReferenceProcedure:TPasMPParallelForReferenceProcedure;
       Data:pointer;
-      FirstIndex:TPasMPInt32;
-      LastIndex:TPasMPInt32;
+      FirstIndex:TPasMPNativeInt;
+      LastIndex:TPasMPNativeInt;
       Granularity:TPasMPInt32;
       Depth:TPasMPInt32;
       CanSpread:longbool;
@@ -11585,8 +11585,8 @@ type PPasMPParallelForReferenceProcedureStartJobData=^TPasMPParallelForReference
      PPasMPParallelForReferenceProcedureJobData=^TPasMPParallelForReferenceProcedureJobData;
      TPasMPParallelForReferenceProcedureJobData=record
       StartJobData:PPasMPParallelForReferenceProcedureStartJobData;
-      FirstIndex:TPasMPInt32;
-      LastIndex:TPasMPInt32;
+      FirstIndex:TPasMPNativeInt;
+      LastIndex:TPasMPNativeInt;
       RemainDepth:TPasMPInt32;
      end;
 
@@ -11655,7 +11655,8 @@ procedure TPasMP.ParallelForStartJobReferenceProcedureFunction(const Job:PPasMPJ
 var NewJobs:array[0..31] of PPasMPJob;
     JobData:PPasMPParallelForReferenceProcedureStartJobData;
     NewJobData:PPasMPParallelForReferenceProcedureJobData;
-    Index,EndIndex,Granularity,Count,CountJobs,PartSize,Rest,Size,JobIndex:TPasMPInt32;
+    Index,EndIndex,Granularity,Count,CountJobs,PartSize,Rest,Size:TPasMPNativeInt;
+    JobIndex:TPasMPInt32;
 begin
  JobData:=PPasMPParallelForReferenceProcedureStartJobData(pointer(@Job^.Data));
  try
@@ -11707,7 +11708,7 @@ begin
  end;
 end;
 
-function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPInt32;const ParallelForReferenceProcedure:TPasMPParallelForReferenceProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
+function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForReferenceProcedure:TPasMPParallelForReferenceProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
 var JobData:PPasMPParallelForReferenceProcedureStartJobData;
 begin
  result:=Acquire(ParallelForStartJobReferenceProcedureFunction,nil,ParentJob,Flags);
@@ -11727,8 +11728,8 @@ type PPasMPParallelForStartJobData=^TPasMPParallelForStartJobData;
      TPasMPParallelForStartJobData=record
       Method:TMethod;
       Data:pointer;
-      FirstIndex:TPasMPInt32;
-      LastIndex:TPasMPInt32;
+      FirstIndex:TPasMPNativeInt;
+      LastIndex:TPasMPNativeInt;
       Granularity:TPasMPInt32;
       Depth:TPasMPInt32;
       CanSpread:longbool;
@@ -11737,8 +11738,8 @@ type PPasMPParallelForStartJobData=^TPasMPParallelForStartJobData;
      PPasMPParallelForJobData=^TPasMPParallelForJobData;
      TPasMPParallelForJobData=record
       StartJobData:PPasMPParallelForStartJobData;
-      FirstIndex:TPasMPInt32;
-      LastIndex:TPasMPInt32;
+      FirstIndex:TPasMPNativeInt;
+      LastIndex:TPasMPNativeInt;
       RemainDepth:TPasMPInt32;
      end;
 
@@ -11809,7 +11810,8 @@ procedure TPasMP.ParallelForStartJobFunction(const Job:PPasMPJob;const ThreadInd
 var NewJobs:array[0..31] of PPasMPJob;
     JobData:PPasMPParallelForStartJobData;
     NewJobData:PPasMPParallelForJobData;
-    Index,EndIndex,Granularity,Count,CountJobs,PartSize,Rest,Size,JobIndex:TPasMPInt32;
+    Index,EndIndex,Granularity,Count,CountJobs,PartSize,Rest,Size:TPasMPNativeInt;
+    JobIndex:TPasMPInt32;
 begin
  JobData:=PPasMPParallelForStartJobData(pointer(@Job^.Data));
  Index:=JobData^.FirstIndex;
@@ -11857,7 +11859,7 @@ begin
  end;
 end;
 
-function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPInt32;const ParallelForProcedure:TPasMPParallelForProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
+function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForProcedure:TPasMPParallelForProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
 var JobData:PPasMPParallelForStartJobData;
 begin
  result:=Acquire(ParallelForStartJobFunction,nil,ParentJob,Flags);
@@ -11876,7 +11878,7 @@ begin
  JobData^.CanSpread:=CanSpread;
 end;
 
-function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPInt32;const ParallelForMethod:TPasMPParallelForMethod;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
+function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForMethod:TPasMPParallelForMethod;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
 var JobData:PPasMPParallelForStartJobData;
 begin
  result:=Acquire(ParallelForStartJobFunction,nil,ParentJob,Flags);
