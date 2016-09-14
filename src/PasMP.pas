@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-14-19-56-0000                       *
+ *                        Version 2016-09-14-23-06-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1997,6 +1997,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fAvailableCPUCores:TPasMPAvailableCPUCores;
        fDoCPUCorePinning:longbool;
        fSleepingOnIdle:longbool;
+       fAllWorkerThreadsHaveOwnSystemThreads:longbool;
        fFPUExceptionMask:TFPUExceptionMask;
        fFPUPrecisionMode:TFPUPrecisionMode;
        fFPURoundingMode:TFPURoundingMode;
@@ -2053,7 +2054,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure ParallelIndirectMergeSortJobFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
        procedure ParallelIndirectMergeSortRootJobFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
       public
-       constructor Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const Profiling:boolean=false);
+       constructor Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const AllWorkerThreadsHaveOwnSystemThreads:boolean=false;const Profiling:boolean=false);
        destructor Destroy; override;
        class function CreateGlobalInstance:TPasMP;
        class function GetGlobalInstance:TPasMP; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
@@ -9929,7 +9930,7 @@ begin
  fCurrentJobPriority:=PasMPJobPriorityNormal;
  fProfilerStackDepth:=0;
  fXorShift32:=(TPasMPUInt32(AThreadIndex+1)*83492791) or 1;
- if fThreadIndex>0 then begin
+ if (fThreadIndex>0) or fPasMPInstance.fAllWorkerThreadsHaveOwnSystemThreads then begin
   fSystemThread:=TPasMPWorkerSystemThread.Create(self);
  end else begin
   fSystemThread:=nil;
@@ -10595,7 +10596,7 @@ begin
  result:=@fHistory[TPasMPUInt32(TPasMPInterlocked.Increment(TPasMPInt32(fCount))-1) and PasMPProfilerHistoryRingBufferSizeMask];
 end;
 
-constructor TPasMP.Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const Profiling:boolean=false);
+constructor TPasMP.Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const AllWorkerThreadsHaveOwnSystemThreads:boolean=false;const Profiling:boolean=false);
 var Index:TPasMPInt32;
 begin
 
@@ -10610,6 +10611,8 @@ begin
  fDoCPUCorePinning:=DoCPUCorePinning;
 
  fSleepingOnIdle:=SleepingOnIdle;
+
+ fAllWorkerThreadsHaveOwnSystemThreads:=AllWorkerThreadsHaveOwnSystemThreads;
 
  if Profiling then begin
   fProfiler:=TPasMPProfiler.Create(self);
@@ -11161,13 +11164,16 @@ begin
  end;
  JobWorkerThread:=GetJobWorkerThread;
  InternalData:=PasMPJobFlagActive or Flags;
- if (InternalData and PasMPJobPriorityShiftedMask)=PasMPJobPriorityInherited then begin
-  InternalData:=InternalData or JobWorkerThread.fCurrentJobPriority;
- end;
  if assigned(JobWorkerThread) then begin
+  if (InternalData and PasMPJobPriorityShiftedMask)=PasMPJobPriorityInherited then begin
+   InternalData:=InternalData or JobWorkerThread.fCurrentJobPriority;
+  end;
   InternalData:=InternalData or (PasMPJobFlagHasOwnerWorkerThread or TPasMPUInt32(JobWorkerThread.fThreadIndex));
   result:=JobWorkerThread.fJobAllocator.AllocateJob;
  end else begin
+  if (InternalData and PasMPJobPriorityShiftedMask)=PasMPJobPriorityInherited then begin
+   InternalData:=InternalData or PasMPJobPriorityNormal;
+  end;
   result:=GlobalAllocateJob;
  end;
  result^.Method.Code:=MethodCode;
@@ -11654,9 +11660,10 @@ end;
 procedure TPasMP.ParallelForStartJobReferenceProcedureFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
 var NewJobs:array[0..31] of PPasMPJob;
     JobData:PPasMPParallelForReferenceProcedureStartJobData;
-    NewJobData:PPasMPParallelForReferenceProcedureJobData;
+    NewJobData,NewJobDataEx:PPasMPParallelForReferenceProcedureJobData;
     Index,EndIndex,Granularity,Count,CountJobs,PartSize,Rest,Size:TPasMPNativeInt;
     JobIndex:TPasMPInt32;
+    JobEx:TPasMPJob;
 begin
  JobData:=PPasMPParallelForReferenceProcedureStartJobData(pointer(@Job^.Data));
  try
@@ -11666,7 +11673,13 @@ begin
    Granularity:=JobData^.Granularity;
    Count:=EndIndex-Index;
    if Count<=Granularity then begin
-    ParallelForJobFunctionProcess(Job,ThreadIndex);
+    JobEx:=Job^;
+    NewJobDataEx:=PPasMPParallelForReferenceProcedureJobData(pointer(@JobEx.Data));
+    NewJobDataEx^.StartJobData:=JobData;
+    NewJobDataEx^.FirstIndex:=JobData^.FirstIndex;
+    NewJobDataEx^.LastIndex:=JobData^.LastIndex;
+    NewJobDataEx^.RemainDepth:=JobData^.Depth;
+    ParallelForJobReferenceProcedureProcess(@JobEx,ThreadIndex);
    end else begin
     if JobData^.CanSpread then begin
      // Only try to spread, when all worker threads (except us) are jobless
@@ -11809,9 +11822,10 @@ end;
 procedure TPasMP.ParallelForStartJobFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
 var NewJobs:array[0..31] of PPasMPJob;
     JobData:PPasMPParallelForStartJobData;
-    NewJobData:PPasMPParallelForJobData;
+    NewJobData,NewJobDataEx:PPasMPParallelForJobData;
     Index,EndIndex,Granularity,Count,CountJobs,PartSize,Rest,Size:TPasMPNativeInt;
     JobIndex:TPasMPInt32;
+    JobEx:TPasMPJob;
 begin
  JobData:=PPasMPParallelForStartJobData(pointer(@Job^.Data));
  Index:=JobData^.FirstIndex;
@@ -11820,7 +11834,13 @@ begin
   Granularity:=JobData^.Granularity;
   Count:=EndIndex-Index;
   if Count<=Granularity then begin
-   ParallelForJobFunctionProcess(Job,ThreadIndex);
+   JobEx:=Job^;
+   NewJobDataEx:=PPasMPParallelForJobData(pointer(@JobEx.Data));
+   NewJobDataEx^.StartJobData:=JobData;
+   NewJobDataEx^.FirstIndex:=JobData^.FirstIndex;
+   NewJobDataEx^.LastIndex:=JobData^.LastIndex;
+   NewJobDataEx^.RemainDepth:=JobData^.Depth;
+   ParallelForJobFunctionProcess(@JobEx,ThreadIndex);
   end else begin
    if JobData^.CanSpread then begin
     // Only try to spread, when all worker threads (except us) are jobless

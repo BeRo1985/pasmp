@@ -42,7 +42,7 @@ end;
 
 procedure TFormMain.FormCreate(Sender: TObject);
 begin
- PasMPInstance:=TPasMP.Create(-1,0,false,true,true);
+ PasMPInstance:=TPasMP.Create(-1,0,false,true,false,true);
  ProfilerHistoryView:=TPasMPProfilerHistoryView.Create(self);
  ProfilerHistoryView.Parent:=self;
  ProfilerHistoryView.Align:=alClient;
