@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-14-23-06-0000                       *
+ *                        Version 2016-09-25-23-23-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -7425,85 +7425,81 @@ begin
  fResizeLock.AcquireWrite;
  try
 
-  if CurrentState^.Count>=CurrentState^.Size then begin
+  TPasMPInterlocked.Write(fVersion,CurrentState^.Version+1);
 
-   TPasMPInterlocked.Write(fVersion,CurrentState^.Version+1);
+  fLock.AcquireWrite;
+  try
 
-   fLock.AcquireWrite;
-   try
+   NewState:=CreateState;
+   NewState^.Version:=fVersion;
+   NewState^.Size:=CurrentState^.Size shl 1;
+   NewState^.Mask:=NewState^.Size-1;
+   NewState^.LogSize:=CurrentState^.LogSize+1;
+   NewState^.Count:=CurrentState^.Count;
 
-    NewState:=CreateState;
-    NewState^.Version:=fVersion;
-    NewState^.Size:=CurrentState^.Size shl 1;
-    NewState^.Mask:=NewState^.Size-1;
-    NewState^.LogSize:=CurrentState^.LogSize+1;
-    NewState^.Count:=CurrentState^.Count;
+   TPasMPMemory.AllocateAlignedMemory(NewState^.Items,NewState^.Size*fInternalItemSize,PasMPCPUCacheLineSize);
+   FillChar(NewState^.Items^,NewState^.Size*fInternalItemSize,#0);
 
-    TPasMPMemory.AllocateAlignedMemory(NewState^.Items,NewState^.Size*fInternalItemSize,PasMPCPUCacheLineSize);
-    FillChar(NewState^.Items^,NewState^.Size*fInternalItemSize,#0);
+   OtherIndex:=0;
+   while OtherIndex<CurrentState^.Size do begin
 
-    OtherIndex:=0;
-    while OtherIndex<CurrentState^.Size do begin
+    OtherItem:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(OtherIndex)*TPasMPPtrUInt(fInternalItemSize))));
 
-     OtherItem:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(OtherIndex)*TPasMPPtrUInt(fInternalItemSize))));
+    if OtherItem^.State=PasMPThreadSafeHashTableItemStateUsed then begin
 
-     if OtherItem^.State=PasMPThreadSafeHashTableItemStateUsed then begin
+     TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(OtherItem^.Lock);
+     try
 
-      TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(OtherItem^.Lock);
-      try
+      if OtherItem^.State=PasMPThreadSafeHashTableItemStateUsed then begin
 
-       if OtherItem^.State=PasMPThreadSafeHashTableItemStateUsed then begin
+       StartIndex:=(OtherItem^.Hash shr (32-NewState^.LogSize)) and NewState^.Mask;
+       Step:=((OtherItem^.Hash shl 1) or 1) and NewState^.Mask;
 
-        StartIndex:=(OtherItem^.Hash shr (32-NewState^.LogSize)) and NewState^.Mask;
-        Step:=((OtherItem^.Hash shl 1) or 1) and NewState^.Mask;
+       Index:=StartIndex;
 
-        Index:=StartIndex;
+       repeat
 
-        repeat
+        Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(NewState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
 
-         Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(NewState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
+        if Item^.State=PasMPThreadSafeHashTableItemStateEmpty then begin
+         Item^.Hash:=OtherItem^.Hash;
+         InitializeItem(@Item^.Data);
+         CopyItem(@OtherItem^.Data,@Item^.Data);
+         Item^.State:=PasMPThreadSafeHashTableItemStateUsed;
+         break;
+        end;
 
-         if Item^.State=PasMPThreadSafeHashTableItemStateEmpty then begin
-          Item^.Hash:=OtherItem^.Hash;
-          InitializeItem(@Item^.Data);
-          CopyItem(@OtherItem^.Data,@Item^.Data);
-          Item^.State:=PasMPThreadSafeHashTableItemStateUsed;
-          break;
-         end;
+        Index:=(Index+Step) and NewState^.Mask;
 
-         Index:=(Index+Step) and NewState^.Mask;
+       until Index=StartIndex;
 
-        until Index=StartIndex;
-
-       end;
-
-      finally
-       TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(OtherItem^.Lock);
       end;
 
+     finally
+      TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(OtherItem^.Lock);
      end;
 
-     inc(OtherIndex);
-
     end;
 
-    OldLastState:=fLastState;
-    if assigned(OldLastState) then begin
-     OldLastState^.Next:=NewState;
-     NewState^.Previous:=OldLastState;
-    end else begin
-     NewState^.Previous:=nil;
-     OldLastState:=NewState;
-    end;
-    NewState^.Next:=nil;
-    TPasMPInterlocked.Write(pointer(fLastState),pointer(NewState));
+    inc(OtherIndex);
 
-    TPasMPInterlocked.Decrement(CurrentState^.ReferenceCounter);
-
-   finally
-    fLock.ReleaseWrite;
    end;
 
+   OldLastState:=fLastState;
+   if assigned(OldLastState) then begin
+    OldLastState^.Next:=NewState;
+    NewState^.Previous:=OldLastState;
+   end else begin
+    NewState^.Previous:=nil;
+    OldLastState:=NewState;
+   end;
+   NewState^.Next:=nil;
+   TPasMPInterlocked.Write(pointer(fLastState),pointer(NewState));
+
+   TPasMPInterlocked.Decrement(CurrentState^.ReferenceCounter);
+
+  finally
+   fLock.ReleaseWrite;
   end;
 
  finally
@@ -7522,10 +7518,14 @@ begin
   CurrentState:=AcquireState;
   try
    Version:=CurrentState^.Version;
-   if CurrentState^.Count<=$7fffff then begin
-    UnderGrowLoadFactor:=CurrentState^.Count<((CurrentState^.Size*fGrowLoadFactor) shr 7);
+   if CurrentState^.Count<CurrentState^.Size then begin
+    if CurrentState^.Count<=$7fffff then begin
+     UnderGrowLoadFactor:=CurrentState^.Count<((CurrentState^.Size*fGrowLoadFactor) shr 7);
+    end else begin
+     UnderGrowLoadFactor:=CurrentState^.Count<((TPasMPInt64(CurrentState^.Size)*fGrowLoadFactor) shr 7);
+    end;
    end else begin
-    UnderGrowLoadFactor:=CurrentState^.Count<((TPasMPInt64(CurrentState^.Size)*fGrowLoadFactor) shr 7);
+    UnderGrowLoadFactor:=false;
    end;
    if UnderGrowLoadFactor and SetKeyValueOnState(CurrentState,Key,Value) then begin
     result:=true;
