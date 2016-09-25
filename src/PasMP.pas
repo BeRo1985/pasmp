@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-25-23-31-0000                       *
+ *                        Version 2016-09-25-23-34-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -7440,7 +7440,7 @@ begin
  fResizeLock.AcquireWrite;
  try
 
-  if not UnderGrowLoadFactor(CurrentState) then begin
+  {if not UnderGrowLoadFactor(CurrentState) then} begin
 
    TPasMPInterlocked.Write(fVersion,CurrentState^.Version+1);
 
