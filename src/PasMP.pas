@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-25-23-23-0000                       *
+ *                        Version 2016-09-25-23-31-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1300,6 +1300,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure Clear;
        function GetKeyValue(const Key,Value:pointer):boolean;
        function SetKeyValueOnState(const CurrentState:PPasMPThreadSafeHashTableState;const Key,Value:pointer):boolean;
+       function UnderGrowLoadFactor(const CurrentState:PPasMPThreadSafeHashTableState):boolean; {$ifdef CAN_INLINE}inline;{$endif}
        procedure Grow;
        function SetKeyValue(const Key,Value:pointer):boolean;
        function DeleteKey(const Key:pointer):boolean;
@@ -7415,91 +7416,109 @@ begin
 
 end;
 
+function TPasMPThreadSafeHashTable.UnderGrowLoadFactor(const CurrentState:PPasMPThreadSafeHashTableState):boolean;
+begin
+ if CurrentState^.Count<CurrentState^.Size then begin
+  if CurrentState^.Count<=$7fffff then begin
+   result:=CurrentState^.Count<((CurrentState^.Size*fGrowLoadFactor) shr 7);
+  end else begin
+   result:=CurrentState^.Count<((TPasMPInt64(CurrentState^.Size)*fGrowLoadFactor) shr 7);
+  end;
+ end else begin
+  result:=false;
+ end;
+end;
+
 procedure TPasMPThreadSafeHashTable.Grow;
 var CurrentState,NewState,OldLastState:PPasMPThreadSafeHashTableState;
     StartIndex,Index,Step,OtherIndex:TPasMPInt32;
     Item,OtherItem:PPasMPThreadSafeHashTableItem;
+    OK:boolean;
 begin
  CurrentState:=fLastState;
 
  fResizeLock.AcquireWrite;
  try
 
-  TPasMPInterlocked.Write(fVersion,CurrentState^.Version+1);
+  if not UnderGrowLoadFactor(CurrentState) then begin
 
-  fLock.AcquireWrite;
-  try
+   TPasMPInterlocked.Write(fVersion,CurrentState^.Version+1);
 
-   NewState:=CreateState;
-   NewState^.Version:=fVersion;
-   NewState^.Size:=CurrentState^.Size shl 1;
-   NewState^.Mask:=NewState^.Size-1;
-   NewState^.LogSize:=CurrentState^.LogSize+1;
-   NewState^.Count:=CurrentState^.Count;
+   fLock.AcquireWrite;
+   try
 
-   TPasMPMemory.AllocateAlignedMemory(NewState^.Items,NewState^.Size*fInternalItemSize,PasMPCPUCacheLineSize);
-   FillChar(NewState^.Items^,NewState^.Size*fInternalItemSize,#0);
+    NewState:=CreateState;
+    NewState^.Version:=fVersion;
+    NewState^.Size:=CurrentState^.Size shl 1;
+    NewState^.Mask:=NewState^.Size-1;
+    NewState^.LogSize:=CurrentState^.LogSize+1;
+    NewState^.Count:=CurrentState^.Count;
 
-   OtherIndex:=0;
-   while OtherIndex<CurrentState^.Size do begin
+    TPasMPMemory.AllocateAlignedMemory(NewState^.Items,NewState^.Size*fInternalItemSize,PasMPCPUCacheLineSize);
+    FillChar(NewState^.Items^,NewState^.Size*fInternalItemSize,#0);
 
-    OtherItem:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(OtherIndex)*TPasMPPtrUInt(fInternalItemSize))));
+    OtherIndex:=0;
+    while OtherIndex<CurrentState^.Size do begin
 
-    if OtherItem^.State=PasMPThreadSafeHashTableItemStateUsed then begin
+     OtherItem:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(CurrentState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(OtherIndex)*TPasMPPtrUInt(fInternalItemSize))));
 
-     TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(OtherItem^.Lock);
-     try
+     if OtherItem^.State=PasMPThreadSafeHashTableItemStateUsed then begin
 
-      if OtherItem^.State=PasMPThreadSafeHashTableItemStateUsed then begin
+      TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(OtherItem^.Lock);
+      try
 
-       StartIndex:=(OtherItem^.Hash shr (32-NewState^.LogSize)) and NewState^.Mask;
-       Step:=((OtherItem^.Hash shl 1) or 1) and NewState^.Mask;
+       if OtherItem^.State=PasMPThreadSafeHashTableItemStateUsed then begin
 
-       Index:=StartIndex;
+        StartIndex:=(OtherItem^.Hash shr (32-NewState^.LogSize)) and NewState^.Mask;
+        Step:=((OtherItem^.Hash shl 1) or 1) and NewState^.Mask;
 
-       repeat
+        Index:=StartIndex;
 
-        Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(NewState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
+        repeat
 
-        if Item^.State=PasMPThreadSafeHashTableItemStateEmpty then begin
-         Item^.Hash:=OtherItem^.Hash;
-         InitializeItem(@Item^.Data);
-         CopyItem(@OtherItem^.Data,@Item^.Data);
-         Item^.State:=PasMPThreadSafeHashTableItemStateUsed;
-         break;
-        end;
+         Item:=pointer(TPasMPPtrUInt(TPasMPPtrUInt(NewState^.Items)+TPasMPPtrUInt(TPasMPPtrUInt(Index)*TPasMPPtrUInt(fInternalItemSize))));
 
-        Index:=(Index+Step) and NewState^.Mask;
+         if Item^.State=PasMPThreadSafeHashTableItemStateEmpty then begin
+          Item^.Hash:=OtherItem^.Hash;
+          InitializeItem(@Item^.Data);
+          CopyItem(@OtherItem^.Data,@Item^.Data);
+          Item^.State:=PasMPThreadSafeHashTableItemStateUsed;
+          break;
+         end;
 
-       until Index=StartIndex;
+         Index:=(Index+Step) and NewState^.Mask;
 
+        until Index=StartIndex;
+
+       end;
+
+      finally
+       TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(OtherItem^.Lock);
       end;
 
-     finally
-      TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(OtherItem^.Lock);
      end;
+
+     inc(OtherIndex);
 
     end;
 
-    inc(OtherIndex);
+    OldLastState:=fLastState;
+    if assigned(OldLastState) then begin
+     OldLastState^.Next:=NewState;
+     NewState^.Previous:=OldLastState;
+    end else begin
+     NewState^.Previous:=nil;
+     OldLastState:=NewState;
+    end;
+    NewState^.Next:=nil;
+    TPasMPInterlocked.Write(pointer(fLastState),pointer(NewState));
 
+    TPasMPInterlocked.Decrement(CurrentState^.ReferenceCounter);
+
+   finally
+    fLock.ReleaseWrite;
    end;
 
-   OldLastState:=fLastState;
-   if assigned(OldLastState) then begin
-    OldLastState^.Next:=NewState;
-    NewState^.Previous:=OldLastState;
-   end else begin
-    NewState^.Previous:=nil;
-    OldLastState:=NewState;
-   end;
-   NewState^.Next:=nil;
-   TPasMPInterlocked.Write(pointer(fLastState),pointer(NewState));
-
-   TPasMPInterlocked.Decrement(CurrentState^.ReferenceCounter);
-
-  finally
-   fLock.ReleaseWrite;
   end;
 
  finally
@@ -7511,23 +7530,13 @@ end;
 function TPasMPThreadSafeHashTable.SetKeyValue(const Key,Value:pointer):boolean;
 var CurrentState:PPasMPThreadSafeHashTableState;
     Version:TPasMPInt32;
-    UnderGrowLoadFactor:boolean;
 begin
  repeat
   result:=false;
   CurrentState:=AcquireState;
   try
    Version:=CurrentState^.Version;
-   if CurrentState^.Count<CurrentState^.Size then begin
-    if CurrentState^.Count<=$7fffff then begin
-     UnderGrowLoadFactor:=CurrentState^.Count<((CurrentState^.Size*fGrowLoadFactor) shr 7);
-    end else begin
-     UnderGrowLoadFactor:=CurrentState^.Count<((TPasMPInt64(CurrentState^.Size)*fGrowLoadFactor) shr 7);
-    end;
-   end else begin
-    UnderGrowLoadFactor:=false;
-   end;
-   if UnderGrowLoadFactor and SetKeyValueOnState(CurrentState,Key,Value) then begin
+   if UnderGrowLoadFactor(CurrentState) and SetKeyValueOnState(CurrentState,Key,Value) then begin
     result:=true;
    end else begin
     Grow;
