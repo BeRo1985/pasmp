@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-25-23-34-0000                       *
+ *                        Version 2016-09-29-15-27-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -63,11 +63,13 @@ unit PasMP;
   {$define CPUx86}
   {$define CPU32}
   {$asmmode intel}
+  {$define PasMPHaveFPUControls}
  {$endif}
  {$ifdef CPUx86_64}
   {$define CPUx64}
   {$define CPU64}
   {$asmmode intel}
+  {$define PasMPHaveFPUControls}
  {$endif}
  {$ifdef FPC_LITTLE_ENDIAN}
   {$define LITTLE_ENDIAN}
@@ -116,10 +118,12 @@ unit PasMP;
  {$ifdef CPUx64}
   {$define CPUx86_64}
   {$define CPU64}
+  {$define PasMPHaveFPUControls}
  {$else}
   {$ifdef CPU386}
    {$define CPUx86}
    {$define CPU32}
+   {$define PasMPHaveFPUControls}
   {$endif}
  {$endif}
  {$define HAS_TYPE_EXTENDED}
@@ -840,9 +844,16 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
      end;
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+{$if defined(fpc)}
+     TPasMPCriticalSectionInstance=TRTLCriticalSection;
+{$elseif defined(POSIX)}
+     TPasMPCriticalSectionInstance=TObject;
+{$else}
+     TPasMPCriticalSectionInstance=TRTLCriticalSection;
+{$ifend}
      TPasMPCriticalSection=class(TCriticalSection)
       protected
-       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TRTLCriticalSection))-1] of TPasMPUInt8;
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPCriticalSectionInstance))-1] of TPasMPUInt8;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -852,7 +863,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       private
        fMutex:THandle;
       protected
-       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TRTLCriticalSection))-1] of TPasMPUInt8;
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPCriticalSectionInstance))-1] of TPasMPUInt8;
 {$else}
 {$ifdef Unix}
       private
@@ -1999,9 +2010,11 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fDoCPUCorePinning:longbool;
        fSleepingOnIdle:longbool;
        fAllWorkerThreadsHaveOwnSystemThreads:longbool;
+{$ifdef PasMPHaveFPUControls}
        fFPUExceptionMask:TFPUExceptionMask;
        fFPUPrecisionMode:TFPUPrecisionMode;
        fFPURoundingMode:TFPURoundingMode;
+{$endif}
        fJobWorkerThreads:array of TPasMPJobWorkerThread;
        fCountJobWorkerThreads:TPasMPInt32;
        fSleepingJobWorkerThreads:TPasMPInt32;
@@ -2954,7 +2967,7 @@ begin
 end;
 {$endif}
 
-{$ifdef CPUARM}
+{$if defined(FPC) and defined(CPUARM)}
 function InterlockedCompareExchange64(var Destination:TPasMPInt64;NewValue:TPasMPInt64;Comperand:TPasMPInt64):TPasMPInt64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
  // LDREXD and STREXD were introduced in ARM 11, so the LDREXD and STREXD instructions in ARM all v7 variants or above. In v6, only some variants support it.
@@ -3015,7 +3028,7 @@ asm
  ldmfd sp!,{r2,r4,r5,r6,r7}
 {$endif}
 end;
-{$endif}
+{$ifend}
 
 {$ifdef CPU386}
 function InterlockedCompareExchange64(var Destination:TPasMPInt64;NewValue:TPasMPInt64;Comperand:TPasMPInt64):TPasMPInt64; assembler;
@@ -3235,40 +3248,72 @@ asm
 {$endif}
 end;
 {$else}
+{$ifndef HAS_ATOMICS}
 function InterlockedDecrement(var Destination:TPasMPInt32):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicDecrement(Destination);
+{$else}
  result:=Windows.InterlockedDecrement(Destination);
+{$endif}
 end;
 
 function InterlockedIncrement(var Destination:TPasMPInt32):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicIncrement(Destination);
+{$else}
  result:=Windows.InterlockedIncrement(Destination);
+{$endif}
 end;
 
 function InterlockedExchange(var Destination:TPasMPInt32;Source:TPasMPInt32):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicExchange(Destination,Source);
+{$else}
  result:=Windows.InterlockedExchange(Destination,Source);
+{$endif}
 end;
 
 function InterlockedExchangePointer(var Destination:pointer;Source:pointer):pointer; {$ifdef CAN_INLINE}inline;{$endif}
 begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicExchange(Destination,Source);
+{$else}
  result:=Windows.InterlockedExchangePointer(Destination,Source);
+{$endif}
 end;
 
 function InterlockedExchangeAdd(var Destination:TPasMPInt32;Source:TPasMPInt32):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
+{$ifdef HAS_ATOMICS}
+ repeat
+  result:=Destination;
+ until AtomicCmpExchange(Destination,Destination+Source,Destination)=result;
+{$else}
  result:=Windows.InterlockedExchangeAdd(Destination,Source);
+{$endif}
 end;
 
 function InterlockedCompareExchange(var Destination:TPasMPInt32;NewValue,Comperand:TPasMPInt32):TPasMPInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicCmpExchange(Destination,NewValue,Comperand);
+{$else}
  result:=Windows.InterlockedCompareExchange(Destination,NewValue,Comperand);
+{$endif}
 end;
 
 function InterlockedCompareExchange64(var Destination:TPasMPInt64;NewValue,Comperand:TPasMPInt64):TPasMPInt64; {$ifdef CAN_INLINE}inline;{$endif}
 begin
+{$ifdef HAS_ATOMICS}
+ result:=AtomicCmpExchange(Destination,NewValue,Comperand);
+{$else}
  result:=Windows.InterlockedCompareExchange64(Destination,NewValue,Comperand);
+{$endif}
 end;
+{$endif}
 {$endif}
 {$endif}
 {$endif}
@@ -3684,6 +3729,10 @@ end;
 {$ifdef fpc}
 begin
  ThreadSwitch;
+end;
+{$else}
+begin
+ TThread.Yield;
 end;
 {$endif}
 {$endif}
@@ -5070,7 +5119,7 @@ begin
   ib:=tv.tv_usec;
   result:=ia+ib;
 {$else}
- result:=SDL_GetTicks;
+ result:=trunc(Now*86400000.0);
 {$endif}
 {$endif}
 {$endif}
@@ -5151,12 +5200,12 @@ begin
 {$else}
   NowTime:=GetTime;
   EndTime:=NowTime+pDelay;
-  while (NowTime+4)<EndTime then begin
-   SDL_Delay(1);
+  while (NowTime+4)<EndTime do begin
+   TPasMP.Yield;
    NowTime:=GetTime;
   end;
   while (NowTime+2)<EndTime do begin
-   SDL_Delay(0);
+   TPasMP.Yield;
    NowTime:=GetTime;
   end;
   while NowTime<EndTime do begin
@@ -5251,7 +5300,7 @@ begin
 {$ifdef Unix}
  pthread_mutex_init(@fMutex,nil);
 {$else}
- fCriticalSection:=TCriticalSection.Create;
+ fCriticalSection:=TPasMPCriticalSection.Create;
 {$endif}
 {$endif}
 end;
@@ -6867,7 +6916,7 @@ end;
 begin
  inherited Create;
  fItemSize:=ItemSize;
- fInternalNodeSize:=TPasMP.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPThreadSafeQueueNode)+fItemSize,PasMPCPUCacheLineSize));
+ fInternalNodeSize:=TPasMPMath.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPThreadSafeQueueNode)+fItemSize,PasMPCPUCacheLineSize));
  fHeadCriticalSection:=TPasMPCriticalSection.Create;
  fTailCriticalSection:=TPasMPCriticalSection.Create;
  fHead:=nil;
@@ -9976,9 +10025,11 @@ var ThreadIDHash:TPasMPUInt32;
 {$endif}
 begin
 
+{$ifdef PasMPHaveFPUControls}
  SetExceptionMask(fPasMPInstance.fFPUExceptionMask);
  SetPrecisionMode(fPasMPInstance.fFPUPrecisionMode);
  SetRoundMode(fPasMPInstance.fFPURoundingMode);
+{$endif}
 
  if (length(fPasMPInstance.fAvailableCPUCores)>1) and
     (fThreadIndex<length(fPasMPInstance.fAvailableCPUCores)) then begin
@@ -10009,7 +10060,11 @@ begin
 {$endif}
 {$endif}
 {$else}
+{$if (defined(NEXTGEN) or not defined(Windows)) and not defined(FPC)}
+ fThreadID:=TThread.CurrentThread.ThreadID;
+{$else}
  fThreadID:=GetCurrentThreadID;
+{$ifend}
  ThreadIDHash:=TPasMP.GetThreadIDHash(fThreadID);
 
  fPasMPInstance.fJobWorkerThreadHashTableCriticalSection.Acquire;
@@ -10611,9 +10666,11 @@ begin
 
  inherited Create;
 
+{$ifdef PasMPHaveFPUControls}
  fFPUExceptionMask:=GetExceptionMask;
  fFPUPrecisionMode:=GetPrecisionMode;
  fFPURoundingMode:=GetRoundMode;
+{$endif}
 
  fAvailableCPUCores:=nil;
 
@@ -10674,7 +10731,7 @@ begin
 {$ifndef UseThreadLocalStorage}
  fJobWorkerThreadHashTableCriticalSection:=TPasMPCriticalSection.Create;
 
- FillChar(fJobWorkerThreadHashTable,SizeOf(TPasMPJobWorkerThreadHashTable),AnsiChar(#0));
+ FillChar(fJobWorkerThreadHashTable,SizeOf(TPasMPJobWorkerThreadHashTable),#0);
 {$endif}
 
  for Index:=0 to fCountJobWorkerThreads-1 do begin
@@ -11059,7 +11116,11 @@ end;
 var ThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif};
     ThreadIDHash:TPasMPUInt32;
 begin
+{$if (defined(NEXTGEN) or not defined(Windows)) and not defined(FPC)}
+ ThreadID:=TThread.CurrentThread.ThreadID;
+{$else}
  ThreadID:=GetCurrentThreadID;
+{$ifend}
  ThreadIDHash:=TPasMP.GetThreadIDHash(ThreadID);
  result:=fJobWorkerThreadHashTable[ThreadIDHash and PasMPJobWorkerThreadHashTableMask];
  while assigned(result) and (result.fThreadID<>ThreadID) do begin
