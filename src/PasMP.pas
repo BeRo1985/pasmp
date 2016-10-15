@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-09-29-15-27-0000                       *
+ *                        Version 2016-10-15-02-21-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1309,12 +1309,9 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function AcquireState:PPasMPThreadSafeHashTableState; {$ifdef CAN_INLINE}inline;{$endif}
        procedure ReleaseState(const State:PPasMPThreadSafeHashTableState); {$ifdef CAN_INLINE}inline;{$endif}
        procedure Clear;
-       function GetKeyValue(const Key,Value:pointer):boolean;
        function SetKeyValueOnState(const CurrentState:PPasMPThreadSafeHashTableState;const Key,Value:pointer):boolean;
        function UnderGrowLoadFactor(const CurrentState:PPasMPThreadSafeHashTableState):boolean; {$ifdef CAN_INLINE}inline;{$endif}
        procedure Grow;
-       function SetKeyValue(const Key,Value:pointer):boolean;
-       function DeleteKey(const Key:pointer):boolean;
       protected
        procedure InitializeItem(const Data:pointer); virtual;
        procedure FinalizeItem(const Data:pointer); virtual;
@@ -1325,6 +1322,9 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure SetValue(const Data,Value:pointer); virtual;
        function HashKey(const Key:pointer):TPasMPThreadSafeHashTableHash; virtual;
        function CompareKey(const Data,Key:pointer):boolean; virtual;
+       function GetKeyValue(const Key,Value:pointer):boolean;
+       function SetKeyValue(const Key,Value:pointer):boolean;
+       function DeleteKey(const Key:pointer):boolean;
       public
        constructor Create(const ItemSize:TPasMPInt32);
        destructor Destroy; override;
