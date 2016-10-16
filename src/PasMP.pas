@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-10-15-02-21-0000                       *
+ *                        Version 2016-10-16-02-06-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -7482,7 +7482,6 @@ procedure TPasMPThreadSafeHashTable.Grow;
 var CurrentState,NewState,OldLastState:PPasMPThreadSafeHashTableState;
     StartIndex,Index,Step,OtherIndex:TPasMPInt32;
     Item,OtherItem:PPasMPThreadSafeHashTableItem;
-    OK:boolean;
 begin
  CurrentState:=fLastState;
 
