@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-10-22-05-19-0000                       *
+ *                        Version 2016-10-22-16-28-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -390,10 +390,10 @@ uses {$ifdef Windows}
      SysUtils,Classes,
      {$ifdef HAS_GENERICS}
       {$ifdef fpc}
-       {$ifdef FreePascalGenericsCollectionsLibrary}
+       {$if defined(FreePascalGenericsCollectionsLibrary) or (defined(fpc) and (((fpc_version=3) and (fpc_release>=1)) or (fpc_version>3)))}
      Generics.Defaults,
         {$define HasGenericsCollections}
-       {$endif}
+       {$ifend}
       {$else}
      System.Generics.Defaults,
        {$define HasGenericsCollections}
