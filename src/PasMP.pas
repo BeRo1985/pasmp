@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-10-22-16-28-0000                       *
+ *                        Version 2016-10-22-16-40-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1715,6 +1715,9 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fValueSize:TPasMPInt32;
        fItemSize:TPasMPInt32;
        fComparer:IEqualityComparer<KeyType>;
+{$ifdef fpc}
+       procedure Dummy(out Value:ValueType); inline;
+{$endif}
       protected
        procedure InitializeItem(const Data:pointer); override;
        procedure FinalizeItem(const Data:pointer); override;
@@ -9563,8 +9566,18 @@ begin
  result:=fComparer.Equals(KeyType(Data^),KeyType(Key^));
 end;
 
+{$ifdef fpc}
+procedure TPasMPHashTable<KeyType,ValueType>.Dummy(out Value:ValueType);
+begin
+ // "Warning: Variable "Value" does not seem to be initialized" anti-warning workaround for FPC
+end;
+{$endif}
+
 function TPasMPHashTable<KeyType,ValueType>.GetKeyValue(const Key:KeyType;out Value:ValueType):boolean;
 begin
+{$ifdef fpc}
+ Dummy(Value);
+{$endif}
  result:=inherited GetKeyValue(@Key,@Value);
 end;
 
