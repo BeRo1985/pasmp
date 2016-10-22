@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-10-16-02-06-0000                       *
+ *                        Version 2016-10-22-05-19-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -466,6 +466,18 @@ type PPasMPInt8=^TPasMPInt8;
      PPasMPNativeInt=^TPasMPNativeInt;
      TPasMPNativeInt=TPasMPPtrInt;
 
+     PPasMPBoolean=^TPasMPBoolean;
+     TPasMPBoolean=boolean;
+
+     PPasMPBool8=^TPasMPBool8;
+     TPasMPBool8=bytebool;
+
+     PPasMPBool16=^TPasMPBool16;
+     TPasMPBool16=wordbool;
+
+     PPasMPBool32=^TPasMPBool32;
+     TPasMPBool32=longbool;
+
 const PasMPAllocatorPoolBucketBits=12;
       PasMPAllocatorPoolBucketSize=1 shl PasMPAllocatorPoolBucketBits;
       PasMPAllocatorPoolBucketMask=PasMPAllocatorPoolBucketSize-1;
@@ -729,6 +741,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$endif}
        class function Exchange(var Destination:pointer;const Source:pointer):pointer; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Exchange(var Destination:TObject;const Source:TObject):TObject; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Exchange(var Destination:TPasMPBool32;const Source:TPasMPBool32):TPasMPBool32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function CompareExchange(var Destination:TPasMPInt32;const NewValue,Comperand:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function CompareExchange(var Destination:TPasMPUInt32;const NewValue,Comperand:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
@@ -741,6 +754,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$ifend}
        class function CompareExchange(var Destination:pointer;const NewValue,Comperand:pointer):pointer; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function CompareExchange(var Destination:TObject;const NewValue,Comperand:TObject):TObject; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function CompareExchange(var Destination:TPasMPBool32;const NewValue,Comperand:TPasMPBool32):TPasMPBool32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Read(var Source:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Read(var Source:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
@@ -750,9 +764,10 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
        class function Read(var Source:TPasMPInt128Record):TPasMPInt128Record; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(fpc)}inline;{$ifend}
 {$ifend}
+{$ifend}
        class function Read(var Source:pointer):pointer; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Read(var Source:TObject):TObject; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
-{$ifend}
+       class function Read(var Source:TPasMPBool32):TPasMPBool32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Write(var Destination:TPasMPInt32;const Source:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Write(var Destination:TPasMPUInt32;const Source:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$if defined(CPU64) or defined(CPU386) or defined(CPUARM)}
@@ -765,6 +780,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$ifend}
        class function Write(var Destination:pointer;const Source:pointer):pointer; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Write(var Destination:TObject;const Source:TObject):TObject; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function Write(var Destination:TPasMPBool32;const Source:TPasMPBool32):TPasMPBool32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -4638,6 +4654,15 @@ begin
 {$endif}
 end;
 
+class function TPasMPInterlocked.Exchange(var Destination:TPasMPBool32;const Source:TPasMPBool32):TPasMPBool32;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=TPasMPBool32(TPasMPInt32(AtomicExchange(TPasMPInt32(Destination),TPasMPInt32(Source))));
+{$else}
+ result:=TPasMPBool32(TPasMPInt32(InterlockedExchange(TPasMPInt32(Destination),TPasMPInt32(Source))));
+{$endif}
+end;
+
 class function TPasMPInterlocked.CompareExchange(var Destination:TPasMPInt32;const NewValue,Comperand:TPasMPInt32):TPasMPInt32;
 begin
 {$ifdef HAS_ATOMICS}
@@ -4715,6 +4740,15 @@ begin
 {$else}
  result:=pointer(TPasMPPtrInt(InterlockedCompareExchange(TPasMPInt32(TPasMPPtrInt(Destination)),TPasMPInt32(TPasMPPtrInt(NewValue)),TPasMPInt32(TPasMPPtrInt(Comperand)))));
 {$endif}
+{$endif}
+end;
+
+class function TPasMPInterlocked.CompareExchange(var Destination:TPasMPBool32;const NewValue,Comperand:TPasMPBool32):TPasMPBool32;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=TPasMPBool32(TPasMPInt32(TAtomicCmpExchange(TPasMPInt32(Destination),TPasMPInt32(NewValue),TPasMPInt32(Comperand))));
+{$else}
+ result:=TPasMPBool32(TPasMPInt32(InterlockedCompareExchange(TPasMPInt32(Destination),TPasMPInt32(NewValue),TPasMPInt32(Comperand))));
 {$endif}
 end;
 
@@ -4798,6 +4832,15 @@ begin
 {$else}
  result:=pointer(TPasMPPtrInt(InterlockedCompareExchange(TPasMPInt32(TPasMPPtrInt(Source)),TPasMPInt32(TPasMPPtrInt(0)),TPasMPInt32(TPasMPPtrInt(0)))));
 {$endif}
+{$endif}
+end;
+
+class function TPasMPInterlocked.Read(var Source:TPasMPBool32):TPasMPBool32;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=TPasMPBool32(TPasMPInt32(AtomicCmpExchange(TPasMPInt32(Source),TPasMPInt32(0),TPasMPInt32(0))));
+{$else}
+ result:=TPasMPBool32(TPasMPInt32(InterlockedCompareExchange(TPasMPInt32(Source),TPasMPInt32(0),TPasMPInt32(0))));
 {$endif}
 end;
 
@@ -4949,6 +4992,15 @@ begin
 {$else}
  result:=pointer(TPasMPPtrInt(InterlockedExchange(TPasMPInt32(TPasMPPtrInt(Destination)),TPasMPInt32(TPasMPPtrInt(Source)))));
 {$endif}
+{$endif}
+end;
+
+class function TPasMPInterlocked.Write(var Destination:TPasMPBool32;const Source:TPasMPBool32):TPasMPBool32;
+begin
+{$ifdef HAS_ATOMICS}
+ result:=TPasMPBool32(TPasMPInt32(AtomicExchange(TPasMPInt32(Destination),TPasMPInt32(Source))));
+{$else}
+ result:=TPasMPBool32(TPasMPInt32(InterlockedExchange(TPasMPInt32(Destination),TPasMPInt32(Source))));
 {$endif}
 end;
 
