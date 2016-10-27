@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-10-22-16-40-0000                       *
+ *                        Version 2016-10-27-14-46-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -389,15 +389,15 @@ uses {$ifdef Windows}
      {$endif}
      SysUtils,Classes,
      {$ifdef HAS_GENERICS}
-      {$ifdef fpc}
-       {$if defined(FreePascalGenericsCollectionsLibrary) or (defined(fpc) and (((fpc_version=3) and (fpc_release>=1)) or (fpc_version>3)))}
+      {$if defined(fpc)}
+       {$if defined(FreePascalGenericsCollectionsLibrary) or (defined(fpc) and (((fpc_version=3.0) and (fpc_release>=1.0)) or (fpc_version>3.0)))}
      Generics.Defaults,
         {$define HasGenericsCollections}
        {$ifend}
       {$else}
      System.Generics.Defaults,
        {$define HasGenericsCollections}
-      {$endif}
+      {$ifend}
      {$endif}
      Math,SyncObjs;
 
@@ -4749,7 +4749,7 @@ end;
 class function TPasMPInterlocked.CompareExchange(var Destination:TPasMPBool32;const NewValue,Comperand:TPasMPBool32):TPasMPBool32;
 begin
 {$ifdef HAS_ATOMICS}
- result:=TPasMPBool32(TPasMPInt32(TAtomicCmpExchange(TPasMPInt32(Destination),TPasMPInt32(NewValue),TPasMPInt32(Comperand))));
+ result:=TPasMPBool32(TPasMPInt32(AtomicCmpExchange(TPasMPInt32(Destination),TPasMPInt32(NewValue),TPasMPInt32(Comperand))));
 {$else}
  result:=TPasMPBool32(TPasMPInt32(InterlockedCompareExchange(TPasMPInt32(Destination),TPasMPInt32(NewValue),TPasMPInt32(Comperand))));
 {$endif}
