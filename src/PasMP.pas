@@ -9086,7 +9086,7 @@ end;
 constructor TPasMPUnboundedQueue<T>.Create;
 begin
  inherited Create;
- fQueue:=TPasMPThreadSafeQueue.Create(SizeOf(PPasMPUnboundedTypedQueueItem));
+ fQueue:=TPasMPThreadSafeQueue.Create(SizeOf(TPasMPUnboundedQueue<T>.PPasMPUnboundedTypedQueueItem));
 end;
 
 destructor TPasMPUnboundedQueue<T>.Destroy;
