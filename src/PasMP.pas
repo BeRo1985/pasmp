@@ -1,12 +1,12 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2016-11-22-07-53-0000                       *
+ *                        Version 2017-05-10-06-57-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
  *                                                                            *
- * Copyright (C) 2016, Benjamin Rosseaux (benjamin@rosseaux.de)               *
+ * Copyright (C) 2016-2017, Benjamin Rosseaux (benjamin@rosseaux.de)          *
  *                                                                            *
  * This software is provided 'as-is', without any express or implied          *
  * warranty. In no event will the authors be held liable for any damages      *
@@ -378,12 +378,12 @@ uses {$ifdef Windows}
         {$ifdef usecthreads}
          cthreads,
         {$endif}
-        BaseUnix,Unix,UnixType,PThreads,
-        {$ifdef Linux}
+        BaseUnix,Unix,UnixType,{$ifndef Android}PThreads,{$endif}
+        {$if defined(Linux) or defined(Android)}
          Linux,
         {$else}
          ctypes,sysctl,
-        {$endif}
+        {$ifend}
        {$endif}
       {$endif}
      {$endif}
@@ -1155,13 +1155,24 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
+{$ifdef unix}
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     PPasMPSpinLockPThreadSpinLock=^TPasMPSpinLockPThreadSpinLock;
+{$ifdef Android}
+     TPasMPSpinLockPThreadSpinLock=TPasMPInt32;
+{$else}
+     TPasMPSpinLockPThreadSpinLock=pthread_spinlock_t;
+{$endif}
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+{$endif}
+
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPSpinLock=class(TSynchroObject)
 {$ifdef unix}
       private
-       fSpinLock:pthread_spinlock_t;
+       fSpinLock:TPasMPSpinLockPThreadSpinLock;
       protected
-       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_spinlock_t))-1] of TPasMPUInt8;
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSpinLockPThreadSpinLock))-1] of TPasMPUInt8;
 {$else}
       private
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fState:TPasMPInt32;
@@ -1177,13 +1188,29 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
+{$ifdef unix}
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     PPasMPSpinLockPThreadBarrier=^TPasMPSpinLockPThreadBarrier;
+{$ifdef Android}
+     TPasMPSpinLockPThreadBarrier=record
+      __ba_lock:_pthread_fastlock;
+      __ba_required:TPasMPInt32;
+      __ba_present:TPasMPInt32;
+      __ba_waiting:pointer{_pthread_descr};
+     end;
+{$else}
+     TPasMPSpinLockPThreadBarrier=pthread_barrier_t;
+{$endif}
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+{$endif}
+
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPBarrier=class
 {$ifdef unix}
       private
-       fBarrier:pthread_barrier_t;
+       fBarrier:TPasMPSpinLockPThreadBarrier;
       protected
-       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_barrier_t))-1] of TPasMPUInt8;
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSpinLockPThreadBarrier))-1] of TPasMPUInt8;
 {$else}
       private
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fCount:TPasMPInt32;
@@ -2271,7 +2298,7 @@ type qword=TPasMPInt64;
 {$endif}
 {$endif}
 
-{$ifdef Windows}
+{$if defined(Windows)}
 
 function SwitchToThread:BOOL; external 'kernel32.dll' name 'SwitchToThread';
 
@@ -2290,26 +2317,47 @@ procedure AcquireSRWLockExclusive(SRWLock:PPasMPSRWLock); stdcall; external 'ker
 function TryAcquireSRWLockExclusive(SRWLock:PPasMPSRWLock):bool; stdcall; external 'kernel32.dll' name 'TryAcquireSRWLockExclusive';
 procedure ReleaseSRWLockExclusive(SRWLock:PPasMPSRWLock); stdcall; external 'kernel32.dll' name 'ReleaseSRWLockExclusive';
 
-{$else}
-{$ifdef Linux}
+{$elseif defined(Linux) or defined(Android)}
 const _SC_UIO_MAXIOV=60;
       _SC_NPROCESSORS_CONF=(_SC_UIO_MAXIOV)+23;
+
+      PTHREAD_BARRIER_SERIAL_THREAD=-1;
 
 type cpu_set_p=^cpu_set_t;
      cpu_set_t=TPasMPInt64;
 
 {$ifdef fpc}
 {$linklib c}
-{$else}
+{$endif}
+
+{$if defined(Android) or not defined(fpc)}
 type ppthread_mutex_t=^pthread_mutex_t;
      ppthread_mutexattr_t=^pthread_mutexattr_t;
 
      ppthread_cond_t=^pthread_cond_t;
      ppthread_condattr_t=^pthread_condattr_t;
 
-     Ppthread_rwlock_t=^tpthread_rwlock_t;
+     Ppthread_rwlock_t=^pthread_rwlock_t;
      Ppthread_rwlockattr_t=^pthread_rwlockattr_t;
-{$endif}
+
+     Psem_t=^sem_t;
+
+     pthread_spinlock_t=TPasMPSpinLockPThreadSpinLock;
+     ppthread_spinlock_t=^pthread_spinlock_t;
+     TPthreadSpinlock=pthread_spinlock_t;
+     PTPthreadSpinlock=^TPthreadSpinlock;
+
+     Ppthread_barrier_t=^pthread_barrier_t;
+     pthread_barrier_t=TPasMPSpinLockPThreadBarrier;
+
+     pthread_barrierattr_t=record
+      __pshared:TPasMPInt32;
+     end;
+     ppthread_barrierattr_t=^pthread_barrierattr_t;
+     TPthreadBarrierAttribute=pthread_barrierattr_t;
+     PPthreadBarrierAttribute=^TPthreadBarrierAttribute;
+
+{$ifend}
 
 function sysconf(__name:TPasMPInt32):TPasMPInt32; cdecl; external 'c' name 'sysconf';
 
@@ -2319,7 +2367,7 @@ function sched_setaffinity(pid:ptruint;cpusetsize:TPasMPInt32;cpuset:pointer):TP
 function pthread_setaffinity_np(pid:ptruint;cpusetsize:TPasMPInt32;cpuset:pointer):TPasMPInt32; cdecl; external 'c' name 'pthread_setaffinity_np';
 function pthread_getaffinity_np(pid:ptruint;cpusetsize:TPasMPInt32;cpuset:pointer):TPasMPInt32; cdecl; external 'c' name 'pthread_getaffinity_np';
 
-{$ifndef fpc}
+{$if defined(Android) or not defined(fpc)}
 function pthread_mutex_init(__mutex:ppthread_mutex_t;__mutex_attr:ppthread_mutexattr_t):TPasMPInt32; cdecl; external 'c' name 'pthread_mutex_init';
 function pthread_mutex_destroy(__mutex:ppthread_mutex_t):TPasMPInt32; cdecl; external 'c' name 'pthread_mutex_destroy';
 function pthread_mutex_trylock(__mutex:ppthread_mutex_t):TPasMPInt32; cdecl; external 'c' name 'pthread_mutex_trylock';
@@ -2342,10 +2390,29 @@ function pthread_rwlock_wrlock(__rwlock:Ppthread_rwlock_t):TPasMPInt32; cdecl; e
 function pthread_rwlock_trywrlock(__rwlock:Ppthread_rwlock_t):TPasMPInt32; cdecl; external 'c' name 'pthread_rwlock_trywrlock';
 function pthread_rwlock_timedwrlock(__rwlock:Ppthread_rwlock_t;__abstime:Ptimespec):TPasMPInt32; cdecl; external 'c' name 'pthread_rwlock_timedwrlock';
 function pthread_rwlock_unlock(__rwlock:Ppthread_rwlock_t):TPasMPInt32; cdecl; external 'c' name 'pthread_rwlock_unlock';
-{$endif}
 
-{$endif}
-{$endif}
+function pthread_spin_init(__lock:Ppthread_spinlock_t;__pshared:TPasMPInt32):TPasMPInt32; cdecl; external 'c' name 'pthread_spin_init';
+function pthread_spin_destroy(__lock:Ppthread_spinlock_t):TPasMPInt32; cdecl; external 'c' name 'pthread_spin_destroy';
+function pthread_spin_lock(__lock:Ppthread_spinlock_t):TPasMPInt32; cdecl; external 'c' name 'pthread_spin_lock';
+function pthread_spin_trylock(__lock:Ppthread_spinlock_t):TPasMPInt32; cdecl; external 'c' name 'pthread_spin_trylock';
+function pthread_spin_unlock(__lock:Ppthread_spinlock_t):TPasMPInt32; cdecl; external 'c' name 'pthread_spin_unlock';
+
+function pthread_barrier_init(__barrier:Ppthread_barrier_t;__attr:Ppthread_barrierattr_t;__count:dword):TPasMPInt32; cdecl; external 'c' name 'pthread_barrier_init';
+function pthread_barrier_destroy(__barrier:Ppthread_barrier_t):TPasMPInt32; cdecl; external 'c' name 'pthread_barrier_done';
+function pthread_barrier_wait(__barrier:Ppthread_barrier_t):TPasMPInt32; cdecl; external 'c' name 'pthread_barrier_wait';
+
+function sem_init(__sem:Psem_t;__pshared:TPasMPInt32;__value:dword):TPasMPInt32; cdecl; external 'c' name 'sem_init';
+function sem_destroy(__sem:Psem_t):TPasMPInt32; cdecl; external 'c' name 'sem_destroy';
+function sem_close(__sem:Psem_t):TPasMPInt32; cdecl; external 'c' name 'sem_close';
+function sem_unlink(__name:Pchar):TPasMPInt32; cdecl; external 'c' name 'sem_unlink';
+function sem_wait(__sem:Psem_t):TPasMPInt32; cdecl; external 'c' name 'sem_wait';
+function sem_trywait(__sem:Psem_t):TPasMPInt32; cdecl; external 'c' name 'sem_trywait';
+function sem_post(__sem:Psem_t):TPasMPInt32; cdecl; external 'c' name 'sem_post';
+function sem_getvalue(__sem:Psem_t;__sval:pcint):TPasMPInt32; cdecl; external 'c' name 'sem_getvalue';
+function sem_timedwait(__sem:Psem_t;__abstime:Ptimespec):TPasMPInt32; cdecl; external 'c' name 'sem_timedwait';
+{$ifend}
+
+{$ifend}
 
 {$if defined(cpu386)}
 {$ifndef fpc}
@@ -2988,6 +3055,7 @@ end;
 
 {$if defined(FPC) and defined(CPUARM)}
 function InterlockedCompareExchange64(var Destination:TPasMPInt64;NewValue:TPasMPInt64;Comperand:TPasMPInt64):TPasMPInt64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+label Loop,Fail,Done;
 asm
  // LDREXD and STREXD were introduced in ARM 11, so the LDREXD and STREXD instructions in ARM all v7 variants or above. In v6, only some variants support it.
  // Input:
@@ -3003,21 +3071,21 @@ asm
  mov r4,r1 // r4 = NewValue.Lo
  mov r5,r2 // r5 = NewValue.Hi
  ldrd	r2,[sp,#20] // r2 = Comperand.Hi
- dmb sy
-.Loop:
+ .long 0xf3bf8f5f // dmb sy
+Loop:
  ldrexd	r6,[r0] // loads R6 and R7, so r6 = Destination.Lo, r7 = Destination.Hi
  cmp r6,r3 // if Destination.Lo = Comperand.Lo
 //it eq
  cmpeq r7,r2 // if Destination.Hi = Comperand.Hi
  strexdeq r1,r4,[r0]  // [r0]=r4 and [r0+4]=r5
- bne .Fail
+ bne Fail
  cmp r1,#1 // 1 for failure and 0 for success
- beq .Loop
- bne .Done
-.Fail:
+ beq Loop
+ bne Done
+Fail:
  clrex
-.Done:
- dmb sy
+Done:
+ .long 0xf3bf8f5f // dmb sy
  mov r0,r6
  mov r1,r7
  ldmfd sp!,{r2,r4,r5,r6,r7}
@@ -3027,21 +3095,21 @@ asm
  mov r4,r1 // r4 = NewValue.Lo
  mov r5,r2 // r5 = NewValue.Hi
  ldrd	r2,[sp,#20] // r2 = Comperand.Hi
- dmb sy
-.Loop:
+ .long 0xf3bf8f5f // dmb sy
+Loop:
  ldrexd	r6,[r0] // loads R6 and R7, so r6 = Destination.Lo, r7 = Destination.Hi
  cmp r6,r3 // if Destination.Lo = Comperand.Lo
  it	eq
  cmpeq r7,r2 // if Destination.Hi = Comperand.Hi
- bne .Fail
+ bne Fail
  strexd r1,r4,[r0]  // [r0]=r4 and [r0+4]=r5
  cmp r1,#1 // 1 for failure and 0 for success
- beq .Loop
- bne .Done
-.Fail:
+ beq Loop
+ bne Done
+Fail:
  clrex
-.Done:
- dmb sy
+Done:
+ .long 0xf3bf8f5f // dmb sy
  mov r0,r6
  mov r1,r7
  ldmfd sp!,{r2,r4,r5,r6,r7}
@@ -10899,7 +10967,7 @@ begin
 end;
 
 class function TPasMP.GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):TPasMPInt32;
-{$ifdef Windows}
+{$if defined(Windows)}
 var PhysicalCores,LogicalCores,i,j:TPasMPInt32;
     sinfo:SYSTEM_INFO;
     dwProcessAffinityMask,dwSystemAffinityMask:TPasMPPtrUInt;
@@ -11012,8 +11080,7 @@ begin
   SetLength(AvailableCPUCores,result);
  end;
 end;
-{$else}
-{$ifdef Linux}
+{$elseif defined(Linux) or defined(Android)}
 var i,j:TPasMPInt32;
     CPUSet:TPasMPInt64;
 begin
@@ -11035,8 +11102,7 @@ begin
   SetLength(AvailableCPUCores,result);
  end;
 end;
-{$else}
-{$ifdef Solaris}
+{$elseif defined(Solaris)}
 var i:TPasMPInt32;
 begin
  result:=sysconf(_SC_NPROC_ONLN);
@@ -11045,8 +11111,7 @@ begin
   AvailableCPUCores[i]:=i;
  end;
 end;
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
 var mib:array[0..1] of cint;
     len:cint;
     t:cint;
@@ -11078,10 +11143,7 @@ begin
   AvailableCPUCores[i]:=i;
  end;
 end;
-{$endif}
-{$endif}
-{$endif}
-{$endif}
+{$ifend}
 
 class function TPasMP.Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean; {$ifdef Linux}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
 {$ifdef Linux}
