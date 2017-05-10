@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-05-10-07-53-0000                       *
+ *                        Version 2017-05-10-09-05-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -11078,6 +11078,53 @@ begin
  if result>j then begin
   result:=j;
   SetLength(AvailableCPUCores,result);
+ end;
+end;
+{$elseif defined(Android)}
+const Paths:array[0..1] of string=
+       (
+        '/sys/devices/system/cpu/possible',
+        '/sys/devices/system/cpu/present'
+       );
+var TryIteration,i:TPasMPInt32;
+    fs:TFileStream;
+    s:{$ifdef HAS_TYPE_RAWBYTESTRING}RawByteString{$else}AnsiString{$endif};
+begin
+ for TryIteration:=0 to 1 do begin
+  if FileExists(Paths[TryIteration]) then begin
+   s:='';
+   fs:=TFileStream.Create(Paths[TryIteration],fmOpenRead or fmShareDenyWrite);
+   try
+    SetLength(s,fs.Size);
+    fs.Read(s[1],length(s));
+   finally
+    fs.Free;
+   end;
+   if (length(s)>2) and (s[1]='0') and (s[2]='-') then begin
+    Delete(s,1,2);
+    result:=StrToIntDef(s,-1);
+    if result>=0 then begin
+     inc(result);
+     SetLength(AvailableCPUCores,result);
+     for i:=0 to result-1 do begin
+      AvailableCPUCores[i]:=i;
+     end;
+     exit;
+    end;
+   end;
+  end;
+ end;
+ result:=1;
+ for i:=0 to 127 do begin
+  if DirectoryExists('/sys/devices/system/cpu/cpu'+IntToStr(i)) then begin
+   result:=i+1;
+  end else begin
+   break;
+  end;
+ end;
+ SetLength(AvailableCPUCores,result);
+ for i:=0 to result-1 do begin
+  AvailableCPUCores[i]:=i;
  end;
 end;
 {$elseif defined(Linux) or defined(Android)}
