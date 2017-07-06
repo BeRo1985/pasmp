@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-05-10-09-05-0000                       *
+ *                        Version 2017-07-06-13-11-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -5212,40 +5212,44 @@ begin
 end;
 
 function TPasMPHighResolutionTimer.GetTime:TPasMPInt64;
-{$ifdef linux}
-var NowTimeSpec:TimeSpec;
+{$if defined(linux)}
+var NowTimeSpec:TTimeSpec;
+    tv:timeval;
+    tz:timezone;
     ia,ib:TPasMPInt64;
-{$else}
-{$ifdef unix}
+{$elseif defined(unix)}
 var tv:timeval;
     tz:timezone;
     ia,ib:TPasMPInt64;
-{$endif}
-{$endif}
+{$ifend}
 begin
-{$ifdef windows}
+{$if defined(Windows)}
  if not QueryPerformanceCounter(result) then begin
   result:=timeGetTime;
  end;
-{$else}
-{$ifdef linux}
- clock_gettime(CLOCK_MONOTONIC,@NowTimeSpec);
- ia:=TPasMPInt64(NowTimeSpec.tv_sec)*TPasMPInt64(1000000000);
- ib:=NowTimeSpec.tv_nsec;
- result:=ia+ib;
-{$else}
-{$ifdef unix}
+{$elseif defined(linux)}
+ if clock_gettime(CLOCK_MONOTONIC,@NowTimeSpec)=0 then begin
+  ia:=TPasMPInt64(NowTimeSpec.tv_sec)*TPasMPInt64(1000000000);
+  ib:=NowTimeSpec.tv_nsec;
+  result:=ia+ib;
+ end else begin
   tz.tz_minuteswest:=0;
   tz.tz_dsttime:=0;
   fpgettimeofday(@tv,@tz);
   ia:=TPasMPInt64(tv.tv_sec)*TPasMPInt64(1000000);
   ib:=tv.tv_usec;
-  result:=ia+ib;
+  result:=(ia+ib)*1000;
+ end;
+{$elseif defined(unix)}
+ tz.tz_minuteswest:=0;
+ tz.tz_dsttime:=0;
+ fpgettimeofday(@tv,@tz);
+ ia:=TPasMPInt64(tv.tv_sec)*TPasMPInt64(1000000);
+ ib:=tv.tv_usec;
+ result:=ia+ib;
 {$else}
  result:=trunc(Now*86400000.0);
-{$endif}
-{$endif}
-{$endif}
+{$ifend}
  result:=result shr fFrequencyShift;
 end;
 
