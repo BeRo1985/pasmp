@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-07-06-13-11-0000                       *
+ *                        Version 2017-07-07-16-41-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -296,23 +296,26 @@ unit PasMP;
   {$ifndef BCB}
    {$define Delphi6AndUp}
   {$endif}
-   {$ifndef Delphi6}
-    {$define BCB6OrDelphi7AndUp}
-    {$ifndef BCB}
-     {$define Delphi7AndUp}
-    {$endif}
-    {$ifndef BCB}
-     {$ifndef Delphi7}
-      {$ifndef Delphi2005}
-       {$define BDS2006AndUp}
-      {$endif}
+  {$ifndef Delphi6}
+   {$define BCB6OrDelphi7AndUp}
+   {$ifndef BCB}
+    {$define Delphi7AndUp}
+   {$endif}
+   {$ifndef BCB}
+    {$ifndef Delphi7}
+     {$ifndef Delphi2005}
+      {$define BDS2006AndUp}
      {$endif}
     {$endif}
    {$endif}
+  {$endif}
  {$endif}
  {$ifdef Delphi6AndUp}
   {$warn symbol_platform off}
   {$warn symbol_deprecated off}
+ {$endif}
+ {$ifdef Posix}
+  {$define Unix}
  {$endif}
 {$endif}
 {$ifdef CPU386}
@@ -348,6 +351,14 @@ unit PasMP;
 
 {$undef UseThreadLocalStorage}
 {$undef UseThreadLocalStorageX8632}
+
+{$if defined(Linux) or defined(Android)}
+ {$define PasMPPThreadSpinLock}
+ {$define PasMPPThreadBarrier}
+{$else}
+ {$undef PasMPPThreadSpinLock}
+ {$undef PasMPPThreadBarrier}
+{$ifend}
 
 {$ifdef PasMPUseAsStrictSingletonInstance}
 {$if defined(Windows) and (defined(CPU386) or defined(CPUx86_64)) and not (defined(FPC) or defined(UseMultiplePasMPInstanceInstances))}
@@ -385,6 +396,18 @@ uses {$ifdef Windows}
          ctypes,sysctl,
         {$ifend}
        {$endif}
+      {$else}
+       {$if defined(DelphiXE2AndUp) and defined(Posix)}
+        Posix.Base,
+        Posix.StdDef,
+        Posix.SysTypes,
+        Posix.SysTime,
+        Posix.Time,
+        Posix.Sched,
+        Posix.Semaphore,
+        Posix.Pthread,
+        Posix.Errno,
+       {$ifend}
       {$endif}
      {$endif}
      SysUtils,Classes,
@@ -640,6 +663,20 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        );
      end;
 
+{$ifdef Unix}
+     PPasMPTimeSpec=^TPasMPTimeSpec;
+     TPasMPTimeSpec={$if defined(fpc)}TTimeSpec{$elseif declared(timespec)}timespec{$else}record
+      tv_sec:time_t;
+      tv_nsec:suseconds_t;
+     end{$ifend};
+
+     PPasMPTimeZone=^TPasMPTimeZone;
+     TPasMPTimeZone={$ifdef fpc}timezone{$else}record
+      tz_minuteswest:TPasMPInt32;
+      tz_dsttime:TPasMPInt32;
+     end{$endif};
+{$endif}
+
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPMath=class
       public
@@ -875,13 +912,12 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPMutex=class(TSynchroObject)
-{$ifdef Windows}
+{$if defined(Windows)}
       private
        fMutex:THandle;
       protected
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPCriticalSectionInstance))-1] of TPasMPUInt8;
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
       private
        fMutex:pthread_mutex_t;
       protected
@@ -891,41 +927,36 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fCriticalSection:TPasMPCriticalSection;
       protected
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPCriticalSection))-1] of TPasMPUInt8;
-{$endif}
-{$endif}
+{$ifend}
       public
        constructor Create; overload;
-{$ifdef Unix}
+{$if defined(Unix)}
        constructor Create(const lpMutexAttributes:pointer); overload;
-{$endif}
-{$ifdef Windows}
+{$elseif defined(Windows)}
        constructor Create(const lpMutexAttributes:pointer;const bInitialOwner:boolean;const lpName:string); overload;
        constructor Create(const DesiredAccess:TPasMPUInt32;const bInitialOwner:boolean;const lpName:string); overload;
-{$endif}
+{$ifend}
        destructor Destroy; override;
        procedure Acquire; override;
        procedure Release; override;
-{$ifdef Windows}
+{$if defined(Windows)}
        property Mutex:THandle read fMutex;
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
        property Mutex:pthread_mutex_t read fMutex;
 {$else}
        property CriticalSection:TPasMPCriticalSection read fCriticalSection;
-{$endif}
-{$endif}
+{$ifend}
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPConditionVariableLock=class(TSynchroObject)
-{$ifdef Windows}
+{$if defined(Windows)}
       private
        fCriticalSection:TRTLCriticalSection;
       protected
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TRTLCriticalSection))-1] of TPasMPUInt8;
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
       private
        fMutex:pthread_mutex_t;
       protected
@@ -935,8 +966,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fCriticalSection:TPasMPCriticalSection;
       protected
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPCriticalSection))-1] of TPasMPUInt8;
-{$endif}
-{$endif}
+{$ifend}
       public
        constructor Create;
        destructor Destroy; override;
@@ -952,13 +982,12 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPConditionVariable=class
-{$ifdef Windows}
+{$if defined(Windows)}
       private
        fConditionVariable:TPasMPConditionVariableData;
       protected
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPConditionVariableData))-1] of TPasMPUInt8;
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
       private
        fConditionVariable:pthread_cond_t;
       protected
@@ -972,8 +1001,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fEvent:TPasMPEvent;
       protected
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(TPasMPInt32)*3)+SizeOf(TPasMPCriticalSection)+SizeOf(TPasMPEvent)))-1] of TPasMPUInt8;
-{$endif}
-{$endif}
+{$ifend}
       public
        constructor Create;
        destructor Destroy; override;
@@ -988,15 +1016,14 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       private
        fInitialCount:TPasMPInt32;
        fMaximumCount:TPasMPInt32;
-{$ifdef Windows}
+{$if defined(Windows)}
        fHandle:THandle;
       protected
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(TPasMPInt32)*2)+SizeOf(THandle)))-1] of TPasMPUInt8;
-{$else}
-{$ifdef unix}
-       fHandle:TPasMPInt32;
+{$elseif defined(Unix)}
+       fHandle:{$ifdef fpc}TPasMPInt32{$else}sem_t{$endif};
       protected
-       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-(SizeOf(TPasMPInt32)*3))-1] of TPasMPUInt8;
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(TPasMPInt32)*2)+SizeOf({$ifdef fpc}TPasMPInt32{$else}sem_t{$endif})))-1] of TPasMPUInt8;
 {$else}
 {$define PasMPSemaphoreUseConditionVariable}
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fCurrentCount:TPasMPInt32;
@@ -1013,8 +1040,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$else}
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(TPasMPInt32)*3)+SizeOf(TPasMPCriticalSection)+SizeOf(TPasMPEvent)))-1] of TPasMPUInt8;
 {$endif}
-{$endif}
-{$endif}
+{$ifend}
       public
        constructor Create(const InitialCount,MaximumCount:TPasMPInt32);
        destructor Destroy; override;
@@ -1053,13 +1079,12 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPMultipleReaderSingleWriterLock=class(TInterfacedObject,IReadWriteSync)
-{$ifdef Windows}
+{$if defined(Windows)}
       private
        fSRWLock:TPasMPSRWLock;
       protected
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSRWLock))-1] of TPasMPUInt8;
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
       private
        fReadWriteLock:pthread_rwlock_t;
       protected
@@ -1072,8 +1097,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fConditionVariable:TPasMPConditionVariable;
       protected
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(TPasMPInt32)*2)+SizeOf(TPasMPConditionVariableLock)+SizeOf(TPasMPConditionVariable)))-1] of TPasMPUInt8;
-{$endif}
-{$endif}
+{$ifend}
       public
        constructor Create;
        destructor Destroy; override;
@@ -1126,13 +1150,12 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPSlimReaderWriterLock=class(TSynchroObject)
-{$ifdef Windows}
+{$if defined(Windows)}
       private
        fSRWLock:TPasMPSRWLock;
       protected
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSRWLock))-1] of TPasMPUInt8;
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
       private
        fReadWriteLock:pthread_rwlock_t;
       protected
@@ -1144,8 +1167,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fConditionVariable:TPasMPConditionVariable;
       protected
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-(SizeOf(TPasMPInt32)+SizeOf(TPasMPConditionVariableLock)+SizeOf(TPasMPConditionVariable)))-1] of TPasMPUInt8;
-{$endif}
-{$endif}
+{$ifend}
       public
        constructor Create;
        destructor Destroy; override;
@@ -1155,7 +1177,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
-{$ifdef unix}
+{$if defined(PasMPPThreadSpinLock)}
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      PPasMPSpinLockPThreadSpinLock=^TPasMPSpinLockPThreadSpinLock;
 {$ifdef Android}
@@ -1164,11 +1186,11 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
      TPasMPSpinLockPThreadSpinLock=pthread_spinlock_t;
 {$endif}
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
-{$endif}
+{$ifend}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPSpinLock=class(TSynchroObject)
-{$ifdef unix}
+{$if defined(PasMPPThreadSpinLock)}
       private
        fSpinLock:TPasMPSpinLockPThreadSpinLock;
       protected
@@ -1178,7 +1200,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fState:TPasMPInt32;
       protected
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPInt32))-1] of TPasMPUInt8;
-{$endif}
+{$ifend}
       public
        constructor Create;
        destructor Destroy; override;
@@ -1188,25 +1210,30 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
-{$ifdef unix}
+{$if defined(PasMPPThreadBarrier)}
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      PPasMPSpinLockPThreadBarrier=^TPasMPSpinLockPThreadBarrier;
-{$ifdef Android}
+{$if defined(Android)}
+     PPasMPSpinLockPThreadFastLock=^TPasMPSpinLockPThreadFastLock;
+     TPasMPSpinLockPThreadFastLock={$ifdef fpc}_pthread_fastlock{$else}record
+      __status:TPasMPInt32;
+      __spinlock:TPasMPInt32;
+     end{$endif};
      TPasMPSpinLockPThreadBarrier=record
-      __ba_lock:_pthread_fastlock;
+      __ba_lock:TPasMPSpinLockPThreadFastLock;
       __ba_required:TPasMPInt32;
       __ba_present:TPasMPInt32;
       __ba_waiting:pointer{_pthread_descr};
      end;
 {$else}
      TPasMPSpinLockPThreadBarrier=pthread_barrier_t;
-{$endif}
+{$ifend}
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
-{$endif}
+{$ifend}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPBarrier=class
-{$ifdef unix}
+{$if defined(PasMPPThreadBarrier)}
       private
        fBarrier:TPasMPSpinLockPThreadBarrier;
       protected
@@ -1219,7 +1246,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fConditionVariable:TPasMPConditionVariable;
       protected
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(TPasMPInt32)*2)+SizeOf(TPasMPConditionVariableLock)+SizeOf(TPasMPConditionVariable)))-1] of TPasMPUInt8;
-{$endif}
+{$ifend}
       public
        constructor Create(const Count:TPasMPInt32);
        destructor Destroy; override;
@@ -2318,10 +2345,13 @@ function TryAcquireSRWLockExclusive(SRWLock:PPasMPSRWLock):bool; stdcall; extern
 procedure ReleaseSRWLockExclusive(SRWLock:PPasMPSRWLock); stdcall; external 'kernel32.dll' name 'ReleaseSRWLockExclusive';
 
 {$elseif defined(Linux) or defined(Android)}
+{$ifdef fpc}
 const _SC_UIO_MAXIOV=60;
       _SC_NPROCESSORS_CONF=(_SC_UIO_MAXIOV)+23;
 
+{$if defined(PasMPPThreadBarrier)}
       PTHREAD_BARRIER_SERIAL_THREAD=-1;
+{$ifend}
 
 type cpu_set_p=^cpu_set_t;
      cpu_set_t=TPasMPInt64;
@@ -2342,11 +2372,14 @@ type ppthread_mutex_t=^pthread_mutex_t;
 
      Psem_t=^sem_t;
 
+{$if defined(PasMPPThreadSpinLock)}
      pthread_spinlock_t=TPasMPSpinLockPThreadSpinLock;
      ppthread_spinlock_t=^pthread_spinlock_t;
      TPthreadSpinlock=pthread_spinlock_t;
      PTPthreadSpinlock=^TPthreadSpinlock;
+{$ifend}
 
+{$if defined(PasMPPThreadBarrier)}
      Ppthread_barrier_t=^pthread_barrier_t;
      pthread_barrier_t=TPasMPSpinLockPThreadBarrier;
 
@@ -2356,6 +2389,7 @@ type ppthread_mutex_t=^pthread_mutex_t;
      ppthread_barrierattr_t=^pthread_barrierattr_t;
      TPthreadBarrierAttribute=pthread_barrierattr_t;
      PPthreadBarrierAttribute=^TPthreadBarrierAttribute;
+{$ifend}
 
 {$ifend}
 
@@ -2379,38 +2413,80 @@ function pthread_cond_destroy(__cond:ppthread_cond_t):TPasMPInt32; cdecl; extern
 function pthread_cond_signal(__cond:ppthread_cond_t):TPasMPInt32; cdecl; external 'c' name 'pthread_cond_signal';
 function pthread_cond_broadcast(__cond:ppthread_cond_t):TPasMPInt32; cdecl; external 'c' name 'pthread_cond_broadcast';
 function pthread_cond_wait(__cond:ppthread_cond_t; __mutex:ppthread_mutex_t):TPasMPInt32; cdecl; external 'c' name 'pthread_cond_wait';
-function pthread_cond_timedwait(__cond:ppthread_cond_t;__mutex:ppthread_mutex_t;__abstime:PTimeSpec):TPasMPInt32; cdecl; external 'c' name 'pthread_cond_timedwait';
+function pthread_cond_timedwait(__cond:ppthread_cond_t;__mutex:ppthread_mutex_t;__abstime:PPasMPTimeSpec):TPasMPInt32; cdecl; external 'c' name 'pthread_cond_timedwait';
 
 function pthread_rwlock_init(__rwlock:Ppthread_rwlock_t;__attr:Ppthread_rwlockattr_t):TPasMPInt32; cdecl; external 'c' name 'pthread_rwlock_init';
 function pthread_rwlock_destroy(__rwlock:Ppthread_rwlock_t):TPasMPInt32; cdecl; external 'c' name 'pthread_rwlock_destroy';
 function pthread_rwlock_rdlock(__rwlock:Ppthread_rwlock_t):TPasMPInt32; cdecl; external 'c' name 'pthread_rwlock_rdlock';
 function pthread_rwlock_tryrdlock(__rwlock:Ppthread_rwlock_t):TPasMPInt32; cdecl; external 'c' name 'pthread_rwlock_tryrdlock';
-function pthread_rwlock_timedrdlock(__rwlock:Ppthread_rwlock_t;__abstime:Ptimespec):TPasMPInt32; cdecl; external 'c' name 'pthread_rwlock_timedrdlock';
+function pthread_rwlock_timedrdlock(__rwlock:Ppthread_rwlock_t;__abstime:PPasMPTimeSpec):TPasMPInt32; cdecl; external 'c' name 'pthread_rwlock_timedrdlock';
 function pthread_rwlock_wrlock(__rwlock:Ppthread_rwlock_t):TPasMPInt32; cdecl; external 'c' name 'pthread_rwlock_wrlock';
 function pthread_rwlock_trywrlock(__rwlock:Ppthread_rwlock_t):TPasMPInt32; cdecl; external 'c' name 'pthread_rwlock_trywrlock';
-function pthread_rwlock_timedwrlock(__rwlock:Ppthread_rwlock_t;__abstime:Ptimespec):TPasMPInt32; cdecl; external 'c' name 'pthread_rwlock_timedwrlock';
+function pthread_rwlock_timedwrlock(__rwlock:Ppthread_rwlock_t;__abstime:PPasMPTimeSpec):TPasMPInt32; cdecl; external 'c' name 'pthread_rwlock_timedwrlock';
 function pthread_rwlock_unlock(__rwlock:Ppthread_rwlock_t):TPasMPInt32; cdecl; external 'c' name 'pthread_rwlock_unlock';
 
+{$if defined(PasMPPThreadSpinLock)}
 function pthread_spin_init(__lock:Ppthread_spinlock_t;__pshared:TPasMPInt32):TPasMPInt32; cdecl; external 'c' name 'pthread_spin_init';
 function pthread_spin_destroy(__lock:Ppthread_spinlock_t):TPasMPInt32; cdecl; external 'c' name 'pthread_spin_destroy';
 function pthread_spin_lock(__lock:Ppthread_spinlock_t):TPasMPInt32; cdecl; external 'c' name 'pthread_spin_lock';
 function pthread_spin_trylock(__lock:Ppthread_spinlock_t):TPasMPInt32; cdecl; external 'c' name 'pthread_spin_trylock';
 function pthread_spin_unlock(__lock:Ppthread_spinlock_t):TPasMPInt32; cdecl; external 'c' name 'pthread_spin_unlock';
+{$ifend}
 
-function pthread_barrier_init(__barrier:Ppthread_barrier_t;__attr:Ppthread_barrierattr_t;__count:dword):TPasMPInt32; cdecl; external 'c' name 'pthread_barrier_init';
-function pthread_barrier_destroy(__barrier:Ppthread_barrier_t):TPasMPInt32; cdecl; external 'c' name 'pthread_barrier_done';
+{$if defined(PasMPPThreadBarrier)}
+function pthread_barrier_init(__barrier:Ppthread_barrier_t;__attr:Ppthread_barrierattr_t;__count:TPasMPUInt32):TPasMPInt32; cdecl; external 'c' name 'pthread_barrier_init';
+function pthread_barrier_destroy(__barrier:Ppthread_barrier_t):TPasMPInt32; cdecl; external 'c' name 'pthread_barrier_destroy';
 function pthread_barrier_wait(__barrier:Ppthread_barrier_t):TPasMPInt32; cdecl; external 'c' name 'pthread_barrier_wait';
+{$ifend}
 
-function sem_init(__sem:Psem_t;__pshared:TPasMPInt32;__value:dword):TPasMPInt32; cdecl; external 'c' name 'sem_init';
+function sem_init(__sem:Psem_t;__pshared:TPasMPInt32;__value:TPasMPUInt32):TPasMPInt32; cdecl; external 'c' name 'sem_init';
 function sem_destroy(__sem:Psem_t):TPasMPInt32; cdecl; external 'c' name 'sem_destroy';
 function sem_close(__sem:Psem_t):TPasMPInt32; cdecl; external 'c' name 'sem_close';
 function sem_unlink(__name:Pchar):TPasMPInt32; cdecl; external 'c' name 'sem_unlink';
 function sem_wait(__sem:Psem_t):TPasMPInt32; cdecl; external 'c' name 'sem_wait';
 function sem_trywait(__sem:Psem_t):TPasMPInt32; cdecl; external 'c' name 'sem_trywait';
 function sem_post(__sem:Psem_t):TPasMPInt32; cdecl; external 'c' name 'sem_post';
-function sem_getvalue(__sem:Psem_t;__sval:pcint):TPasMPInt32; cdecl; external 'c' name 'sem_getvalue';
-function sem_timedwait(__sem:Psem_t;__abstime:Ptimespec):TPasMPInt32; cdecl; external 'c' name 'sem_timedwait';
+function sem_getvalue(__sem:Psem_t;__sval:PPasMPInt32):TPasMPInt32; cdecl; external 'c' name 'sem_getvalue';
+function sem_timedwait(__sem:Psem_t;__abstime:PPasMPTimeSpec):TPasMPInt32; cdecl; external 'c' name 'sem_timedwait';
 {$ifend}
+
+{$else}
+
+{$if defined(PasMPPThreadSpinLock)}
+type pthread_spinlock_t=TPasMPSpinLockPThreadSpinLock;
+     ppthread_spinlock_t=^pthread_spinlock_t;
+     TPthreadSpinlock=pthread_spinlock_t;
+     PTPthreadSpinlock=^TPthreadSpinlock;
+
+function pthread_spin_init(__lock:Ppthread_spinlock_t;__pshared:TPasMPInt32):TPasMPInt32; cdecl; external libpthread name _PU+'pthread_spin_init';
+function pthread_spin_destroy(__lock:Ppthread_spinlock_t):TPasMPInt32; cdecl; external libpthread name _PU+'pthread_spin_destroy';
+function pthread_spin_lock(__lock:Ppthread_spinlock_t):TPasMPInt32; cdecl; external libpthread name _PU+'pthread_spin_lock';
+function pthread_spin_trylock(__lock:Ppthread_spinlock_t):TPasMPInt32; cdecl; external libpthread name _PU+'pthread_spin_trylock';
+function pthread_spin_unlock(__lock:Ppthread_spinlock_t):TPasMPInt32; cdecl; external libpthread name _PU+'pthread_spin_unlock';
+
+
+{$ifend}
+
+{$if defined(PasMPPThreadBarrier)}
+const PTHREAD_BARRIER_SERIAL_THREAD=-1;
+
+type Ppthread_barrier_t=^pthread_barrier_t;
+     pthread_barrier_t=TPasMPSpinLockPThreadBarrier;
+
+     pthread_barrierattr_t=record
+      __pshared:TPasMPInt32;
+     end;
+     ppthread_barrierattr_t=^pthread_barrierattr_t;
+     TPthreadBarrierAttribute=pthread_barrierattr_t;
+     PPthreadBarrierAttribute=^TPthreadBarrierAttribute;
+
+function pthread_barrier_init(__barrier:Ppthread_barrier_t;__attr:Ppthread_barrierattr_t;__count:TPasMPUInt32):TPasMPInt32; cdecl; external libpthread name _PU+'pthread_barrier_init';
+function pthread_barrier_destroy(__barrier:Ppthread_barrier_t):TPasMPInt32; cdecl; external libpthread name _PU+'pthread_barrier_destroy';
+function pthread_barrier_wait(__barrier:Ppthread_barrier_t):TPasMPInt32; cdecl; external libpthread name _PU+'pthread_barrier_wait';
+
+{$ifend}
+
+{$endif}
 
 {$ifend}
 
@@ -3794,26 +3870,28 @@ end;
 {$ifend}
 
 class procedure TPasMP.Yield; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
+{$if defined(Windows)}
 begin
  SwitchToThread;
 end;
-{$else}
-{$ifdef Unix}
-{$ifdef usecthreads}
+{$elseif defined(Unix)}
+{$if defined(fpc) and defined(usecthreads)}
 begin
  sched_yield;
 end;
-{$else}
+{$elseif defined(fpc)}
 var timeout:timeval;
 begin
  timeout.tv_sec:=0;
  timeout.tv_usec:=0;
  fpselect(0,nil,nil,nil,@timeout);
 end;
-{$endif}
 {$else}
-{$ifdef fpc}
+begin
+ TThread.Yield;
+end;
+{$ifend}
+{$elseif defined(fpc)}
 begin
  ThreadSwitch;
 end;
@@ -3821,9 +3899,7 @@ end;
 begin
  TThread.Yield;
 end;
-{$endif}
-{$endif}
-{$endif}
+{$ifend}
 
 class function TPasMPInterlocked.Increment(var Destination:TPasMPInt32):TPasMPInt32;
 begin
@@ -5178,7 +5254,7 @@ constructor TPasMPHighResolutionTimer.Create;
 begin
  inherited Create;
  fFrequencyShift:=0;
-{$ifdef windows}
+{$if defined(Windows)}
  if QueryPerformanceFrequency(fFrequency) then begin
   while (fFrequency and $ffffffffe0000000)<>0 do begin
    fFrequency:=fFrequency shr 1;
@@ -5187,17 +5263,13 @@ begin
  end else begin
   fFrequency:=1000;
  end;
+{$elseif defined(Linux)}
+ fFrequency:=1000000000;
+{$elseif defined(Unix)}
+ fFrequency:=1000000;
 {$else}
-{$ifdef linux}
-  fFrequency:=1000000000;
-{$else}
-{$ifdef unix}
-  fFrequency:=1000000;
-{$else}
-  fFrequency:=1000;
-{$endif}
-{$endif}
-{$endif}
+ fFrequency:=1000;
+{$ifend}
  fMillisecondInterval:=(fFrequency+500) div 1000;
  fTwoMillisecondsInterval:=(fFrequency+250) div 500;
  fFourMillisecondsInterval:=(fFrequency+125) div 250;
@@ -5212,55 +5284,66 @@ begin
 end;
 
 function TPasMPHighResolutionTimer.GetTime:TPasMPInt64;
-{$if defined(linux)}
-var NowTimeSpec:TTimeSpec;
+{$if defined(Linux)}
+var NowTimeSpec:TPasMPTimeSpec;
     tv:timeval;
-    tz:timezone;
+    tz:TPasMPTimeZone;
     ia,ib:TPasMPInt64;
-{$elseif defined(unix)}
-var tv:timeval;
-    tz:timezone;
-    ia,ib:TPasMPInt64;
-{$ifend}
 begin
-{$if defined(Windows)}
- if not QueryPerformanceCounter(result) then begin
-  result:=timeGetTime;
- end;
-{$elseif defined(linux)}
  if clock_gettime(CLOCK_MONOTONIC,@NowTimeSpec)=0 then begin
   ia:=TPasMPInt64(NowTimeSpec.tv_sec)*TPasMPInt64(1000000000);
   ib:=NowTimeSpec.tv_nsec;
-  result:=ia+ib;
+  result:=(ia+ib) shr fFrequencyShift;
  end else begin
   tz.tz_minuteswest:=0;
   tz.tz_dsttime:=0;
+{$ifdef fpc}
   fpgettimeofday(@tv,@tz);
+{$else}
+  gettimeofday(tv,@tz);
+{$endif}
   ia:=TPasMPInt64(tv.tv_sec)*TPasMPInt64(1000000);
   ib:=tv.tv_usec;
-  result:=(ia+ib)*1000;
+  result:=((ia+ib)*1000) shr fFrequencyShift;
  end;
+end;
 {$elseif defined(unix)}
+var tv:timeval;
+    tz:TPasMPTimeZone;
+    ia,ib:TPasMPInt64;
+begin
  tz.tz_minuteswest:=0;
  tz.tz_dsttime:=0;
+{$ifdef fpc}
  fpgettimeofday(@tv,@tz);
+{$else}
+ gettimeofday(tv,@tz);
+{$endif}
  ia:=TPasMPInt64(tv.tv_sec)*TPasMPInt64(1000000);
  ib:=tv.tv_usec;
- result:=ia+ib;
-{$else}
- result:=trunc(Now*86400000.0);
-{$ifend}
+ result:=(ia+ib) shr fFrequencyShift;
+end;
+{$elseif defined(Windows)}
+begin
+ if not QueryPerformanceCounter(result) then begin
+  result:=timeGetTime;
+ end;
  result:=result shr fFrequencyShift;
 end;
+{$else}
+begin
+ result:=trunc(Now*86400000.0) shr fFrequencyShift;
+end;
+{$ifend}
 
 procedure TPasMPHighResolutionTimer.Sleep(const pDelay:TPasMPInt64);
 var EndTime,NowTime{$ifdef unix},SleepTime{$endif}:TPasMPInt64;
 {$ifdef unix}
-    req,rem:timespec;
+    req,rem:TPasMPTimeSpec;
 {$endif}
 begin
  if pDelay>0 then begin
-{$ifdef windows}
+{$if defined(Windows)}
   NowTime:=GetTime;
   EndTime:=NowTime+pDelay;
   while (NowTime+fTwoMillisecondsInterval)<EndTime do begin
@@ -5274,8 +5357,7 @@ begin
   while NowTime<EndTime do begin
    NowTime:=GetTime;
   end;
-{$else}
-{$ifdef linux}
+{$elseif defined(Linux) or defined(Android)}
   NowTime:=GetTime;
   EndTime:=NowTime+pDelay;
   while true do begin
@@ -5285,7 +5367,11 @@ begin
     if SleepTime>0 then begin
      req.tv_sec:=SleepTime div 1000000000;
      req.tv_nsec:=SleepTime mod 10000000000;
+{$ifdef fpc}
      fpNanoSleep(@req,@rem);
+{$else}
+     NanoSleep(req,@rem);
+{$endif}
      NowTime:=GetTime;
      continue;
     end;
@@ -5293,14 +5379,13 @@ begin
    break;
   end;
   while (NowTime+fTwoMillisecondsInterval)<EndTime do begin
-   ThreadSwitch;
+   TPasMP.Yield;
    NowTime:=GetTime;
   end;
   while NowTime<EndTime do begin
    NowTime:=GetTime;
   end;
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
   NowTime:=GetTime;
   EndTime:=NowTime+pDelay;
   while true do begin
@@ -5310,7 +5395,11 @@ begin
     if SleepTime>0 then begin
      req.tv_sec:=SleepTime div 1000000;
      req.tv_nsec:=(SleepTime mod 1000000)*1000;
+{$ifdef fpc}
      fpNanoSleep(@req,@rem);
+{$else}
+     NanoSleep(req,@rem);
+{$endif}
      NowTime:=GetTime;
      continue;
     end;
@@ -5318,7 +5407,7 @@ begin
    break;
   end;
   while (NowTime+fTwoMillisecondsInterval)<EndTime do begin
-   ThreadSwitch;
+   TPasMP.Yield;
    NowTime:=GetTime;
   end;
   while NowTime<EndTime do begin
@@ -5338,9 +5427,7 @@ begin
   while NowTime<EndTime do begin
    NowTime:=GetTime;
   end;
-{$endif}
-{$endif}
-{$endif}
+{$ifend}
  end;
 end;
 
@@ -5418,36 +5505,40 @@ end;
 constructor TPasMPMutex.Create;
 begin
  inherited Create;
-{$ifdef Windows}
+{$if defined(Windows)}
  fMutex:=CreateMutex(nil,false,nil);
  if fMutex=0 then begin
   RaiseLastOSError;
  end;
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
+{$ifdef fpc}
  pthread_mutex_init(@fMutex,nil);
 {$else}
+ pthread_mutex_init(fMutex,nil);
+{$endif}
+{$else}
  fCriticalSection:=TPasMPCriticalSection.Create;
-{$endif}
-{$endif}
+{$ifend}
 end;
 
 {$ifdef Unix}
 constructor TPasMPMutex.Create(const lpMutexAttributes:pointer);
 begin
  inherited Create;
-{$ifdef Windows}
+{$if defined(Windows)}
  fMutex:=CreateMutex(lpMutexAttributes,false,'');
  if fMutex=0 then begin
   RaiseLastOSError;
  end;
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
+{$ifdef fpc}
  pthread_mutex_init(@fMutex,lpMutexAttributes);
 {$else}
+ pthread_mutex_init(fMutex,lpMutexAttributes);
+{$endif}
+{$else}
  fCriticalSection:=TCriticalSection.Create;
-{$endif}
-{$endif}
+{$ifend}
 end;
 {$endif}
 
@@ -5455,55 +5546,53 @@ end;
 constructor TPasMPMutex.Create(const lpMutexAttributes:pointer;const bInitialOwner:boolean;const lpName:string);
 begin
  inherited Create;
-{$ifdef Windows}
+{$if defined(Windows)}
  fMutex:=CreateMutex(lpMutexAttributes,bInitialOwner,PChar(lpName));
  if fMutex=0 then begin
   RaiseLastOSError;
  end;
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
  pthread_mutex_init(@fMutex,lpMutexAttributes);
 {$else}
  fCriticalSection:=TCriticalSection.Create;
-{$endif}
-{$endif}
+{$ifend}
 end;
 
 constructor TPasMPMutex.Create(const DesiredAccess:TPasMPUInt32;const bInitialOwner:boolean;const lpName:string);
 begin
  inherited Create;
-{$ifdef Windows}
+{$if defined(Windows)}
  fMutex:=OpenMutex(DesiredAccess,bInitialOwner,PChar(lpName));
  if fMutex=0 then begin
   RaiseLastOSError;
  end;
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
  pthread_mutex_init(@fMutex,nil);
 {$else}
  fCriticalSection:=TCriticalSection.Create;
-{$endif}
-{$endif}
+{$ifend}
 end;
 {$endif}
 
 destructor TPasMPMutex.Destroy;
 begin
-{$ifdef Windows}
+{$if defined(Windows)}
  CloseHandle(fMutex);
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
+{$ifdef fpc}
  pthread_mutex_destroy(@fMutex);
 {$else}
+ pthread_mutex_destroy(fMutex);
+{$endif}
+{$else}
  fCriticalSection.Free;
-{$endif}
-{$endif}
+{$ifend}
  inherited Destroy;
 end;
 
 procedure TPasMPMutex.Acquire;
 begin
-{$ifdef Windows}
+{$if defined(Windows)}
  case WaitForSingleObject(fMutex,INFINITE) of
   WAIT_OBJECT_0:begin
   end;
@@ -5515,118 +5604,134 @@ begin
    RaiseLastOSError;
   end;
  end;
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
+{$ifdef fpc}
  pthread_mutex_lock(@fMutex);
 {$else}
+ pthread_mutex_lock(fMutex);
+{$endif}
+{$else}
  fCriticalSection.Acquire;
-{$endif}
-{$endif}
+{$ifend}
 end;
 
 procedure TPasMPMutex.Release;
 begin
-{$ifdef Windows}
+{$if defined(Windows)}
  if not ReleaseMutex(fMutex) then begin
   RaiseLastOSError;
  end;
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
+{$ifdef fpc}
  pthread_mutex_unlock(@fMutex);
 {$else}
+ pthread_mutex_unlock(fMutex);
+{$endif}
+{$else}
  fCriticalSection.Release;
-{$endif}
-{$endif}
+{$ifend}
 end;
 
 constructor TPasMPConditionVariableLock.Create;
 begin
  inherited Create;
-{$ifdef Windows}
+{$if defined(Windows)}
  InitializeCriticalSection(fCriticalSection);
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
+{$ifdef fpc}
  pthread_mutex_init(@fMutex,nil);
 {$else}
+ pthread_mutex_init(fMutex,nil);
+{$endif}
+{$else}
  fCriticalSection:=TPasMPCriticalSection.Create;
-{$endif}
-{$endif}
+{$ifend}
 end;
 
 destructor TPasMPConditionVariableLock.Destroy;
 begin
-{$ifdef Windows}
+{$if defined(Windows)}
  DeleteCriticalSection(fCriticalSection);
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
+{$ifdef fpc}
  pthread_mutex_destroy(@fMutex);
 {$else}
+ pthread_mutex_destroy(fMutex);
+{$endif}
+{$else}
  fCriticalSection.Free;
-{$endif}
-{$endif}
+{$ifend}
  inherited Destroy;
 end;
 
 procedure TPasMPConditionVariableLock.Acquire;
 begin
-{$ifdef Windows}
+{$if defined(Windows)}
  EnterCriticalSection(fCriticalSection);
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
+{$ifdef fpc}
  pthread_mutex_lock(@fMutex);
 {$else}
+ pthread_mutex_lock(fMutex);
+{$endif}
+{$else}
  fCriticalSection.Acquire;
-{$endif}
-{$endif}
+{$ifend}
 end;
 
-procedure TPasMPConditionVariableLock.Release; 
+procedure TPasMPConditionVariableLock.Release;
 begin
-{$ifdef Windows}
+{$if defined(Windows)}
  LeaveCriticalSection(fCriticalSection);
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
+{$ifdef fpc}
  pthread_mutex_unlock(@fMutex);
 {$else}
+ pthread_mutex_unlock(fMutex);
+{$endif}
+{$else}
  fCriticalSection.Release;
-{$endif}
-{$endif}
+{$ifend}
 end;
 
 constructor TPasMPConditionVariable.Create;
 begin
  inherited Create;
-{$ifdef Windows}
+{$if defined(Windows)}
  InitializeConditionVariable(@fConditionVariable);
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
+{$ifdef fpc}
  pthread_cond_init(@fConditionVariable,nil);
+{$else}
+ pthread_cond_init(fConditionVariable,nil);
+{$endif}
 {$else}
  fWaitCounter:=0;
  fCriticalSection:=TPasMPCriticalSection.Create;
  fReleaseCounter:=0;
  fGenerationCounter:=0;
  fEvent:=TPasMPEvent.Create(nil,true,false,'');
-{$endif}
-{$endif}
+{$ifend}
 end;
 
 destructor TPasMPConditionVariable.Destroy;
 begin
-{$ifdef Windows}
-{$else}
-{$ifdef Unix}
+{$if defined(Windows)}
+{$elseif defined(Unix)}
+{$ifdef fpc}
  pthread_cond_destroy(@fConditionVariable);
+{$else}
+ pthread_cond_destroy(fConditionVariable);
+{$endif}
 {$else}
  fCriticalSection.Free;
  fEvent.Free;
-{$endif}
-{$endif}
+{$ifend}
  inherited Destroy;
 end;
 
 function TPasMPConditionVariable.Wait(const Lock:TPasMPConditionVariableLock;const dwMilliSeconds:TPasMPUInt32=INFINITE):TWaitResult; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
+{$if defined(Windows)}
 begin
  if SleepConditionVariableCS(@fConditionVariable,@Lock.fCriticalSection,dwMilliSeconds) then begin
   result:=wrSignaled;
@@ -5634,26 +5739,25 @@ begin
   case GetLastError of
    ERROR_TIMEOUT:begin
     result:=wrTimeOut;
-   end;      
+   end;
    else begin
     result:=wrError;
    end;
   end;
  end;
 end;
-{$else}
-{$ifdef Unix}
-var TimeSpec_:TTimeSpec;
+{$elseif defined(Unix)}
+var TimeSpec_:TPasMPTimeSpec;
 begin
  if dwMilliSeconds=INFINITE then begin
-  case pthread_cond_wait(@fConditionVariable,@Lock.fMutex) of
+  case pthread_cond_wait({$ifdef fpc}@fConditionVariable,@Lock.fMutex{$else}fConditionVariable,Lock.fMutex{$endif}) of
    0:begin
     result:=wrSignaled;
    end;
-   ESysETIMEDOUT:begin
+   {$ifdef fpc}ESysETIMEDOUT{$else}ETIMEDOUT{$endif}:begin
     result:=wrTimeOut;
    end;
-   ESysEINVAL:begin
+   {$ifdef fpc}ESysEINVAL{$else}EINVAL{$endif}:begin
     result:=wrAbandoned;
    end;
    else begin
@@ -5663,14 +5767,14 @@ begin
  end else begin
   TimeSpec_.tv_sec:=dwMilliSeconds div 1000;
   TimeSpec_.tv_nsec:=(dwMilliSeconds mod 1000)*1000000000;
-  case pthread_cond_timedwait(@fConditionVariable,@Lock.fMutex,@TimeSpec_) of
+  case pthread_cond_timedwait({$ifdef fpc}@fConditionVariable,@Lock.fMutex,@TimeSpec_{$else}fConditionVariable,Lock.fMutex,TimeSpec_{$endif}) of
    0:begin
     result:=wrSignaled;
    end;
-   ESysETIMEDOUT:begin
+   {$ifdef fpc}ESysETIMEDOUT{$else}ETIMEDOUT{$endif}:begin
     result:=wrTimeOut;
    end;
-   ESysEINVAL:begin
+   {$ifdef fpc}ESysEINVAL{$else}EINVAL{$endif}:begin
     result:=wrAbandoned;
    end;
    else begin
@@ -5740,18 +5844,20 @@ begin
  end;
 
 end;
-{$endif}
-{$endif}
+{$ifend}
 
 procedure TPasMPConditionVariable.Signal; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
+{$if defined(Windows)}
 begin
  WakeConditionVariable(@fConditionVariable);
 end;
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
 begin
+{$ifdef fpc}
  pthread_cond_signal(@fConditionVariable);
+{$else}
+ pthread_cond_signal(fConditionVariable);
+{$endif}
 end;
 {$else}
 begin
@@ -5766,18 +5872,20 @@ begin
   fCriticalSection.Release;
  end;
 end;
-{$endif}
-{$endif}
+{$ifend}
 
 procedure TPasMPConditionVariable.Broadcast; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
+{$if defined(Windows)}
 begin
  WakeAllConditionVariable(@fConditionVariable);
 end;
-{$else}
-{$ifdef Unix}
+{$elseif defined(Unix)}
 begin
+{$ifdef fpc}
  pthread_cond_broadcast(@fConditionVariable);
+{$else}
+ pthread_cond_signal(fConditionVariable);
+{$endif}
 end;
 {$else}
 begin
@@ -5792,19 +5900,21 @@ begin
   fCriticalSection.Release;
  end;
 end;
-{$endif}
-{$endif}
-         
+{$ifend}
+
 constructor TPasMPSemaphore.Create(const InitialCount,MaximumCount:TPasMPInt32);
 begin
  inherited Create;
  fInitialCount:=InitialCount;
  fMaximumCount:=MaximumCount;
-{$ifdef Windows}
+{$if defined(Windows)}
  fHandle:=CreateSemaphore(nil,InitialCount,MaximumCount,nil);
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
+{$ifdef fpc}
  sem_init(@fHandle,0,InitialCount);
+{$else}
+ sem_init(fHandle,0,InitialCount);
+{$endif}
 {$else}
  fCurrentCount:=fInitialCount;
 {$ifdef PasMPSemaphoreUseConditionVariable}
@@ -5814,17 +5924,19 @@ begin
  fCriticalSection:=TPasMPCriticalSection.Create;
  fEvent:=TPasMPEvent.Create(nil,false,false,'');
 {$endif}
-{$endif}
-{$endif}
+{$ifend}
 end;
 
 destructor TPasMPSemaphore.Destroy;
 begin
-{$ifdef Windows}
+{$if defined(Windows)}
  CloseHandle(fHandle);
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
+{$ifdef fpc}
  sem_destroy(@fHandle);
+{$else}
+ sem_destroy(fHandle);
+{$endif}
 {$else}
 {$ifdef PasMPSemaphoreUseConditionVariable}
  fConditionVariable.Free;
@@ -5833,8 +5945,7 @@ begin
  fEvent.Free;
  fCriticalSection.Free;
 {$endif}
-{$endif}
-{$endif}
+{$ifend}
  inherited Destroy;
 end;
 
@@ -5849,7 +5960,7 @@ begin
 end;
 
 function TPasMPSemaphore.Acquire(const AcquireCount:TPasMPInt32):TWaitResult;
-{$ifdef Windows}
+{$if defined(Windows)}
 var Counter:TPasMPInt32;
 begin
  result:=wrError;
@@ -5873,21 +5984,20 @@ begin
   end;
  end;
 end;
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
 var Counter:TPasMPInt32;
 begin
  result:=wrError;
  for Counter:=1 to AcquireCount do begin
-  case sem_wait(@fHandle) of
+  case sem_wait({$ifdef fpc}@fHandle{$else}fHandle{$endif}) of
    0:begin
     result:=wrSignaled;
    end;
-   ESysETIMEDOUT:begin
+   {$ifdef fpc}ESysETIMEDOUT{$else}ETIMEDOUT{$endif}:begin
     result:=wrTimeOut;
     exit;
    end;
-   ESysEINVAL:begin
+   {$ifdef fpc}ESysEINVAL{$else}EINVAL{$endif}:begin
     result:=wrAbandoned;
     exit;
    end;
@@ -5952,20 +6062,18 @@ begin
  end;
 end;
 {$endif}
-{$endif}
-{$endif}
+{$ifend}
 
 function TPasMPSemaphore.Release(const ReleaseCount:TPasMPInt32):TPasMPInt32;
-{$ifdef Windows}
+{$if defined(Windows)}
 begin
  ReleaseSemaphore(fHandle,ReleaseCount,@result);
 end;
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
 begin
  result:=0;
  while result<ReleaseCount do begin
-  case sem_post(@fHandle) of
+  case sem_post({$ifdef fpc}@fHandle{$else}fHandle{$endif}) of
    0:begin
     inc(result);
    end;
@@ -6026,8 +6134,7 @@ begin
  end;
 end;
 {$endif}
-{$endif}
-{$endif}
+{$ifend}
 
 constructor TPasMPInvertedSemaphore.Create(const InitialCount,MaximumCount:TPasMPInt32);
 begin
@@ -6123,43 +6230,50 @@ end;
 constructor TPasMPMultipleReaderSingleWriterLock.Create;
 begin
  inherited Create;
-{$ifdef Windows}
+{$if defined(Windows)}
  InitializeSRWLock(@fSRWLock);
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
+{$ifdef fpc}
  pthread_rwlock_init(@fReadWriteLock,nil);
+{$else}
+ pthread_rwlock_init(fReadWriteLock,nil);
+{$endif}
 {$else}
  fReaders:=0;
  fWriters:=0;
  fConditionVariableLock:=TPasMPConditionVariableLock.Create;
  fConditionVariable:=TPasMPConditionVariable.Create;
-{$endif}
-{$endif}
+{$ifend}
 end;
 
 destructor TPasMPMultipleReaderSingleWriterLock.Destroy;
 begin
-{$ifdef Windows}
-{$else}
-{$ifdef unix}
+{$if defined(Windows)}
+{$elseif defined(Unix)}
+{$ifdef fpc}
  pthread_rwlock_destroy(@fReadWriteLock);
+{$else}
+ pthread_rwlock_destroy(fReadWriteLock);
+{$endif}
 {$else}
  fConditionVariable.Free;
  fConditionVariableLock.Free;
-{$endif}
-{$endif}
+{$ifend}
  inherited Destroy;
 end;
 
 procedure TPasMPMultipleReaderSingleWriterLock.AcquireRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
+{$if defined(Windows)}
 begin
  AcquireSRWLockShared(@fSRWLock);
 end;
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
 begin
+{$ifdef fpc}
  pthread_rwlock_rdlock(@fReadWriteLock);
+{$else}
+ pthread_rwlock_rdlock(fReadWriteLock);
+{$endif}
 end;
 {$else}
 var State:TPasMPInt32;
@@ -6174,18 +6288,20 @@ begin
   fConditionVariableLock.Release;
  end;
 end;
-{$endif}
-{$endif}
+{$ifend}
 
 function TPasMPMultipleReaderSingleWriterLock.TryAcquireRead:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
+{$if defined(Windows)}
 begin
  result:=TryAcquireSRWLockShared(@fSRWLock);
 end;
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
 begin
+{$ifdef fpc}
  result:=pthread_rwlock_tryrdlock(@fReadWriteLock)=0;
+{$else}
+ result:=pthread_rwlock_tryrdlock(fReadWriteLock)=0;
+{$endif}
 end;
 {$else}
 var State:TPasMPInt32;
@@ -6200,18 +6316,20 @@ begin
   fConditionVariableLock.Release;
  end;
 end;
-{$endif}
-{$endif}
+{$ifend}
 
 procedure TPasMPMultipleReaderSingleWriterLock.ReleaseRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
+{$if defined(Windows)}
 begin
  ReleaseSRWLockShared(@fSRWLock);
 end;
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
 begin
+{$ifdef fpc}
  pthread_rwlock_unlock(@fReadWriteLock);
+{$else}
+ pthread_rwlock_unlock(fReadWriteLock);
+{$endif}
 end;
 {$else}
 begin
@@ -6225,18 +6343,20 @@ begin
   fConditionVariableLock.Release;
  end;
 end;
-{$endif}
-{$endif}
+{$ifend}
 
 procedure TPasMPMultipleReaderSingleWriterLock.AcquireWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
+{$if defined(Windows)}
 begin
  AcquireSRWLockExclusive(@fSRWLock);
 end;
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
 begin
+{$ifdef fpc}
  pthread_rwlock_wrlock(@fReadWriteLock);
+{$else}
+ pthread_rwlock_wrlock(fReadWriteLock);
+{$endif}
 end;
 {$else}
 begin
@@ -6250,18 +6370,20 @@ begin
   fConditionVariableLock.Release;
  end;
 end;
-{$endif}
-{$endif}
+{$ifend}
 
 function TPasMPMultipleReaderSingleWriterLock.TryAcquireWrite:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
+{$if defined(Windows)}
 begin
  result:=TryAcquireSRWLockExclusive(@fSRWLock);
 end;
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
 begin
+{$ifdef fpc}
  result:=pthread_rwlock_trywrlock(@fReadWriteLock)=0;
+{$else}
+ result:=pthread_rwlock_trywrlock(fReadWriteLock)=0;
+{$endif}
 end;
 {$else}
 begin
@@ -6275,18 +6397,20 @@ begin
   fConditionVariableLock.Release;
  end;
 end;
-{$endif}
-{$endif}
+{$ifend}
 
 procedure TPasMPMultipleReaderSingleWriterLock.ReleaseWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
+{$if defined(Windows)}
 begin
  ReleaseSRWLockExclusive(@fSRWLock);
 end;
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
 begin
+{$ifdef fpc}
  pthread_rwlock_unlock(@fReadWriteLock);
+{$else}
+ pthread_rwlock_unlock(fReadWriteLock);
+{$endif}
 end;
 {$else}
 begin
@@ -6300,20 +6424,23 @@ begin
   fConditionVariableLock.Release;
  end;
 end;
-{$endif}
-{$endif}
+{$ifend}
 
 procedure TPasMPMultipleReaderSingleWriterLock.ReadToWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
+{$if defined(Windows)}
 begin
  ReleaseSRWLockShared(@fSRWLock);
  AcquireSRWLockExclusive(@fSRWLock);
 end;
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
 begin
+{$ifdef fpc}
  pthread_rwlock_unlock(@fReadWriteLock);
  pthread_rwlock_wrlock(@fReadWriteLock);
+{$else}
+ pthread_rwlock_unlock(fReadWriteLock);
+ pthread_rwlock_wrlock(fReadWriteLock);
+{$endif}
 end;
 {$else}
 begin
@@ -6328,20 +6455,23 @@ begin
   fConditionVariableLock.Release;
  end;
 end;
-{$endif}
-{$endif}
+{$ifend}
 
 procedure TPasMPMultipleReaderSingleWriterLock.WriteToRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef Windows}
+{$if defined(Windows)}
 begin
  ReleaseSRWLockExclusive(@fSRWLock);
  AcquireSRWLockShared(@fSRWLock);
 end;
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
 begin
+{$ifdef fpc}
  pthread_rwlock_unlock(@fReadWriteLock);
  pthread_rwlock_rdlock(@fReadWriteLock);
+{$else}
+ pthread_rwlock_unlock(fReadWriteLock);
+ pthread_rwlock_rdlock(fReadWriteLock);
+{$endif}
 end;
 {$else}
 begin
@@ -6356,8 +6486,7 @@ begin
   fConditionVariableLock.Release;
  end;
 end;
-{$endif}
-{$endif}
+{$ifend}
 
 procedure TPasMPMultipleReaderSingleWriterLock.BeginRead;
 begin
@@ -6565,42 +6694,49 @@ end;
 constructor TPasMPSlimReaderWriterLock.Create;
 begin
  inherited Create;
-{$ifdef Windows}
+{$if defined(Windows)}
  InitializeSRWLock(@fSRWLock);
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
+{$ifdef fpc}
  pthread_rwlock_init(@fReadWriteLock,nil);
+{$else}
+ pthread_rwlock_init(fReadWriteLock,nil);
+{$endif}
 {$else}
  fCount:=0;
  fConditionVariableLock:=TPasMPConditionVariableLock.Create;
  fConditionVariable:=TPasMPConditionVariable.Create;
-{$endif}
-{$endif}
+{$ifend}
 end;
 
 destructor TPasMPSlimReaderWriterLock.Destroy;
 begin
-{$ifdef Windows}
-{$else}
-{$ifdef unix}
+{$if defined(Windows)}
+{$elseif defined(Unix)}
+{$ifdef fpc}
  pthread_rwlock_destroy(@fReadWriteLock);
+{$else}
+ pthread_rwlock_destroy(fReadWriteLock);
+{$endif}
 {$else}
  fConditionVariable.Free;
  fConditionVariableLock.Free;
-{$endif}
-{$endif}
+{$ifend}
  inherited Destroy;
 end;
 
 procedure TPasMPSlimReaderWriterLock.Acquire;
-{$ifdef Windows}
+{$if defined(Windows)}
 begin
  AcquireSRWLockExclusive(@fSRWLock);
 end;
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
 begin
+{$ifdef fpc}
  pthread_rwlock_wrlock(@fReadWriteLock);
+{$else}
+ pthread_rwlock_wrlock(fReadWriteLock);
+{$endif}
 end;
 {$else}
 begin
@@ -6614,18 +6750,20 @@ begin
   fConditionVariableLock.Release;
  end;
 end;
-{$endif}
-{$endif}
+{$ifend}
 
 function TPasMPSlimReaderWriterLock.TryAcquire:boolean;
-{$ifdef Windows}
+{$if defined(Windows)}
 begin
  result:=TryAcquireSRWLockExclusive(@fSRWLock);
 end;
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
 begin
+{$ifdef fpc}
  result:=pthread_rwlock_trywrlock(@fReadWriteLock)=0;
+{$else}
+ result:=pthread_rwlock_trywrlock(fReadWriteLock)=0;
+{$endif}
 end;
 {$else}
 begin
@@ -6639,18 +6777,20 @@ begin
   fConditionVariableLock.Release;
  end;
 end;
-{$endif}
-{$endif}
+{$ifend}
 
 procedure TPasMPSlimReaderWriterLock.Release;
-{$ifdef Windows}
+{$if defined(Windows)}
 begin
  ReleaseSRWLockExclusive(@fSRWLock);
 end;
-{$else}
-{$ifdef unix}
+{$elseif defined(Unix)}
 begin
+{$ifdef fpc}
  pthread_rwlock_unlock(@fReadWriteLock);
+{$else}
+ pthread_rwlock_unlock(fReadWriteLock);
+{$endif}
 end;
 {$else}
 begin
@@ -6664,32 +6804,31 @@ begin
   fConditionVariableLock.Release;
  end;
 end;
-{$endif}
-{$endif}
+{$ifend}
 
 constructor TPasMPSpinLock.Create;
 begin
  inherited Create;
-{$ifdef Unix}
+{$if defined(PasMPPThreadSpinLock)}
  pthread_spin_init(@fSpinLock,0);
 {$else}
  fState:=0;
-{$endif}
+{$ifend}
 end;
 
 destructor TPasMPSpinLock.Destroy;
 begin
-{$ifdef Unix}
+{$if defined(PasMPPThreadSpinLock)}
  pthread_spin_destroy(@fSpinLock);
-{$endif}
+{$ifend}
  inherited Destroy;
 end;
 
-procedure TPasMPSpinLock.Acquire; {$if defined(Unix)}
+procedure TPasMPSpinLock.Acquire; {$if defined(PasMPPThreadSpinLock)}
 begin
  pthread_spin_lock(@fSpinLock);
 end;
-{$else}{$ifdef cpu386}assembler; register;
+{$elseif defined(cpu386)}assembler; register;
 asm
  test dword ptr [eax+TPasMPSpinLock.fState],1
  jnz @SpinLoop
@@ -6703,7 +6842,7 @@ asm
  jmp @TryAgain
 @TryDone:
 end;
-{$else}{$ifdef cpux86_64}assembler; register;
+{$elseif defined(cpux86_64)}assembler; register;
 {$ifdef Windows}
 asm
  // Win64 ABI
@@ -6743,15 +6882,13 @@ begin
   TPasMP.Yield;
  end;
 end;
-{$endif}
-{$endif}
 {$ifend}
 
-function TPasMPSpinLock.TryAcquire:longbool; {$if defined(Unix)}
+function TPasMPSpinLock.TryAcquire:longbool; {$if defined(PasMPPThreadSpinLock)}
 begin
  result:=pthread_spin_trylock(@fSpinLock)=0;
 end;
-{$else}{$ifdef cpu386}assembler; register;
+{$elseif defined(cpu386)}assembler; register;
 asm
  xor eax,eax
  lock bts dword ptr [eax+TPasMPSpinLock.fState],0
@@ -6759,7 +6896,7 @@ asm
   not eax
  @Failed:
 end;
-{$else}{$ifdef cpux86_64}assembler; register;
+{$elseif defined(cpux86_64)}assembler; register;
 {$ifdef Windows}
 asm
  // Win64 ABI
@@ -6785,19 +6922,17 @@ end;
 begin
  result:=TPasMPInterlocked.CompareExchange(fState,-1,0)=0;
 end;
-{$endif}
-{$endif}
 {$ifend}
 
-procedure TPasMPSpinLock.Release; {$if defined(Unix)}
+procedure TPasMPSpinLock.Release; {$if defined(PasMPPThreadSpinLock)}
 begin
  pthread_spin_unlock(@fSpinLock);
 end;
-{$else}{$ifdef cpu386}assembler; register;
+{$elseif defined(cpu386)}assembler; register;
 asm
  mov dword ptr [eax+TPasMPSpinLock.fState],0
 end;
-{$else}{$ifdef cpux86_64}assembler; register;
+{$elseif defined(cpux86_64)}assembler; register;
 {$ifdef Windows}
 asm
  // Win64 ABI
@@ -6815,26 +6950,24 @@ end;
 begin
  TPasMPInterlocked.Exchange(fState,0);
 end;
-{$endif}
-{$endif}
 {$ifend}
 
 constructor TPasMPBarrier.Create(const Count:TPasMPInt32);
 begin
  inherited Create;
-{$ifdef unix}
+{$if defined(PasMPPThreadBarrier)}
  pthread_barrier_init(@fBarrier,nil,Count);
 {$else}
  fCount:=Count;
  fTotal:=0;
  fConditionVariableLock:=TPasMPConditionVariableLock.Create;
  fConditionVariable:=TPasMPConditionVariable.Create;
-{$endif}
+{$ifend}
 end;
 
 destructor TPasMPBarrier.Destroy;
 begin
-{$ifdef unix}
+{$if defined(PasMPPThreadBarrier)}
  pthread_barrier_destroy(@fBarrier);
 {$else}
  fConditionVariableLock.Acquire;
@@ -6848,12 +6981,12 @@ begin
  end;
  fConditionVariable.Free;
  fConditionVariableLock.Free;
-{$endif}
+{$ifend}
  inherited Destroy;
 end;
 
 function TPasMPBarrier.Wait:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$ifdef unix}
+{$if defined(PasMPPThreadBarrier)}
 begin
  result:=pthread_barrier_wait(@fBarrier)=PTHREAD_BARRIER_SERIAL_THREAD;
 end;
@@ -6890,7 +7023,7 @@ begin
   fConditionVariableLock.Release;
  end;
 end;
-{$endif}
+{$ifend}
 
 constructor TPasMPThreadSafeStack.Create;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
@@ -11106,7 +11239,7 @@ begin
    end;
    if (length(s)>2) and (s[1]='0') and (s[2]='-') then begin
     Delete(s,1,2);
-    result:=StrToIntDef(s,-1);
+    result:=StrToIntDef(String(s),-1);
     if result>=0 then begin
      inc(result);
      SetLength(AvailableCPUCores,result);
