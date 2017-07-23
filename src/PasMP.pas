@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-07-23-04-02-0000                       *
+ *                        Version 2017-07-23-04-27-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2112,7 +2112,6 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fJobWorkerThreadHashTable:TPasMPJobWorkerThreadHashTable;
 {$endif}
        fProfiler:TPasMPProfiler;
-       class procedure DestroyGlobalInstance;
        class function GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif}):TPasMPUInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        function GetJobWorkerThread:TPasMPJobWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
        procedure WaitForWakeUp;
@@ -2144,6 +2143,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        constructor Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const AllWorkerThreadsHaveOwnSystemThreads:boolean=false;const Profiling:boolean=false);
        destructor Destroy; override;
        class function CreateGlobalInstance:TPasMP;
+       class procedure DestroyGlobalInstance;
        class function GetGlobalInstance:TPasMP; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        class function GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):TPasMPInt32; {$ifdef HAS_STATIC}static;{$endif}
        class procedure Relax; {$ifdef HAS_STATIC}static;{$endif}{$if defined(CPU386) or defined(CPUx86_64)}{$elseif defined(CAN_INLINE)}inline;{$ifend}
