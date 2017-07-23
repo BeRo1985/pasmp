@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-07-07-16-41-0000                       *
+ *                        Version 2017-07-23-04-02-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2197,6 +2197,8 @@ var GlobalPasMP:TPasMP=nil; // "Optional" singleton-like global PasMP instance
     GlobalPasMPThreadHeadRoomForForeignTasks:TPasMPInt32=0;
     GlobalPasMPDoCPUCorePinning:boolean=true;
     GlobalPasMPSleepingOnIdle:boolean=true;
+    GlobalPasMPAllWorkerThreadsHaveOwnSystemThreads:boolean=false;
+    GlobalPasMPProfiling:boolean=false;
 
     GPasMP:TPasMP absolute GlobalPasMP; // A shorter name for lazy peoples
 
@@ -11075,7 +11077,9 @@ begin
     GlobalPasMP:=TPasMP.Create(GlobalPasMPMaximalThreads,
                                GlobalPasMPThreadHeadRoomForForeignTasks,
                                GlobalPasMPDoCPUCorePinning,
-                               GlobalPasMPSleepingOnIdle);
+                               GlobalPasMPSleepingOnIdle,
+                               GlobalPasMPAllWorkerThreadsHaveOwnSystemThreads,
+                               GlobalPasMPProfiling);
     TPasMPMemoryBarrier.Sync;
    end;
   finally
