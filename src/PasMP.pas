@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-07-23-04-27-0000                       *
+ *                        Version 2017-09-21-02-05-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -3133,65 +3133,43 @@ end;
 
 {$if defined(FPC) and defined(CPUARM) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
 function InterlockedCompareExchange64(var Destination:TPasMPInt64;NewValue:TPasMPInt64;Comperand:TPasMPInt64):TPasMPInt64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
-label Loop,Fail,Done;
+label Loop;
 asm
- // LDREXD and STREXD were introduced in ARM 11, so the LDREXD and STREXD instructions in ARM all v7 variants or above. In v6, only some variants support it.
+ // LDREXD and STREXD were introduced in ARM 11, so the LDREXD and STREXD instructions in
+ // ARM all v7 variants or above. In v6, only some variants support it (ARMv6k).
+ // the LDREXD and STREXD instructions demands that Rm be an even numbered register
+ // This routine is for non-thumb code
  // Input:
  // r0 = pointer to Destination
  // r1 = NewValue.Lo
  // r2 = NewValue.Hi
  // r3 = Comperand.Lo
  // [sp] = Comperand.Hi
-{$define UseSTREXDEQ}
-{$ifdef UseSTREXDEQ}
- stmfd sp!,{r2,r4,r5,r6,r7}
- // the strex instruction demands that Rm be an even numbered register, so move r1 and r2 into r4 and r5
- mov r4,r1 // r4 = NewValue.Lo
- mov r5,r2 // r5 = NewValue.Hi
- ldrd	r2,[sp,#20] // r2 = Comperand.Hi
- .long 0xf3bf8f5f // dmb sy
-Loop:
- ldrexd	r6,[r0] // loads R6 and R7, so r6 = Destination.Lo, r7 = Destination.Hi
- cmp r6,r3 // if Destination.Lo = Comperand.Lo
-//it eq
- cmpeq r7,r2 // if Destination.Hi = Comperand.Hi
- strexdeq r1,r4,[r0]  // [r0]=r4 and [r0+4]=r5
- bne Fail
- cmp r1,#1 // 1 for failure and 0 for success
- beq Loop
- bne Done
-Fail:
- clrex
-Done:
- .long 0xf3bf8f5f // dmb sy
- mov r0,r6
- mov r1,r7
- ldmfd sp!,{r2,r4,r5,r6,r7}
-{$else}
- stmfd sp!,{r2,r4,r5,r6,r7}
- // the strex instruction demands that Rm be an even numbered register, so move r1 and r2 into r4 and r5
- mov r4,r1 // r4 = NewValue.Lo
- mov r5,r2 // r5 = NewValue.Hi
- ldrd	r2,[sp,#20] // r2 = Comperand.Hi
- .long 0xf3bf8f5f // dmb sy
-Loop:
- ldrexd	r6,[r0] // loads R6 and R7, so r6 = Destination.Lo, r7 = Destination.Hi
- cmp r6,r3 // if Destination.Lo = Comperand.Lo
- it	eq
- cmpeq r7,r2 // if Destination.Hi = Comperand.Hi
- bne Fail
- strexd r1,r4,[r0]  // [r0]=r4 and [r0+4]=r5
- cmp r1,#1 // 1 for failure and 0 for success
- beq Loop
- bne Done
-Fail:
- clrex
-Done:
- .long 0xf3bf8f5f // dmb sy
- mov r0,r6
- mov r1,r7
- ldmfd sp!,{r2,r4,r5,r6,r7}
+ stmfd sp!,{r4,r5,r6,r7}
+ mov r4,r3 // r4 = Comperand.Lo (r3)
+ ldrd	r5,[sp,#16] // r5 = Comperand.Hi ([sp+16])
+ mov r6,r1 // r6 = NewValue.Lo (r1)
+ mov r7,r2 // r7 = NewValue.Hi (r2)
+ mov r2,r0 // r2 = pointer to Destination (r0)
+{$ifdef CPUARM6K}
+ .long 0xee072fba // mcr p15,0,r2,c7,c10,5
+{$else} // >= CPUARMV7A
+ .long 0xf57ff05f // dmb sy
 {$endif}
+Loop:
+ ldrexd	r0,r1,[r2] // loads r0 and r1 from pointer to Destination (r2), so r0 = Destination.Lo, r1 = Destination.Hi
+ eors r3,r0,r4 // compare Destination.Lo (r0) with Comperand.Lo (r4)
+ eoreqs r3,r1,r5 // compare Destination.Hi (r1) with Comperand.Hi (r5)
+ strexdeq r3,r6,r7,[r2]  // [r2]=r6 and [r2+4]=r7 and r3=result (0 for success or 1 for failure)
+ teqeq r3,#1 // 1 for failure and 0 for success
+ beq Loop // try again if failed
+{$ifdef CPUARM6K}
+ .long 0xee072fba // mcr p15,0,r2,c7,c10,5
+{$else} // >= CPUARMV7A
+ .long 0xf57ff05f // dmb sy
+{$endif}
+ // r0 and r1 should contain here now the old Lo and Hi values from pointer to Destination (r2)
+ ldmfd sp!,{r4,r5,r6,r7}
 end;
 {$ifend}
 
