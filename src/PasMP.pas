@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-09-21-02-15-0000                       *
+ *                        Version 2017-09-21-20-33-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -318,24 +318,24 @@ unit PasMP;
   {$define Unix}
  {$endif}
 {$endif}
-{$ifdef CPU386}
+{$if defined(CPU386) or defined(CPUx86_64) or defined(CPUAARCH64)}
  {$define HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-{$endif}
-{$ifdef CPUx86_64}
- {$define HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-{$endif}
-{$ifdef CPUARM}
- {-$define HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-{$endif}
-{$ifdef Win32}
+{$elseif defined(CPUARM)}
+ {$if defined(CPUARMV6K)}
+  // = CPUARMV6K
+  {$ifdef FORCE_ARM_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+   {$define HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+  {$endif}
+ {$elseif defined(CPUARM_HAS_DMB) and defined(CPUARM_HAS_LDREX)}
+  // >= CPUARMV7A
+  {$ifdef FORCE_ARM_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+   {$define HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+  {$endif}
+ {$ifend}
+{$ifend}
+{$if defined(Win32) or defined(Win64) or defined(WinCE)}
  {$define Windows}
-{$endif}
-{$ifdef Win64}
- {$define Windows}
-{$endif}
-{$ifdef WinCE}
- {$define Windows}
-{$endif}
+{$ifend}
 {$rangechecks off}
 {$extendedsyntax on}
 {$writeableconst on}
@@ -2202,42 +2202,47 @@ var GlobalPasMP:TPasMP=nil; // "Optional" singleton-like global PasMP instance
 
     GPasMP:TPasMP absolute GlobalPasMP; // A shorter name for lazy peoples
 
-{$ifdef fpc}
-{$else}
-{$if CompilerVersion>=25}
-{$else}
-{$ifdef fpc}
+{$if defined(fpc)}
+{$elseif CompilerVersion>=25}
+{$elseif defined(fpc)}
 procedure FallbackMemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
-{$else}
-{$if CompilerVersion>=25}
+{$elseif CompilerVersion>=25}
 procedure FallbackReadBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 procedure FallbackReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 procedure FallbackReadWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 procedure FallbackWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
-{$else}
-{$ifdef CPU386}
+procedure FallbackMemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+{$elseif defined(CPU386)}
 procedure FallbackReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
 procedure FallbackReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 procedure FallbackReadWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
 procedure FallbackWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
-{$else}
-{$ifdef CPUx64}
+procedure FallbackMemoryBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$elseif defined(CPUx86)}
 procedure FallbackReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
 procedure FallbackReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 procedure FallbackReadWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
 procedure FallbackWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackMemoryBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$elseif defined(CPUAARCH64)}
+procedure FallbackReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackReadWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackMemoryBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$elseif defined(CPUARM)}
+procedure FallbackReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+procedure FallbackReadWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure FallbackMemoryBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$else}
 procedure FallbackReadBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 procedure FallbackReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 procedure FallbackReadWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 procedure FallbackWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
-{$endif}
-{$endif}
 procedure FallbackMemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 {$ifend}
-{$endif}
-{$ifend}
-{$endif}
 
 {$if defined(cpu386)}
 {$ifndef fpc}
@@ -3132,7 +3137,8 @@ end;
 {$endif}
 
 {$if defined(FPC) and defined(CPUARM) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
-function InterlockedCompareExchange64(var Destination:TPasMPInt64;NewValue:TPasMPInt64;Comperand:TPasMPInt64):TPasMPInt64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+{$if defined(CPUARM_HAS_LDREX)}
+function InterlockedCompareExchange64(var Destination:TPasMPInt64;NewValue,Comperand:TPasMPInt64):TPasMPInt64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 label Loop;
 asm
  // LDREXD and STREXD were introduced in ARM 11, so the LDREXD and STREXD instructions in
@@ -3151,11 +3157,29 @@ asm
  mov r6,r1 // r6 = NewValue.Lo (r1)
  mov r7,r2 // r7 = NewValue.Hi (r2)
  mov r2,r0 // r2 = pointer to Destination (r0)
-{$ifdef CPUARM6K}
- .long 0xee072fba // mcr p15,0,r2,c7,c10,5
-{$else} // >= CPUARMV7A
+{$if defined(CPUARM_HAS_DMB)} // >= CPUARMV7A
  .long 0xf57ff05f // dmb sy
-{$endif}
+{$elseif defined(CPUARMV6K)} // = CPUARMV6K
+ .long 0xee072fba // mcr p15,0,r2,c7,c10,5
+{$elseif defined(Linux) or defined(Android)} // Linux and Android with a kernel version >= 2.6.15 respectively _kuser_helper_version >= 3
+ // r0 = kuser_memory_barrier at 0xffff0fa0 (see https://www.kernel.org/doc/Documentation/arm/kernel_user_helpers.txt)
+ stmfd r13!,{lr}
+ mvn r0,#0x0000f000
+ sub r0,r0,#0x5f
+{$if defined(CPUARM_HAS_BLX)}
+ blx r0
+{$elseif defined(CPUARM_HAS_BLX)}
+ mov lr,pc
+{$if defined(CPUARM_HAS_BX)}
+ bx r0
+{$else}
+ mov pc,r0
+{$ifend}
+ ldmfd r13!,{pc}
+{$ifend}
+{$else} // Otherwise give up
+ {$error Non-supported target platform configuration}
+{$ifend}
 Loop:
  ldrexd	r0,r1,[r2] // loads r0 and r1 from pointer to Destination (r2), so r0 = Destination.Lo, r1 = Destination.Hi
  eors r3,r0,r4 // compare Destination.Lo (r0) with Comperand.Lo (r4)
@@ -3163,18 +3187,83 @@ Loop:
  strexdeq r3,r6,r7,[r2]  // [r2]=r6 and [r2+4]=r7 and r3=result (0 for success or 1 for failure)
  teqeq r3,#1 // 1 for failure and 0 for success
  beq Loop // try again if failed
-{$ifdef CPUARM6K}
- .long 0xee072fba // mcr p15,0,r2,c7,c10,5
-{$else} // >= CPUARMV7A
+{$if defined(CPUARM_HAS_DMB)} // >= CPUARMV7A
  .long 0xf57ff05f // dmb sy
-{$endif}
- // r0 and r1 should contain here now the old Lo and Hi values from pointer to Destination (r2)
+{$elseif defined(CPUARMV6K)} // = CPUARMV6K
+ .long 0xee072fba // mcr p15,0,r2,c7,c10,5
+{$elseif defined(Linux) or defined(Android)} // Linux and Android with a kernel version >= 2.6.15 respectively _kuser_helper_version >= 3
+ // r0 = kuser_memory_barrier at 0xffff0fa0 (see https://www.kernel.org/doc/Documentation/arm/kernel_user_helpers.txt)
+ stmfd r13!,{lr}
+ mvn r0,#0x0000f000
+ sub r0,r0,#0x5f
+{$if defined(CPUARM_HAS_BLX)}
+ blx r0
+{$elseif defined(CPUARM_HAS_BLX)}
+ mov lr,pc
+{$if defined(CPUARM_HAS_BX)}
+ bx r0
+{$else}
+ mov pc,r0
+{$ifend}
+ ldmfd r13!,{pc}
+{$ifend}
+{$else} // Otherwise give up
+ {$error Non-supported target platform configuration}
+{$ifend}
+ // r0 and r1 should contain here now the old Lo and Hi values from pointer to Destination (r2) as
+ // result value registers
  ldmfd sp!,{r4,r5,r6,r7}
 end;
+{$elseif defined(FPC) and defined(CPUAARCH64)}
+function InterlockedCompareExchange128(var Destination:TPasMPInt128Record;const NewValue,Comperand:TPasMPInt128Record):TPasMPInt128Record; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
+label Loop,Fail;
+asm
+ // Input:
+ // x0 = pointer to Destination
+ // x1 = NewValue.Lo
+ // x2 = NewValue.Hi
+ // x3 = Comperand.Lo
+ // x4 = Comperand.Hi
+ // x5 = Destination.Lo = [x0+0]
+ // x6 = Destination.Hi = [x0+8]
+ mov x6,x1
+Loop:
+ ldaxp x5,x1,[x0]
+ cmp x5,x3
+ bne Fail
+ cmp x1,x4
+ bne Fail
+ stlxp w7,x6,x2,[x0]
+ cbnz w7,Loop
+Fail:
+ mov x0,x5
+ // x0 and x1 should contain here now the old Lo and Hi values from pointer to Destination (x0) as
+ // result value registers
+end;
+{$elseif defined(Linux) or defined(Android)} // Linux and Android with a kernel version >= 3.1 respectively _kuser_helper_version >= 5
+function InterlockedCompareExchange64(var Destination:TPasMPInt64;NewValue,Comperand:TPasMPInt64):TPasMPInt64;
+type Tkuser__cmpxchg64=function(Comperand,NewValue,Destination:PPasMPInt64):TPasMPInt32;
+begin
+ if PPasMPInt32(Pointer(PtrUInt($ffff0ffc{__kuser__helper_version})))^>=5 then begin
+  // Warning:
+  // This assumes that the InterlockedCompareExchange64 uses the result only for
+  // successful/failure checking, but not for other purposes
+  repeat
+   result:=Destination;
+  until (Tkuser__cmpxchg64(Pointer(PtrUInt($ffff0f60{__kuser__cmpxchg64})))(@Comperand,@NewValue,@Destination)=0) and
+        (result<>Comperand);
+ end else begin
+  Assert(false,'Non-supported target platform configuration');
+  result:=not Comperand;
+ end;
+end;
+{$else} // Otherwise give up
+ {$error Non-supported target platform configuration}
 {$ifend}
 
-{$ifdef CPU386}
-function InterlockedCompareExchange64(var Destination:TPasMPInt64;NewValue:TPasMPInt64;Comperand:TPasMPInt64):TPasMPInt64; assembler;
+{$elseif defined(CPU386)}
+
+function InterlockedCompareExchange64(var Destination:TPasMPInt64;NewValue,Comperand:TPasMPInt64):TPasMPInt64; assembler;
 asm
  push ebx
  push edi
@@ -3187,9 +3276,9 @@ asm
  pop edi
  pop ebx
 end;
-{$endif}
 
-{$ifdef CPUx86_64}
+{$elseif defined(CPUx86_64)}
+
 function InterlockedCompareExchange128(var Destination:TPasMPInt128Record;const NewValue,Comperand:TPasMPInt128Record):TPasMPInt128Record; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 asm
  push rbx
@@ -3213,7 +3302,8 @@ asm
 {$endif}
  pop rbx
 end;
-{$endif}
+
+{$ifend}
 
 {$ifndef fpc}
 {$ifdef CPU386}
@@ -3461,31 +3551,42 @@ end;
 {$endif}
 {$endif}
 
-{$ifdef fpc}
+{$if defined(fpc)}
+
 procedure FallbackMemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  ReadWriteBarrier;
 end;
-{$else}
-{$if CompilerVersion>=25}
+
+{$elseif CompilerVersion>=25}
+
 procedure FallbackReadBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  MemoryBarrier;
 end;
+
 procedure FallbackReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  // reads imply barrier on earlier reads depended on
 end;
+
 procedure FallbackReadWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  MemoryBarrier;
 end;
+
 procedure FallbackWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  MemoryBarrier;
 end;
-{$else}
-{$ifdef CPU386}
+
+procedure FallbackMemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ MemoryBarrier;
+end;
+
+{$elseif defined(CPU386)}
+
 procedure FallbackReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
 asm
  lfence
@@ -3505,8 +3606,14 @@ procedure FallbackWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN
 asm
  sfence
 end;
-{$else}
-{$ifdef CPUx64}
+
+procedure FallbackMemoryBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+asm
+ mfence
+end;
+
+{$elseif defined(CPUx64)}
+
 procedure FallbackReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
 asm
  lfence
@@ -3526,6 +3633,158 @@ procedure FallbackWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN
 asm
  sfence
 end;
+
+procedure FallbackMemoryBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+asm
+ mfence
+end;
+
+{$elseif defined(CPUAARCH64)}
+
+procedure FallbackReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+asm
+ .long 0xd50339bf // dmb ishld (or #9)
+end;
+
+procedure FallbackReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ // reads imply barrier on earlier reads depended on
+end;
+
+procedure FallbackReadWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+asm
+ .long 0xd5033bbf // dmb ish (or #11)
+end;
+
+procedure FallbackWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+asm
+ .long 0xd5033abf // dmb ishst or (#10)
+end;
+
+procedure FallbackMemoryBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+asm
+ .long 0xd5033bbf // dmb ish (or #11)
+end;
+
+{$elseif defined(CPUARM)}
+
+procedure FallbackReadBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+asm
+{$if defined(CPUARM_HAS_DMB)} // >= CPUARMV7A
+ .long 0xf57ff05f // dmb sy
+{$elseif defined(CPUARMV6K)} // = CPUARMV6K
+ mov r0,#0
+ .long 0xee070fba // mcr p15,0,r2,c7,c10,5
+{$elseif defined(Linux) or defined(Android)} // Linux and Android with a kernel version >= 2.6.15 respectively _kuser_helper_version >= 3
+ // r0 = kuser_memory_barrier at 0xffff0fa0 (see https://www.kernel.org/doc/Documentation/arm/kernel_user_helpers.txt)
+ stmfd r13!,{lr}
+ mvn r0,#0x0000f000
+ sub r0,r0,#0x5f
+{$if defined(CPUARM_HAS_BLX)}
+ blx r0
+{$elseif defined(CPUARM_HAS_BLX)}
+ mov lr,pc
+{$if defined(CPUARM_HAS_BX)}
+ bx r0
+{$else}
+ mov pc,r0
+{$ifend}
+ ldmfd r13!,{pc}
+{$ifend}
+{$else} // Otherwise give up
+ {$error Non-supported target platform configuration}
+{$ifend}
+end;
+
+procedure FallbackReadDependencyBarrier; {$ifdef CAN_INLINE}inline;{$endif}
+begin
+ // reads imply barrier on earlier reads depended on
+end;
+
+procedure FallbackReadWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+asm
+{$if defined(CPUARM_HAS_DMB)} // >= CPUARMV7A
+ .long 0xf57ff05f // dmb sy
+{$elseif defined(CPUARMV6K)} // = CPUARMV6K
+ mov r0,#0
+ .long 0xee070fba // mcr p15,0,r2,c7,c10,5
+{$elseif defined(Linux) or defined(Android)} // Linux and Android with a kernel version >= 2.6.15 respectively _kuser_helper_version >= 3
+ // r0 = kuser_memory_barrier at 0xffff0fa0 (see https://www.kernel.org/doc/Documentation/arm/kernel_user_helpers.txt)
+ stmfd r13!,{lr}
+ mvn r0,#0x0000f000
+ sub r0,r0,#0x5f
+{$if defined(CPUARM_HAS_BLX)}
+ blx r0
+{$elseif defined(CPUARM_HAS_BLX)}
+ mov lr,pc
+{$if defined(CPUARM_HAS_BX)}
+ bx r0
+{$else}
+ mov pc,r0
+{$ifend}
+ ldmfd r13!,{pc}
+{$ifend}
+{$else} // Otherwise give up
+ {$error Non-supported target platform configuration}
+{$ifend}
+end;
+
+procedure FallbackWriteBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+asm
+{$if defined(CPUARM_HAS_DMB)} // >= CPUARMV7A
+ .long 0xf57ff05e // dmb st
+{$elseif defined(CPUARMV6K)} // = CPUARMV6K
+ mov r0,#0
+ .long 0xee070fba // mcr p15,0,r2,c7,c10,5
+{$elseif defined(Linux) or defined(Android)} // Linux and Android with a kernel version >= 2.6.15 respectively _kuser_helper_version >= 3
+ // r0 = kuser_memory_barrier at 0xffff0fa0 (see https://www.kernel.org/doc/Documentation/arm/kernel_user_helpers.txt)
+ stmfd r13!,{lr}
+ mvn r0,#0x0000f000
+ sub r0,r0,#0x5f
+{$if defined(CPUARM_HAS_BLX)}
+ blx r0
+{$elseif defined(CPUARM_HAS_BLX)}
+ mov lr,pc
+{$if defined(CPUARM_HAS_BX)}
+ bx r0
+{$else}
+ mov pc,r0
+{$ifend}
+ ldmfd r13!,{pc}
+{$ifend}
+{$else} // Otherwise give up
+ {$error Non-supported target platform configuration}
+{$ifend}
+end;
+
+procedure FallbackMemoryBarrier; assembler; {$ifdef fpc}nostackframe; {$ifdef CAN_INLINE}inline;{$endif}{$endif}
+asm
+{$if defined(CPUARM_HAS_DMB)} // >= CPUARMV7A
+ .long 0xf57ff05f // dmb sy
+{$elseif defined(CPUARMV6K)} // = CPUARMV6K
+ mov r0,#0
+ .long 0xee070fba // mcr p15,0,r2,c7,c10,5
+{$elseif defined(Linux) or defined(Android)} // Linux and Android with a kernel version >= 2.6.15 respectively _kuser_helper_version >= 3
+ // r0 = kuser_memory_barrier at 0xffff0fa0 (see https://www.kernel.org/doc/Documentation/arm/kernel_user_helpers.txt)
+ stmfd r13!,{lr}
+ mvn r0,#0x0000f000
+ sub r0,r0,#0x5f
+{$if defined(CPUARM_HAS_BLX)}
+ blx r0
+{$elseif defined(CPUARM_HAS_BLX)}
+ mov lr,pc
+{$if defined(CPUARM_HAS_BX)}
+ bx r0
+{$else}
+ mov pc,r0
+{$ifend}
+ ldmfd r13!,{pc}
+{$ifend}
+{$else} // Otherwise give up
+ {$error Non-supported target platform configuration}
+{$ifend}
+end;
+
 {$else}
 procedure FallbackReadBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
@@ -3543,8 +3802,6 @@ end;
 procedure FallbackWriteBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
 end;
-{$endif}
-{$endif}
 
 procedure FallbackMemoryBarrier; {$ifdef CAN_INLINE}inline;{$endif}
 begin
@@ -3555,7 +3812,6 @@ begin
 {$endif}
 end;
 {$ifend}
-{$endif}
 
 procedure MemorySwap(a,b:pointer;Size:TPasMPInt32);
 var Temp:TPasMPUInt32;
@@ -5133,15 +5389,13 @@ end;
 
 class procedure TPasMPMemoryBarrier.Read;
 begin
-{$ifdef fpc}
+{$if defined(fpc)}
  ReadBarrier;
-{$else}
-{$if CompilerVersion>=25}
+{$elseif CompilerVersion>=25}
  MemoryBarrier;
 {$else}
  FallbackReadBarrier;
 {$ifend}
-{$endif}
 end;
 
 class procedure TPasMPMemoryBarrier.ReadDependency;
@@ -5151,41 +5405,35 @@ end;
 
 class procedure TPasMPMemoryBarrier.ReadWrite;
 begin
-{$ifdef fpc}
+{$if defined(fpc)}
  ReadWriteBarrier;
-{$else}
-{$if CompilerVersion>=25}
+{$elseif CompilerVersion>=25}
  MemoryBarrier;
 {$else}
  FallbackReadWriteBarrier;
 {$ifend}
-{$endif}
 end;
 
 class procedure TPasMPMemoryBarrier.Write;
 begin
-{$ifdef fpc}
+{$if defined(fpc)}
  WriteBarrier;
-{$else}
-{$if CompilerVersion>=25}
+{$elseif CompilerVersion>=25}
  MemoryBarrier;
 {$else}
  FallbackWriteBarrier;
 {$ifend}
-{$endif}
 end;
 
 class procedure TPasMPMemoryBarrier.Sync;
 begin
-{$ifdef fpc}
+{$if defined(fpc)}
  ReadWriteBarrier;
-{$else}
-{$if CompilerVersion>=25}
+{$elseif CompilerVersion>=25}
  MemoryBarrier;
 {$else}
  FallbackReadWriteBarrier;
 {$ifend}
-{$endif}
 end;
 
 class procedure TPasMPMemory.AllocateAlignedMemory(var p;Size:TPasMPInt32;Align:TPasMPInt32=PasMPCPUCacheLineSize);
