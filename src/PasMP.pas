@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-09-21-20-33-0000                       *
+ *                        Version 2017-09-21-20-38-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -3251,7 +3251,7 @@ begin
   repeat
    result:=Destination;
   until (Tkuser__cmpxchg64(Pointer(PtrUInt($ffff0f60{__kuser__cmpxchg64})))(@Comperand,@NewValue,@Destination)=0) and
-        (result<>Comperand);
+        (result=Comperand);
  end else begin
   Assert(false,'Non-supported target platform configuration');
   result:=not Comperand;
