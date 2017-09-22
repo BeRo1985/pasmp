@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-09-21-20-38-0000                       *
+ *                        Version 2017-09-22-21-17-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -3246,12 +3246,14 @@ type Tkuser__cmpxchg64=function(Comperand,NewValue,Destination:PPasMPInt64):TPas
 begin
  if PPasMPInt32(Pointer(PtrUInt($ffff0ffc{__kuser__helper_version})))^>=5 then begin
   // Warning:
-  // This assumes that the InterlockedCompareExchange64 uses the result only for
+  // This assumes that the InterlockedCompareExchange64 caller uses the result only for
   // successful/failure checking, but not for other purposes
-  repeat
-   result:=Destination;
-  until (Tkuser__cmpxchg64(Pointer(PtrUInt($ffff0f60{__kuser__cmpxchg64})))(@Comperand,@NewValue,@Destination)=0) and
-        (result=Comperand);
+  result:=Destination;
+  if Tkuser__cmpxchg64(Pointer(PtrUInt($ffff0f60{__kuser__cmpxchg64})))(@Comperand,@NewValue,@Destination)=0 then begin
+   result:=Comperand;
+  end else if result=Comperand then begin
+   result:=not Comperand;
+  end;
  end else begin
   Assert(false,'Non-supported target platform configuration');
   result:=not Comperand;
