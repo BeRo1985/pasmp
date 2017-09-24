@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-09-22-00-31-0000                       *
+ *                        Version 2017-09-24-02-55-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1314,7 +1314,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fItemSize:TPasMPInt32;
        fInternalNodeSize:TPasMPInt32;
       public
-       constructor Create(ItemSize:TPasMPInt32);
+       constructor Create(ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        procedure Clear; {$ifdef CAN_INLINE}inline;{$endif}
        function IsEmpty:boolean; {$ifdef CAN_INLINE}inline;{$endif}
@@ -1402,7 +1402,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function SetKeyValue(const Key,Value:pointer):boolean;
        function DeleteKey(const Key:pointer):boolean;
       public
-       constructor Create(const ItemSize:TPasMPInt32);
+       constructor Create(const ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        property GrowLoadFactor:single read GetGrowLoadFactor write SetGrowLoadFactor;
      end;
@@ -1432,7 +1432,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function Push(const ItemData:pointer):TPasMPInt32;
        function Pop(const ItemData:pointer):boolean;
       public
-       constructor Create(const AItemSize:TPasMPInt32);
+       constructor Create(const aItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        procedure Clear; virtual;
        property Size:TPasMPInt32 read fSize write SetSize;
@@ -1526,7 +1526,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fItemSize:TPasMPInt32;
        fInternalItemSize:TPasMPInt32;
       public
-       constructor Create(const MaximalCount,ItemSize:TPasMPInt32);
+       constructor Create(const MaximalCount,ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        function IsEmpty:boolean;
        function IsFull:boolean;
@@ -1551,7 +1551,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fMaximalCount:TPasMPInt32;
        fInternalItemSize:TPasMPInt32;
       public
-       constructor Create(const MaximalCount:TPasMPInt32);
+       constructor Create(const MaximalCount:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        function IsEmpty:boolean;
        function IsFull:boolean;
@@ -1574,8 +1574,9 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       private
        fStack:TPasMPThreadSafeStack;
        fItemSize:TPasMPInt32;
+       fAddCPUCacheLinePaddingToInternalItemDataStructure:boolean;
       public
-       constructor Create(const ItemSize:TPasMPInt32);
+       constructor Create(const ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        function IsEmpty:boolean;
        function Push(const Item):boolean;
@@ -1595,8 +1596,9 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       private
        fStack:TPasMPThreadSafeStack;
        fItemSize:TPasMPInt32;
+       fAddCPUCacheLinePaddingToInternalItemDataStructure:boolean;
       public
-       constructor Create;
+       constructor Create(const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        function IsEmpty:boolean;
        function Push(const Item:T):boolean;
@@ -1623,7 +1625,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fItemSize:TPasMPInt32;
        fInternalItemSize:TPasMPInt32;
       public
-       constructor Create(const MaximalCount,ItemSize:TPasMPInt32);
+       constructor Create(const MaximalCount,ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        function IsEmpty:boolean;
        function IsFull:boolean;
@@ -1648,7 +1650,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fMaximalCount:TPasMPInt32;
        fInternalItemSize:TPasMPInt32;
       public
-       constructor Create(const MaximalCount:TPasMPInt32);
+       constructor Create(const MaximalCount:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        function IsEmpty:boolean;
        function IsFull:boolean;
@@ -1682,7 +1684,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fTailSequence:TPasMPInt32;
        fCacheLineFillUp2:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPInt32))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
       public
-       constructor Create(const MaximalCount,ItemSize:TPasMPInt32);
+       constructor Create(const MaximalCount,ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        function IsEmpty:boolean;
        function IsFull:boolean;
@@ -1711,7 +1713,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fTailSequence:TPasMPInt32;
        fCacheLineFillUp2:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPInt32))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
       public
-       constructor Create(const MaximalCount:TPasMPInt32);
+       constructor Create(const MaximalCount:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        function IsEmpty:boolean;
        function IsFull:boolean;
@@ -1727,7 +1729,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fQueue:TPasMPThreadSafeQueue;
        fItemSize:TPasMPInt32;
       public
-       constructor Create(const ItemSize:TPasMPInt32);
+       constructor Create(const ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        function IsEmpty:boolean;
        procedure Enqueue(const Item);
@@ -1745,8 +1747,9 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
             end;
       private
        fQueue:TPasMPThreadSafeQueue;
+       fAddCPUCacheLinePaddingToInternalItemDataStructure:boolean;
       public
-       constructor Create;
+       constructor Create(const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        function IsEmpty:boolean;
        procedure Enqueue(const Item:T);
@@ -1772,7 +1775,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function HashKey(const Key:pointer):TPasMPThreadSafeHashTableHash; override;
        function CompareKey(const Data,Key:pointer):boolean; override;
       public
-       constructor Create(const KeySize,ValueSize:TPasMPInt32);
+       constructor Create(const KeySize,ValueSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        function GetKeyValue(const Key;out Value):boolean;
        function SetKeyValue(const Key,Value):boolean;
@@ -1797,7 +1800,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function HashKey(const Key:pointer):TPasMPThreadSafeHashTableHash; override;
        function CompareKey(const Data,Key:pointer):boolean; override;
       public
-       constructor Create(const ValueSize:TPasMPInt32);
+       constructor Create(const ValueSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        function GetKeyValue(const Key:string;out Value):boolean;
        function SetKeyValue(const Key:string;const Value):boolean;
@@ -1822,7 +1825,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function HashKey(const Key:pointer):TPasMPThreadSafeHashTableHash; override;
        function CompareKey(const Data,Key:pointer):boolean; override;
       public
-       constructor Create;
+       constructor Create(const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        function GetKeyValue(const Key:string;out Value:string):boolean;
        function SetKeyValue(const Key,Value:string):boolean;
@@ -1852,7 +1855,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function HashKey(const Key:pointer):TPasMPThreadSafeHashTableHash; override;
        function CompareKey(const Data,Key:pointer):boolean; override;
       public
-       constructor Create;
+       constructor Create(const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        function GetKeyValue(const Key:KeyType;out Value:ValueType):boolean;
        function SetKeyValue(const Key:KeyType;const Value:ValueType):boolean;
@@ -1872,7 +1875,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure FinalizeItem(const ItemData:pointer); override;
        procedure CopyItem(const Source,Destination:pointer); override;
       public
-       constructor Create(const AItemSize:TPasMPInt32);
+       constructor Create(const aItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        function GetItem(const ItemIndex:TPasMPInt32;out ItemData):boolean;
        function SetItem(const ItemIndex:TPasMPInt32;const ItemData):boolean;
@@ -1894,7 +1897,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function GetPropertyItem(const ItemIndex:TPasMPInt32):T;
        procedure SetPropertyItem(const ItemIndex:TPasMPInt32;const ItemData:T);
       public
-       constructor Create;
+       constructor Create(const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        function GetItem(const ItemIndex:TPasMPInt32;out ItemData:T):boolean;
        function SetItem(const ItemIndex:TPasMPInt32;const ItemData:T):boolean;
@@ -7691,14 +7694,17 @@ const PasMPThreadSafeHashTableItemStateDeleted=-1;
       PasMPThreadSafeHashTableItemStateEmpty=0;
       PasMPThreadSafeHashTableItemStateUsed=1;
 
-constructor TPasMPThreadSafeHashTable.Create(const ItemSize:TPasMPInt32);
+constructor TPasMPThreadSafeHashTable.Create(const ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 begin
  inherited Create;
  fCriticalSection:=TPasMPCriticalSection.Create;
  fLock:=TPasMPMultipleReaderSingleWriterSpinLock.Create;
  fResizeLock:=TPasMPMultipleReaderSingleWriterSpinLock.Create;
  fItemSize:=ItemSize;
- fInternalItemSize:=TPasMPMath.RoundUpToMask32(SizeOf(TPasMPThreadSafeHashTableItem)+fItemSize,PasMPCPUCacheLineSize);
+ fInternalItemSize:=SizeOf(TPasMPThreadSafeHashTableItem)+fItemSize;
+ if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
+ end;
  fGrowLoadFactor:=((75 shl 7)+128) div 100; // 0.75
  TPasMPMemory.AllocateAlignedMemory(fFirstState,SizeOf(TPasMPThreadSafeHashTableState),PasMPCPUCacheLineSize);
  FillChar(fFirstState^,SizeOf(TPasMPThreadSafeHashTableState),#0);
@@ -8213,7 +8219,7 @@ begin
  until Version=fVersion;
 end;
 
-constructor TPasMPThreadSafeDynamicArray.Create(const AItemSize:TPasMPInt32);
+constructor TPasMPThreadSafeDynamicArray.Create(const AItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 var BucketItemIndex:TPasMPInt32;
     Bucket:pointer;
     BucketItemOffset:TPasMPPtrUInt;
@@ -8224,7 +8230,10 @@ begin
  fCountBuckets:=1;
  fItemSize:=AItemSize;
  fItemLockOffset:=TPasMPMath.RoundUpToMask32(fItemSize,SizeOf(TPasMPInt32));
- fInternalItemSize:=TPasMPMath.RoundUpToMask32(fItemLockOffset+SizeOf(TPasMPInt32),PasMPCPUCacheLineSize);
+ fInternalItemSize:=fItemLockOffset+SizeOf(TPasMPInt32);
+ if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
+ end;
  fLock:=TPasMPMultipleReaderSingleWriterSpinLock.Create;
  FillChar(fBuckets,SizeOf(TPasMPThreadSafeDynamicArrayBuckets),#0);
  TPasMPMemory.AllocateAlignedMemory(Bucket,PasMPThreadSafeDynamicArrayFirstBucketSize*TPasMPPtrUInt(fInternalItemSize));
@@ -9177,7 +9186,7 @@ begin
 end;
 {$endif}
 
-constructor TPasMPBoundedStack.Create(const MaximalCount,ItemSize:TPasMPInt32);
+constructor TPasMPBoundedStack.Create(const MaximalCount,ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 var i:TPasMPInt32;
     p:PPasMPUInt8;
     StackItem:PPasMPBoundedStackItem;
@@ -9187,7 +9196,10 @@ begin
  fFree:=TPasMPThreadSafeStack.Create;
  fMaximalCount:=MaximalCount;
  fItemSize:=ItemSize;
- fInternalItemSize:=TPasMPMath.RoundUpToMask32(SizeOf(TPasMPBoundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
+ fInternalItemSize:=SizeOf(TPasMPBoundedStackItem)+fItemSize;
+ if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
+ end;
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
  for i:=0 to fMaximalCount-1 do begin
@@ -9242,7 +9254,7 @@ begin
 end;
 
 {$ifdef HAS_GENERICS}
-constructor TPasMPBoundedStack<T>.Create(const MaximalCount:TPasMPInt32);
+constructor TPasMPBoundedStack<T>.Create(const MaximalCount:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 var i:TPasMPInt32;
     p:PPasMPUInt8;
     StackItem:PPasMPBoundedTypedStackItem;
@@ -9251,7 +9263,10 @@ begin
  fStack:=TPasMPThreadSafeStack.Create;
  fFree:=TPasMPThreadSafeStack.Create;
  fMaximalCount:=MaximalCount;
- fInternalItemSize:=TPasMPMath.RoundUpToMask32(SizeOf(TPasMPBoundedTypedStackItem),PasMPCPUCacheLineSize);
+ fInternalItemSize:=SizeOf(TPasMPBoundedTypedStackItem);
+ if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
+ end;
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
  for i:=0 to fMaximalCount-1 do begin
@@ -9317,11 +9332,12 @@ begin
 end;
 {$endif}
 
-constructor TPasMPUnboundedStack.Create(const ItemSize:TPasMPInt32);
+constructor TPasMPUnboundedStack.Create(const ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 begin
  inherited Create;
  fStack:=TPasMPThreadSafeStack.Create;
  fItemSize:=ItemSize;
+ fAddCPUCacheLinePaddingToInternalItemDataStructure:=AddCPUCacheLinePaddingToInternalItemDataStructure;
 end;
 
 destructor TPasMPUnboundedStack.Destroy;
@@ -9330,7 +9346,11 @@ begin
  repeat
   StackItem:=fStack.Pop;
   if assigned(StackItem) then begin
-   TPasMPMemory.FreeAlignedMemory(StackItem);
+   if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
+    TPasMPMemory.FreeAlignedMemory(StackItem);
+   end else begin
+    FreeMem(StackItem);
+   end;
   end else begin
    break;
   end;
@@ -9347,7 +9367,11 @@ end;
 function TPasMPUnboundedStack.Push(const Item):boolean;
 var StackItem:PPasMPUnboundedStackItem;
 begin
- TPasMPMemory.AllocateAlignedMemory(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize);
+ if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  TPasMPMemory.AllocateAlignedMemory(StackItem,TPasMPMath.RoundUpToMask32(SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize),PasMPCPUCacheLineSize);
+ end else begin
+  GetMem(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize);
+ end;
  Move(Item,StackItem^.Data,fItemSize);
  fStack.Push(StackItem);
  result:=true;
@@ -9359,7 +9383,11 @@ begin
  StackItem:=fStack.Pop;
  if assigned(StackItem) then begin
   Move(StackItem^.Data,Item,fItemSize);
-  TPasMPMemory.FreeAlignedMemory(StackItem);
+  if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
+   TPasMPMemory.FreeAlignedMemory(StackItem);
+  end else begin
+   FreeMem(StackItem);
+  end;
   result:=true;
  end else begin
   result:=false;
@@ -9367,11 +9395,12 @@ begin
 end;
 
 {$ifdef HAS_GENERICS}
-constructor TPasMPUnboundedStack<T>.Create;
+constructor TPasMPUnboundedStack<T>.Create(const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 begin
  inherited Create;
  fStack:=TPasMPThreadSafeStack.Create;
  fItemSize:=SizeOf(T);
+ fAddCPUCacheLinePaddingToInternalItemDataStructure:=AddCPUCacheLinePaddingToInternalItemDataStructure;
 end;
 
 destructor TPasMPUnboundedStack<T>.Destroy;
@@ -9381,7 +9410,11 @@ begin
   StackItem:=fStack.Pop;
   if assigned(StackItem) then begin
    Finalize(StackItem^);
-   TPasMPMemory.FreeAlignedMemory(StackItem);
+   if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
+    TPasMPMemory.FreeAlignedMemory(StackItem);
+   end else begin
+    FreeMem(StackItem);
+   end;
   end else begin
    break;
   end;
@@ -9398,7 +9431,11 @@ end;
 function TPasMPUnboundedStack<T>.Push(const Item:T):boolean;
 var StackItem:PPasMPUnboundedTypedStackItem;
 begin
- TPasMPMemory.AllocateAlignedMemory(StackItem,SizeOf(TPasMPUnboundedTypedStackItem)+fItemSize,PasMPCPUCacheLineSize);
+ if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  TPasMPMemory.AllocateAlignedMemory(StackItem,TPasMPMath.RoundUpToMask32(SizeOf(TPasMPUnboundedTypedStackItem),PasMPCPUCacheLineSize),PasMPCPUCacheLineSize);
+ end else begin
+  GetMem(StackItem,SizeOf(TPasMPUnboundedTypedStackItem));
+ end;
  Initialize(StackItem^);
  StackItem^.Data:=Item;
  fStack.Push(StackItem);
@@ -9412,7 +9449,11 @@ begin
  if assigned(StackItem) then begin
   Item:=StackItem^.Data;
   Finalize(StackItem^);
-  TPasMPMemory.FreeAlignedMemory(StackItem);
+  if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
+   TPasMPMemory.FreeAlignedMemory(StackItem);
+  end else begin
+   FreeMem(StackItem);
+  end;
   result:=true;
  end else begin
   result:=false;
@@ -9420,7 +9461,7 @@ begin
 end;
 {$endif}
 
-constructor TPasMPBoundedQueue.Create(const MaximalCount,ItemSize:TPasMPInt32);
+constructor TPasMPBoundedQueue.Create(const MaximalCount,ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 var i:TPasMPInt32;
     p:PPasMPUInt8;
     QueueItem:PPasMPBoundedQueueItem;
@@ -9430,7 +9471,10 @@ begin
  fFree:=TPasMPThreadSafeStack.Create;
  fMaximalCount:=MaximalCount;
  fItemSize:=ItemSize;
- fInternalItemSize:=TPasMPMath.RoundUpToMask32(SizeOf(TPasMPBoundedQueueItem)+fItemSize,PasMPCPUCacheLineSize);
+ fInternalItemSize:=SizeOf(TPasMPBoundedQueueItem)+fItemSize;
+ if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
+ end;
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
  for i:=0 to fMaximalCount-1 do begin
@@ -9482,7 +9526,7 @@ begin
 end;
 
 {$ifdef HAS_GENERICS}
-constructor TPasMPBoundedQueue<T>.Create(const MaximalCount:TPasMPInt32);
+constructor TPasMPBoundedQueue<T>.Create(const MaximalCount:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 var i:TPasMPInt32;
     p:PPasMPUInt8;
     QueueItem:PPasMPBoundedTypedQueueItem;
@@ -9491,7 +9535,10 @@ begin
  fQueue:=TPasMPThreadSafeQueue.Create(SizeOf(PPasMPBoundedQueueItem));
  fFree:=TPasMPThreadSafeStack.Create;
  fMaximalCount:=MaximalCount;
- fInternalItemSize:=TPasMPMath.RoundUpToMask32(SizeOf(TPasMPBoundedTypedQueueItem),PasMPCPUCacheLineSize);
+ fInternalItemSize:=SizeOf(TPasMPBoundedTypedQueueItem);
+ if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
+ end;
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
  for i:=0 to fMaximalCount-1 do begin
@@ -9558,7 +9605,7 @@ begin
 end;
 {$endif}
 
-constructor TPasMPBoundedArrayBasedQueue.Create(const MaximalCount,ItemSize:TPasMPInt32);
+constructor TPasMPBoundedArrayBasedQueue.Create(const MaximalCount,ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 var i:TPasMPInt32;
     p:PPasMPUInt8;
     QueueItemNode:PPasMPBoundedArrayBasedQueueItemNode;
@@ -9570,7 +9617,10 @@ begin
  end;
  fMask:=fMaximalCount-1;
  fItemSize:=ItemSize;
- fInternalItemSize:=TPasMPMath.RoundUpToMask32(SizeOf(TPasMPBoundedArrayBasedQueueItemNode)+fItemSize,PasMPCPUCacheLineSize);
+ fInternalItemSize:=SizeOf(TPasMPBoundedArrayBasedQueueItemNode)+fItemSize;
+ if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
+ end;
  fHeadSequence:=0;
  fTailSequence:=0;
  TPasMPMemoryBarrier.ReadWrite;
@@ -9729,7 +9779,7 @@ begin
 end;
 
 {$ifdef HAS_GENERICS}
-constructor TPasMPBoundedArrayBasedQueue<T>.Create(const MaximalCount:TPasMPInt32);
+constructor TPasMPBoundedArrayBasedQueue<T>.Create(const MaximalCount:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 var i:TPasMPInt32;
     p:PPasMPUInt8;
     QueueItemNode:PPasMPBoundedArrayTypedQueueItemNode;
@@ -9740,7 +9790,10 @@ begin
   raise EPasMPBoundedArrayBasedQueue.Create('Maximum count must be power of two');
  end;
  fMask:=fMaximalCount-1;
- fInternalItemSize:=TPasMPMath.RoundUpToMask32(SizeOf(TPasMPBoundedArrayTypedQueueItemNode),PasMPCPUCacheLineSize);
+ fInternalItemSize:=SizeOf(TPasMPBoundedArrayTypedQueueItemNode);
+ if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
+ end;
  fHeadSequence:=0;
  fTailSequence:=0;
  TPasMPMemoryBarrier.ReadWrite;
@@ -9899,10 +9952,10 @@ end;
 
 {$endif}
 
-constructor TPasMPUnboundedQueue.Create(const ItemSize:TPasMPInt32);
+constructor TPasMPUnboundedQueue.Create(const ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 begin
  inherited Create;
- fQueue:=TPasMPThreadSafeQueue.Create(ItemSize);
+ fQueue:=TPasMPThreadSafeQueue.Create(ItemSize,AddCPUCacheLinePaddingToInternalItemDataStructure);
  fItemSize:=ItemSize;
 end;
 
@@ -9928,10 +9981,11 @@ begin
 end;
 
 {$ifdef HAS_GENERICS}
-constructor TPasMPUnboundedQueue<T>.Create;
+constructor TPasMPUnboundedQueue<T>.Create(const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 begin
  inherited Create;
- fQueue:=TPasMPThreadSafeQueue.Create(SizeOf(TPasMPUnboundedQueue<T>.PPasMPUnboundedTypedQueueItem));
+ fQueue:=TPasMPThreadSafeQueue.Create(SizeOf(TPasMPUnboundedQueue<T>.PPasMPUnboundedTypedQueueItem),AddCPUCacheLinePaddingToInternalItemDataStructure);
+ fAddCPUCacheLinePaddingToInternalItemDataStructure:=AddCPUCacheLinePaddingToInternalItemDataStructure;
 end;
 
 destructor TPasMPUnboundedQueue<T>.Destroy;
@@ -9940,7 +9994,11 @@ begin
  while fQueue.Dequeue(QueueItem) do begin
   if assigned(QueueItem) then begin
    Finalize(QueueItem^);
-   TPasMPMemory.FreeAlignedMemory(QueueItem);
+   if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
+    TPasMPMemory.FreeAlignedMemory(QueueItem);
+   end else begin
+    FreeMem(QueueItem);
+   end;
   end;
  end;
  fQueue.Free;
@@ -9955,7 +10013,11 @@ end;
 procedure TPasMPUnboundedQueue<T>.Enqueue(const Item:T);
 var QueueItem:PPasMPUnboundedTypedQueueItem;
 begin
- TPasMPMemory.AllocateAlignedMemory(QueueItem,SizeOf(TPasMPUnboundedTypedQueueItem),PasMPCPUCacheLineSize);
+ if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  TPasMPMemory.AllocateAlignedMemory(QueueItem,TPasMPMath.RoundUpToMask32(SizeOf(TPasMPUnboundedTypedQueueItem),PasMPCPUCacheLineSize),PasMPCPUCacheLineSize);
+ end else begin
+  GetMem(QueueItem,SizeOf(TPasMPUnboundedTypedQueueItem));
+ end;
  Initialize(QueueItem^);
  QueueItem^.Data:=Item;
  fQueue.Enqueue(QueueItem);
@@ -9970,18 +10032,22 @@ begin
   if result then begin
    Item:=QueueItem^.Data;
    Finalize(QueueItem^);
-   TPasMPMemory.FreeAlignedMemory(QueueItem);
+   if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
+    TPasMPMemory.FreeAlignedMemory(QueueItem);
+   end else begin
+    FreeMem(QueueItem);
+   end;
   end;
  end;
 end;
 {$endif}
 
-constructor TPasMPHashTable.Create(const KeySize,ValueSize:TPasMPInt32);
+constructor TPasMPHashTable.Create(const KeySize,ValueSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 begin
  fKeySize:=KeySize;
  fValueSize:=ValueSize;
  fItemSize:=fKeySize+fValueSize;
- inherited Create(fItemSize);
+ inherited Create(fItemSize,AddCPUCacheLinePaddingToInternalItemDataStructure);
 end;
 
 destructor TPasMPHashTable.Destroy;
@@ -10181,12 +10247,12 @@ begin
  result:=inherited DeleteKey(@Key);
 end;
 
-constructor TPasMPStringHashTable.Create(const ValueSize:TPasMPInt32);
+constructor TPasMPStringHashTable.Create(const ValueSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 begin
  fKeySize:=SizeOf(string);
  fValueSize:=ValueSize;
  fItemSize:=fKeySize+fValueSize;
- inherited Create(fItemSize);
+ inherited Create(fItemSize,AddCPUCacheLinePaddingToInternalItemDataStructure);
 end;
 
 destructor TPasMPStringHashTable.Destroy;
@@ -10262,12 +10328,12 @@ begin
  result:=inherited DeleteKey(@Key);
 end;
 
-constructor TPasMPStringStringHashTable.Create;
+constructor TPasMPStringStringHashTable.Create(const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 begin
  fKeySize:=SizeOf(string);
  fValueSize:=SizeOf(string);
  fItemSize:=fKeySize+fValueSize;
- inherited Create(fItemSize);
+ inherited Create(fItemSize,AddCPUCacheLinePaddingToInternalItemDataStructure);
 end;
 
 destructor TPasMPStringStringHashTable.Destroy;
@@ -10346,13 +10412,13 @@ begin
 end;
 
 {$ifdef HasGenericsCollections}
-constructor TPasMPHashTable<KeyType,ValueType>.Create;
+constructor TPasMPHashTable<KeyType,ValueType>.Create(const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 begin
  fKeySize:=SizeOf(KeyType);
  fValueSize:=SizeOf(ValueType);
  fItemSize:=fKeySize+fValueSize;
  fComparer:=TEqualityComparer<KeyType>.Default;
- inherited Create(fItemSize);
+ inherited Create(fItemSize,AddCPUCacheLinePaddingToInternalItemDataStructure);
 end;
 
 destructor TPasMPHashTable<KeyType,ValueType>.Destroy;
@@ -10437,9 +10503,9 @@ begin
 end;
 {$endif}
 
-constructor TPasMPDynamicArray.Create(const AItemSize:TPasMPInt32);
+constructor TPasMPDynamicArray.Create(const aItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 begin
- inherited Create(AItemSize);
+ inherited Create(aItemSize,AddCPUCacheLinePaddingToInternalItemDataStructure);
 end;
 
 destructor TPasMPDynamicArray.Destroy;
@@ -10481,9 +10547,9 @@ begin
 end;
 
 {$ifdef HAS_GENERICS}
-constructor TPasMPDynamicArray<T>.Create;
+constructor TPasMPDynamicArray<T>.Create(const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 begin
- inherited Create(SizeOf(T));
+ inherited Create(SizeOf(T),AddCPUCacheLinePaddingToInternalItemDataStructure);
 end;
 
 destructor TPasMPDynamicArray<T>.Destroy;
