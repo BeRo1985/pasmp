@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-09-24-02-55-0000                       *
+ *                        Version 2017-09-24-03-45-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -548,6 +548,8 @@ const PasMPAllocatorPoolBucketBits=12;
       PasMPJobFlagActiveAndNotMask=TPasMPUInt32(not PasMPJobFlagActive);
 
       PasMPCPUCacheLineSize=64;
+
+      PasMPDoubleNativeMachineWordAtomicCompareExchangeAlignment=SizeOf(TPasMPPtrUInt) shl 1;
 
       PasMPProfilerHistoryRingBufferSizeBits=16;
       PasMPProfilerHistoryRingBufferSize=TPasMPUInt32(1) shl PasMPProfilerHistoryRingBufferSizeBits;
@@ -1313,13 +1315,14 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$endif}
        fItemSize:TPasMPInt32;
        fInternalNodeSize:TPasMPInt32;
+       fAddCPUCacheLinePaddingToInternalItemDataStructure:boolean;
       public
        constructor Create(ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
-       procedure Clear; {$ifdef CAN_INLINE}inline;{$endif}
+       procedure Clear; {$ifndef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        function IsEmpty:boolean; {$ifdef CAN_INLINE}inline;{$endif}
-       procedure Enqueue(const Item); {$ifdef CAN_INLINE}inline;{$endif}
-       function Dequeue(out Item):boolean; {$ifdef CAN_INLINE}inline;{$endif}
+       procedure Enqueue(const Item); {$ifndef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       function Dequeue(out Item):boolean; {$ifndef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -7453,13 +7456,19 @@ begin
 end;
 {$endif}
 
-constructor TPasMPThreadSafeQueue.Create;
+constructor TPasMPThreadSafeQueue.Create(ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 var Node:PPasMPThreadSafeQueueNode;
 begin
  inherited Create;
  fItemSize:=ItemSize;
- fInternalNodeSize:=TPasMPMath.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPThreadSafeQueueNode)+fItemSize,PasMPCPUCacheLineSize));
+ fInternalNodeSize:=SizeOf(TPasMPThreadSafeQueueNode)+fItemSize;
+ fAddCPUCacheLinePaddingToInternalItemDataStructure:=AddCPUCacheLinePaddingToInternalItemDataStructure;
+ if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  fInternalNodeSize:=TPasMPMath.RoundUpToPowerOfTwo(Max(fInternalNodeSize,PasMPCPUCacheLineSize));
+ end else begin
+  fInternalNodeSize:=TPasMPMath.RoundUpToPowerOfTwo(Max(fInternalNodeSize,PasMPDoubleNativeMachineWordAtomicCompareExchangeAlignment));
+ end;
  fHead:=nil;
  fTail:=nil;
  TPasMPMemory.AllocateAlignedMemory(fHead,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
@@ -7478,11 +7487,19 @@ end;
 begin
  inherited Create;
  fItemSize:=ItemSize;
- fInternalNodeSize:=TPasMPMath.RoundUpToPowerOfTwo(Max(SizeOf(TPasMPThreadSafeQueueNode)+fItemSize,PasMPCPUCacheLineSize));
+ fAddCPUCacheLinePaddingToInternalItemDataStructure:=AddCPUCacheLinePaddingToInternalItemDataStructure;
+ fInternalNodeSize:=SizeOf(TPasMPThreadSafeQueueNode)+fItemSize;
+ if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  fInternalNodeSize:=TPasMPMath.RoundUpToPowerOfTwo(Max(fInternalNodeSize,PasMPCPUCacheLineSize));
+ end;
  fHeadCriticalSection:=TPasMPCriticalSection.Create;
  fTailCriticalSection:=TPasMPCriticalSection.Create;
  fHead:=nil;
- TPasMPMemory.AllocateAlignedMemory(fHead,fInternalNodeSize,PasMPCPUCacheLineSize);
+ if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  TPasMPMemory.AllocateAlignedMemory(fHead,fInternalNodeSize,PasMPCPUCacheLineSize);
+ end else begin
+  GetMem(fHead,fInternalNodeSize);
+ end;
  fHead^.Next:=nil;
  fTail:=fHead;
 end;
@@ -7512,7 +7529,11 @@ begin
  CurrentNode:=fHead;
  while assigned(CurrentNode) do begin
   NextNode:=CurrentNode^.Next;
-  TPasMPMemory.FreeAlignedMemory(CurrentNode);
+  if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
+   TPasMPMemory.FreeAlignedMemory(CurrentNode);
+  end else begin
+   FreeMem(CurrentNode);
+  end;
   CurrentNode:=NextNode;
  end;
  fTailCriticalSection.Free;
@@ -7552,11 +7573,19 @@ begin
  CurrentNode:=fHead;
  while assigned(CurrentNode) do begin
   NextNode:=CurrentNode^.Next;
-  TPasMPMemory.FreeAlignedMemory(CurrentNode);
+  if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
+   TPasMPMemory.FreeAlignedMemory(CurrentNode);
+  end else begin
+   FreeMem(CurrentNode);
+  end;
   CurrentNode:=NextNode;
  end;
  fHead:=nil;
- TPasMPMemory.AllocateAlignedMemory(fHead,fInternalNodeSize,PasMPCPUCacheLineSize);
+ if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  TPasMPMemory.AllocateAlignedMemory(fHead,fInternalNodeSize,PasMPCPUCacheLineSize);
+ end else begin
+  GetMem(fHead,fInternalNodeSize);
+ end;
  fHead^.Next:=nil;
  fTail:=fHead;
 end;
@@ -7579,7 +7608,11 @@ procedure TPasMPThreadSafeQueue.Enqueue(const Item);
 var Node:PPasMPThreadSafeQueueNode;
     Tail,OldTail,NewTail:TPasMPTaggedPointer;
 begin
- TPasMPMemory.AllocateAlignedMemory(Node,fInternalNodeSize,PasMPCPUCacheLineSize);
+ if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  TPasMPMemory.AllocateAlignedMemory(Node,fInternalNodeSize,PasMPCPUCacheLineSize);
+ end else begin
+  TPasMPMemory.AllocateAlignedMemory(Node,fInternalNodeSize,PasMPDoubleNativeMachineWordAtomicCompareExchangeAlignment);
+ end;
  Node^.Previous.PointerValue:=nil;
  Node^.Previous.TagValue:=0;
  Move(Item,Node^.Data,fItemSize);
@@ -7598,7 +7631,11 @@ end;
 {$else}
 var Node:PPasMPThreadSafeQueueNode;
 begin
- TPasMPMemory.AllocateAlignedMemory(Node,fInternalNodeSize,PasMPCPUCacheLineSize);
+ if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  TPasMPMemory.AllocateAlignedMemory(Node,fInternalNodeSize,PasMPCPUCacheLineSize);
+ end else begin
+  GetMem(Node,fInternalNodeSize);
+ end;
  Node^.Next:=nil;
  Move(Item,Node^.Data,fItemSize);
  fTailCriticalSection.Acquire;
@@ -7680,7 +7717,11 @@ begin
    if assigned(NewHead) then begin
     Move(NewHead^.Data,Item,fItemSize);
     fHead:=NewHead;
-    TPasMPMemory.FreeAlignedMemory(Node);
+    if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
+     TPasMPMemory.FreeAlignedMemory(Node);
+    end else begin
+     FreeMem(Node);
+    end;
     result:=true;
    end;
   finally
@@ -7704,6 +7745,8 @@ begin
  fInternalItemSize:=SizeOf(TPasMPThreadSafeHashTableItem)+fItemSize;
  if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
   fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
+ end else begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPDoubleNativeMachineWordAtomicCompareExchangeAlignment);
  end;
  fGrowLoadFactor:=((75 shl 7)+128) div 100; // 0.75
  TPasMPMemory.AllocateAlignedMemory(fFirstState,SizeOf(TPasMPThreadSafeHashTableState),PasMPCPUCacheLineSize);
@@ -8233,6 +8276,8 @@ begin
  fInternalItemSize:=fItemLockOffset+SizeOf(TPasMPInt32);
  if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
   fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
+ end else begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,SizeOf(TPasMPPtrUInt));
  end;
  fLock:=TPasMPMultipleReaderSingleWriterSpinLock.Create;
  FillChar(fBuckets,SizeOf(TPasMPThreadSafeDynamicArrayBuckets),#0);
@@ -9199,6 +9244,8 @@ begin
  fInternalItemSize:=SizeOf(TPasMPBoundedStackItem)+fItemSize;
  if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
   fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
+ end else begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPDoubleNativeMachineWordAtomicCompareExchangeAlignment);
  end;
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
@@ -9266,6 +9313,8 @@ begin
  fInternalItemSize:=SizeOf(TPasMPBoundedTypedStackItem);
  if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
   fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
+ end else begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPDoubleNativeMachineWordAtomicCompareExchangeAlignment);
  end;
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
@@ -9346,11 +9395,7 @@ begin
  repeat
   StackItem:=fStack.Pop;
   if assigned(StackItem) then begin
-   if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
-    TPasMPMemory.FreeAlignedMemory(StackItem);
-   end else begin
-    FreeMem(StackItem);
-   end;
+   TPasMPMemory.FreeAlignedMemory(StackItem);
   end else begin
    break;
   end;
@@ -9370,7 +9415,7 @@ begin
  if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
   TPasMPMemory.AllocateAlignedMemory(StackItem,TPasMPMath.RoundUpToMask32(SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPCPUCacheLineSize),PasMPCPUCacheLineSize);
  end else begin
-  GetMem(StackItem,SizeOf(TPasMPUnboundedStackItem)+fItemSize);
+  TPasMPMemory.AllocateAlignedMemory(StackItem,TPasMPMath.RoundUpToMask32(SizeOf(TPasMPUnboundedStackItem)+fItemSize,PasMPDoubleNativeMachineWordAtomicCompareExchangeAlignment),PasMPDoubleNativeMachineWordAtomicCompareExchangeAlignment);
  end;
  Move(Item,StackItem^.Data,fItemSize);
  fStack.Push(StackItem);
@@ -9383,11 +9428,7 @@ begin
  StackItem:=fStack.Pop;
  if assigned(StackItem) then begin
   Move(StackItem^.Data,Item,fItemSize);
-  if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
-   TPasMPMemory.FreeAlignedMemory(StackItem);
-  end else begin
-   FreeMem(StackItem);
-  end;
+  TPasMPMemory.FreeAlignedMemory(StackItem);
   result:=true;
  end else begin
   result:=false;
@@ -9410,11 +9451,7 @@ begin
   StackItem:=fStack.Pop;
   if assigned(StackItem) then begin
    Finalize(StackItem^);
-   if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
-    TPasMPMemory.FreeAlignedMemory(StackItem);
-   end else begin
-    FreeMem(StackItem);
-   end;
+   TPasMPMemory.FreeAlignedMemory(StackItem);
   end else begin
    break;
   end;
@@ -9434,7 +9471,7 @@ begin
  if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
   TPasMPMemory.AllocateAlignedMemory(StackItem,TPasMPMath.RoundUpToMask32(SizeOf(TPasMPUnboundedTypedStackItem),PasMPCPUCacheLineSize),PasMPCPUCacheLineSize);
  end else begin
-  GetMem(StackItem,SizeOf(TPasMPUnboundedTypedStackItem));
+  TPasMPMemory.AllocateAlignedMemory(StackItem,TPasMPMath.RoundUpToMask32(SizeOf(TPasMPUnboundedTypedStackItem),PasMPDoubleNativeMachineWordAtomicCompareExchangeAlignment),PasMPDoubleNativeMachineWordAtomicCompareExchangeAlignment);
  end;
  Initialize(StackItem^);
  StackItem^.Data:=Item;
@@ -9449,11 +9486,7 @@ begin
  if assigned(StackItem) then begin
   Item:=StackItem^.Data;
   Finalize(StackItem^);
-  if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
-   TPasMPMemory.FreeAlignedMemory(StackItem);
-  end else begin
-   FreeMem(StackItem);
-  end;
+  TPasMPMemory.FreeAlignedMemory(StackItem);
   result:=true;
  end else begin
   result:=false;
@@ -9474,6 +9507,8 @@ begin
  fInternalItemSize:=SizeOf(TPasMPBoundedQueueItem)+fItemSize;
  if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
   fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
+ end else begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPDoubleNativeMachineWordAtomicCompareExchangeAlignment);
  end;
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
@@ -9538,6 +9573,8 @@ begin
  fInternalItemSize:=SizeOf(TPasMPBoundedTypedQueueItem);
  if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
   fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
+ end else begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPDoubleNativeMachineWordAtomicCompareExchangeAlignment);
  end;
  TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
  p:=fData;
@@ -9620,6 +9657,8 @@ begin
  fInternalItemSize:=SizeOf(TPasMPBoundedArrayBasedQueueItemNode)+fItemSize;
  if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
   fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
+ end else begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,SizeOf(TPasMPPtrUInt));
  end;
  fHeadSequence:=0;
  fTailSequence:=0;
@@ -9793,6 +9832,8 @@ begin
  fInternalItemSize:=SizeOf(TPasMPBoundedArrayTypedQueueItemNode);
  if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
   fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
+ end else begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,SizeOf(TPasMPPtrUInt));
  end;
  fHeadSequence:=0;
  fTailSequence:=0;
