@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-09-25-07-05-0000                       *
+ *                        Version 2017-09-25-07-16-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1348,6 +1348,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fMask:TPasMPSizeUInt;
        fItemSize:TPasMPSizeUInt;
        fInternalItemSize:TPasMPSizeUInt;
+      protected
        fCacheLineFillUp0:array[0..(PasMPCPUCacheLineSize-(SizeOf(pointer)+(SizeOf(TPasMPSizeUInt)*4)))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fHeadSequence:TPasMPSizeUInt;
        fCacheLineFillUp1:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSizeUInt))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
@@ -1720,7 +1721,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure InitializeItem(const Data:pointer); override;
        procedure FinalizeItem(const Data:pointer); override;
        procedure CopyItem(const Source,Destination:pointer); override;
-      private
+      public
        constructor Create(const MaximalCount:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true); reintroduce;
        destructor Destroy; override;
        function Enqueue(const Item:T):boolean; reintroduce;
@@ -1740,11 +1741,6 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$ifdef HAS_GENERICS}
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMPUnboundedQueue<T>=class(TPasMPThreadSafeQueue)
-      private
-       type PPasMPUnboundedTypedQueueItem=^TPasMPUnboundedTypedQueueItem;
-            TPasMPUnboundedTypedQueueItem=record
-             Data:T;
-            end;
       protected
        procedure InitializeItem(const Data:pointer); override;
        procedure FinalizeItem(const Data:pointer); override;
@@ -9940,7 +9936,7 @@ end;
 {$ifdef HAS_GENERICS}
 constructor TPasMPUnboundedQueue<T>.Create(const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 begin
- inherited Create(SizeOf(TPasMPUnboundedQueue<T>.TPasMPUnboundedTypedQueueItem),AddCPUCacheLinePaddingToInternalItemDataStructure);
+ inherited Create(SizeOf(T),AddCPUCacheLinePaddingToInternalItemDataStructure);
 end;
 
 destructor TPasMPUnboundedQueue<T>.Destroy;
