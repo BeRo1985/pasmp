@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-09-24-03-45-0000                       *
+ *                        Version 2017-09-25-07-05-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1316,6 +1316,10 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fItemSize:TPasMPInt32;
        fInternalNodeSize:TPasMPInt32;
        fAddCPUCacheLinePaddingToInternalItemDataStructure:boolean;
+      protected
+       procedure InitializeItem(const Data:pointer); virtual;
+       procedure FinalizeItem(const Data:pointer); virtual;
+       procedure CopyItem(const Source,Destination:pointer); virtual;
       public
        constructor Create(ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
@@ -1323,6 +1327,44 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function IsEmpty:boolean; {$ifdef CAN_INLINE}inline;{$endif}
        procedure Enqueue(const Item); {$ifndef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        function Dequeue(out Item):boolean; {$ifndef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+     PPasMPThreadSafeBoundedArrayBasedQueueItemNode=^TPasMPThreadSafeBoundedArrayBasedQueueItemNode;
+     TPasMPThreadSafeBoundedArrayBasedQueueItemNode=record
+      Sequence:TPasMPSizeUInt;
+      Data:record
+       // Empty
+      end;
+     end;
+
+     EPasMPThreadSafeBoundedArrayBasedQueue=class(Exception);
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPThreadSafeBoundedArrayBasedQueue=class // only for TPasMP internal usage
+      private
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fData:pointer;
+       fMaximalCount:TPasMPSizeUInt;
+       fMask:TPasMPSizeUInt;
+       fItemSize:TPasMPSizeUInt;
+       fInternalItemSize:TPasMPSizeUInt;
+       fCacheLineFillUp0:array[0..(PasMPCPUCacheLineSize-(SizeOf(pointer)+(SizeOf(TPasMPSizeUInt)*4)))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fHeadSequence:TPasMPSizeUInt;
+       fCacheLineFillUp1:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSizeUInt))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fTailSequence:TPasMPSizeUInt;
+       fCacheLineFillUp2:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSizeUInt))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
+      protected
+       procedure InitializeItem(const Data:pointer); virtual;
+       procedure FinalizeItem(const Data:pointer); virtual;
+       procedure CopyItem(const Source,Destination:pointer); virtual;
+      public
+       constructor Create(const MaximalCount,ItemSize:TPasMPSizeUInt;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
+       destructor Destroy; override;
+       procedure Clear;
+       function IsEmpty:boolean;
+       function IsFull:boolean;
+       function Enqueue(const Item):boolean;
+       function Dequeue(out Item):boolean;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -1663,100 +1705,55 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 {$endif}
 
-     PPasMPBoundedArrayBasedQueueItemNode=^TPasMPBoundedArrayBasedQueueItemNode;
-     TPasMPBoundedArrayBasedQueueItemNode=record
-      Sequence:TPasMPInt32;
-      Data:record
-       // Empty
-      end;
-     end;
-
-     EPasMPBoundedArrayBasedQueue=class(Exception);
-
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPBoundedArrayBasedQueue=class
-      private
-       {$ifdef HAS_VOLATILE}[volatile]{$endif}fData:pointer;
-       fMaximalCount:TPasMPInt32;
-       fMask:TPasMPInt32;
-       fItemSize:TPasMPInt32;
-       fInternalItemSize:TPasMPInt32;
-       fCacheLineFillUp0:array[0..(PasMPCPUCacheLineSize-(SizeOf(pointer)+(SizeOf(TPasMPInt32)*4)))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
-       {$ifdef HAS_VOLATILE}[volatile]{$endif}fHeadSequence:TPasMPInt32;
-       fCacheLineFillUp1:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPInt32))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
-       {$ifdef HAS_VOLATILE}[volatile]{$endif}fTailSequence:TPasMPInt32;
-       fCacheLineFillUp2:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPInt32))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
+     TPasMPBoundedArrayBasedQueue=class(TPasMPThreadSafeBoundedArrayBasedQueue)
       public
-       constructor Create(const MaximalCount,ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
+       constructor Create(const MaximalCount,ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true); reintroduce;
        destructor Destroy; override;
-       function IsEmpty:boolean;
-       function IsFull:boolean;
-       function Enqueue(const Item):boolean;
-       function Dequeue(out Item):boolean;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$ifdef HAS_GENERICS}
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPBoundedArrayBasedQueue<T>=class
+     TPasMPBoundedArrayBasedQueue<T>=class(TPasMPThreadSafeBoundedArrayBasedQueue)
+      protected
+       procedure InitializeItem(const Data:pointer); override;
+       procedure FinalizeItem(const Data:pointer); override;
+       procedure CopyItem(const Source,Destination:pointer); override;
       private
-       type PPasMPBoundedArrayTypedQueueItemNode=^TPasMPBoundedArrayTypedQueueItemNode;
-            TPasMPBoundedArrayTypedQueueItemNode=record
-             Sequence:TPasMPInt32;
-             Data:T;
-            end;
-      private
-       {$ifdef HAS_VOLATILE}[volatile]{$endif}fData:pointer;
-       fMaximalCount:TPasMPInt32;
-       fMask:TPasMPInt32;
-       fInternalItemSize:TPasMPInt32;
-       fCacheLineFillUp0:array[0..(PasMPCPUCacheLineSize-(SizeOf(pointer)+(SizeOf(TPasMPInt32)*4)))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
-       {$ifdef HAS_VOLATILE}[volatile]{$endif}fHeadSequence:TPasMPInt32;
-       fCacheLineFillUp1:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPInt32))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
-       {$ifdef HAS_VOLATILE}[volatile]{$endif}fTailSequence:TPasMPInt32;
-       fCacheLineFillUp2:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPInt32))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
-      public
-       constructor Create(const MaximalCount:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
+       constructor Create(const MaximalCount:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true); reintroduce;
        destructor Destroy; override;
-       function IsEmpty:boolean;
-       function IsFull:boolean;
-       function Enqueue(const Item:T):boolean;
-       function Dequeue(out Item:T):boolean;
+       function Enqueue(const Item:T):boolean; reintroduce;
+       function Dequeue(out Item:T):boolean; reintroduce;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 {$endif}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPUnboundedQueue=class
-      private
-       fQueue:TPasMPThreadSafeQueue;
-       fItemSize:TPasMPInt32;
+     TPasMPUnboundedQueue=class(TPasMPThreadSafeQueue)
       public
-       constructor Create(const ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
+       constructor Create(const ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true); reintroduce;
        destructor Destroy; override;
-       function IsEmpty:boolean;
-       procedure Enqueue(const Item);
-       function Dequeue(out Item):boolean;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
 {$ifdef HAS_GENERICS}
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPUnboundedQueue<T>=class
+     TPasMPUnboundedQueue<T>=class(TPasMPThreadSafeQueue)
       private
        type PPasMPUnboundedTypedQueueItem=^TPasMPUnboundedTypedQueueItem;
             TPasMPUnboundedTypedQueueItem=record
              Data:T;
             end;
-      private
-       fQueue:TPasMPThreadSafeQueue;
-       fAddCPUCacheLinePaddingToInternalItemDataStructure:boolean;
+      protected
+       procedure InitializeItem(const Data:pointer); override;
+       procedure FinalizeItem(const Data:pointer); override;
+       procedure CopyItem(const Source,Destination:pointer); override;
       public
-       constructor Create(const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
+       constructor Create(const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true); reintroduce;
        destructor Destroy; override;
-       function IsEmpty:boolean;
-       procedure Enqueue(const Item:T);
-       function Dequeue(out Item:T):boolean;
+       procedure Enqueue(const Item:T); reintroduce;
+       function Dequeue(out Item:T):boolean; reintroduce;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 {$endif}
@@ -7502,6 +7499,7 @@ begin
  end;
  fHead^.Next:=nil;
  fTail:=fHead;
+ InitializeItem(@fHead^.Data);
 end;
 {$endif}
 
@@ -7511,8 +7509,9 @@ var Item:pointer;
 begin
  GetMem(Item,fItemSize);
  try
-  repeat
-  until not Dequeue(Item^);
+  while Dequeue(Item^) do begin
+   FinalizeItem(Item);
+  end;
  finally
   FreeMem(Item);
  end;
@@ -7529,6 +7528,7 @@ begin
  CurrentNode:=fHead;
  while assigned(CurrentNode) do begin
   NextNode:=CurrentNode^.Next;
+  FinalizeItem(@CurrentNode^.Data);
   if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
    TPasMPMemory.FreeAlignedMemory(CurrentNode);
   end else begin
@@ -7542,6 +7542,19 @@ begin
 end;
 {$endif}
 
+procedure TPasMPThreadSafeQueue.InitializeItem(const Data:pointer);
+begin
+end;
+
+procedure TPasMPThreadSafeQueue.FinalizeItem(const Data:pointer);
+begin
+end;
+
+procedure TPasMPThreadSafeQueue.CopyItem(const Source,Destination:pointer);
+begin
+ Move(Source^,Destination^,fItemSize);
+end;
+
 procedure TPasMPThreadSafeQueue.Clear;
 {$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 var Node:PPasMPThreadSafeQueueNode;
@@ -7549,8 +7562,9 @@ var Node:PPasMPThreadSafeQueueNode;
 begin
  GetMem(Item,fItemSize);
  try
-  repeat
-  until not Dequeue(Item^);
+  while Dequeue(Item^) do begin
+   FinalizeItem(Item);
+  end;
  finally
   FreeMem(Item);
  end;
@@ -7573,6 +7587,7 @@ begin
  CurrentNode:=fHead;
  while assigned(CurrentNode) do begin
   NextNode:=CurrentNode^.Next;
+  FinalizeItem(@CurrentNode^.Data);
   if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
    TPasMPMemory.FreeAlignedMemory(CurrentNode);
   end else begin
@@ -7588,6 +7603,7 @@ begin
  end;
  fHead^.Next:=nil;
  fTail:=fHead;
+ InitializeItem(@fHead^.Data);
 end;
 {$endif}
 
@@ -7615,7 +7631,8 @@ begin
  end;
  Node^.Previous.PointerValue:=nil;
  Node^.Previous.TagValue:=0;
- Move(Item,Node^.Data,fItemSize);
+ InitializeItem(@Node^.Data);
+ CopyItem(@Item,@Node^.Data);
  OldTail:=fTail^;
  repeat
   Tail:=OldTail;
@@ -7637,7 +7654,8 @@ begin
   GetMem(Node,fInternalNodeSize);
  end;
  Node^.Next:=nil;
- Move(Item,Node^.Data,fItemSize);
+ InitializeItem(@Node^.Data);
+ CopyItem(@Item,@Node^.Data);
  fTailCriticalSection.Acquire;
  try
   fTail^.Next:=Node;
@@ -7692,7 +7710,8 @@ begin
       NewHead.TagValue:=Head.TagValue+1;
       OldHead.Value:=TPasMPInterlocked.CompareExchange(fHead^.Value,NewHead.Value,Head.Value);
       if {$ifdef CPU64}(OldHead.PointerValue=Head.PointerValue) and (OldHead.TagValue=Head.TagValue){$else}OldHead.Value.Value=Head.Value.Value{$endif} then begin
-       Move(PPasMPThreadSafeQueueNode(FirstNodePrevious.PointerValue)^.Data,Item,fItemSize);
+       CopyItem(@PPasMPThreadSafeQueueNode(FirstNodePrevious.PointerValue)^.Data,@Item);
+       FinalizeItem(@PPasMPThreadSafeQueueNode(FirstNodePrevious.PointerValue)^.Data);
        TPasMPMemory.FreeAlignedMemory(Head.PointerValue);
        result:=true;
        exit;
@@ -7715,7 +7734,8 @@ begin
    Node:=fHead;
    NewHead:=fHead^.Next;
    if assigned(NewHead) then begin
-    Move(NewHead^.Data,Item,fItemSize);
+    CopyItem(@NewHead^.Data,@Item);
+    FinalizeItem(@NewHead^.Data);
     fHead:=NewHead;
     if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
      TPasMPMemory.FreeAlignedMemory(Node);
@@ -7730,6 +7750,223 @@ begin
  end;
 end;
 {$endif}
+
+constructor TPasMPThreadSafeBoundedArrayBasedQueue.Create(const MaximalCount,ItemSize:TPasMPSizeUInt;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
+var i:TPasMPSizeUInt;
+    p:PPasMPUInt8;
+    QueueItemNode:PPasMPThreadSafeBoundedArrayBasedQueueItemNode;
+begin
+ inherited Create;
+ fMaximalCount:=TPasMPMath.RoundUpToPowerOfTwo(MaximalCount);
+ if fMaximalCount<>MaximalCount then begin
+  raise EPasMPThreadSafeBoundedArrayBasedQueue.Create('Maximum count must be power of two');
+ end;
+ fMask:=fMaximalCount-1;
+ fItemSize:=ItemSize;
+ fInternalItemSize:=SizeOf(TPasMPThreadSafeBoundedArrayBasedQueueItemNode)+fItemSize;
+ if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
+ end else begin
+  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,SizeOf(TPasMPPtrUInt));
+ end;
+ fHeadSequence:=0;
+ fTailSequence:=0;
+ TPasMPMemoryBarrier.ReadWrite;
+ TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
+ p:=fData;
+ for i:=1 to fMaximalCount do begin
+  QueueItemNode:=pointer(p);
+  QueueItemNode^.Sequence:=i-1;
+  InitializeItem(@QueueItemNode^.Data);
+  inc(p,fInternalItemSize);
+ end;
+ TPasMPMemoryBarrier.ReadWrite;
+end;
+
+destructor TPasMPThreadSafeBoundedArrayBasedQueue.Destroy;
+var i:TPasMPSizeUInt;
+    p:PPasMPUInt8;
+    QueueItemNode:PPasMPThreadSafeBoundedArrayBasedQueueItemNode;
+begin
+ p:=fData;
+ for i:=1 to fMaximalCount do begin
+  QueueItemNode:=pointer(p);
+  FinalizeItem(@QueueItemNode^.Data);
+  inc(p,fInternalItemSize);
+ end;
+ TPasMPMemory.FreeAlignedMemory(fData);
+ inherited Destroy;
+end;
+
+procedure TPasMPThreadSafeBoundedArrayBasedQueue.InitializeItem(const Data:pointer);
+begin
+end;
+
+procedure TPasMPThreadSafeBoundedArrayBasedQueue.FinalizeItem(const Data:pointer);
+begin
+end;
+
+procedure TPasMPThreadSafeBoundedArrayBasedQueue.CopyItem(const Source,Destination:pointer);
+begin
+ Move(Source^,Destination^,fItemSize);
+end;
+
+procedure TPasMPThreadSafeBoundedArrayBasedQueue.Clear;
+var Item:pointer;
+begin
+ GetMem(Item,fItemSize);
+ try
+  while Dequeue(Item^) do begin
+   FinalizeItem(Item);
+  end;
+ finally
+  FreeMem(Item);
+ end;
+end;
+
+function TPasMPThreadSafeBoundedArrayBasedQueue.IsEmpty:boolean;
+var LocalTailSequence,QueueItemNodeSequence:TPasMPSizeUInt;
+    QueueItemNode:PPasMPThreadSafeBoundedArrayBasedQueueItemNode;
+begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+ TPasMPMemoryBarrier.ReadWrite;
+{$ifend}
+ LocalTailSequence:=fTailSequence;
+ QueueItemNode:={%H-}pointer(TPasMPPtrUInt(TPasMPPtrUInt(pointer(fData))+TPasMPPtrUInt(TPasMPPtrUInt(LocalTailSequence and fMask)*TPasMPPtrUInt(fInternalItemSize))));
+{$if defined(CPU386) or defined(CPUx86_64)}
+ TPasMPMemoryBarrier.ReadDependency;
+{$else}
+ TPasMPMemoryBarrier.Read;
+{$ifend}
+ QueueItemNodeSequence:=QueueItemNode^.Sequence;
+ result:=TPasMPSizeInt(QueueItemNodeSequence-(LocalTailSequence+1))<0;
+end;
+
+function TPasMPThreadSafeBoundedArrayBasedQueue.IsFull:boolean;
+var LocalHeadSequence,QueueItemNodeSequence:TPasMPSizeUInt;
+    QueueItemNode:PPasMPThreadSafeBoundedArrayBasedQueueItemNode;
+begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+ TPasMPMemoryBarrier.ReadWrite;
+{$ifend}
+ LocalHeadSequence:=fHeadSequence;
+ QueueItemNode:={%H-}pointer(TPasMPPtrUInt(TPasMPPtrUInt(pointer(fData))+TPasMPPtrUInt(TPasMPPtrUInt(LocalHeadSequence and fMask)*TPasMPPtrUInt(fInternalItemSize))));
+{$if defined(CPU386) or defined(CPUx86_64)}
+ TPasMPMemoryBarrier.ReadDependency;
+{$else}
+ TPasMPMemoryBarrier.Read;
+{$ifend}
+ QueueItemNodeSequence:=QueueItemNode^.Sequence;
+ result:=TPasMPSizeInt(QueueItemNodeSequence-LocalHeadSequence)<0;
+end;
+
+function TPasMPThreadSafeBoundedArrayBasedQueue.Enqueue(const Item):boolean;
+var LocalHeadSequence,QueueItemNodeSequence:TPasMPSizeUInt;
+    QueueItemNode:PPasMPThreadSafeBoundedArrayBasedQueueItemNode;
+begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+ TPasMPMemoryBarrier.Read;
+{$ifend}
+ LocalHeadSequence:=fHeadSequence;
+ repeat
+  QueueItemNode:={%H-}pointer(TPasMPPtrUInt(TPasMPPtrUInt(pointer(fData))+TPasMPPtrUInt(TPasMPPtrUInt(LocalHeadSequence and fMask)*TPasMPPtrUInt(fInternalItemSize))));
+{$if defined(CPU386) or defined(CPUx86_64)}
+  TPasMPMemoryBarrier.ReadDependency;
+{$else}
+  TPasMPMemoryBarrier.Read;
+{$ifend}
+  QueueItemNodeSequence:=QueueItemNode^.Sequence;
+  case TPasMPSizeInt(QueueItemNodeSequence-LocalHeadSequence) of
+   0:begin
+    if TPasMPInterlocked.CompareExchange({$ifdef CPU64}TPasMPInt64{$else}TPasMPInt32{$endif}(fHeadSequence),
+                                         {$ifdef CPU64}TPasMPInt64{$else}TPasMPInt32{$endif}(LocalHeadSequence+1),
+                                         {$ifdef CPU64}TPasMPInt64{$else}TPasMPInt32{$endif}(LocalHeadSequence))={$ifdef CPU64}TPasMPInt64{$else}TPasMPInt32{$endif}(LocalHeadSequence) then begin
+     break;
+    end;
+   end;
+   Low(TPasMPSizeInt)..-1:begin
+    result:=false;
+    exit;
+   end;
+   else begin
+{$if defined(CPU386) or defined(CPUx86_64)}
+    TPasMPMemoryBarrier.ReadDependency;
+{$else}
+    TPasMPMemoryBarrier.Read;
+{$ifend}
+    LocalHeadSequence:=fHeadSequence;
+   end;
+  end;
+ until false;
+ InitializeItem(@QueueItemNode^.Data);
+ CopyItem(@Item,@QueueItemNode^.Data);
+{$if defined(CPU386)}
+ asm
+  mfence;
+ end;
+{$elseif not (defined(CPU386) or defined(CPUx86_64))}
+ TPasMPMemoryBarrier.ReadWrite;
+{$ifend}
+ QueueItemNode^.Sequence:=LocalHeadSequence+1;
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+ TPasMPMemoryBarrier.Write;
+{$ifend}
+ result:=true;
+end;
+
+function TPasMPThreadSafeBoundedArrayBasedQueue.Dequeue(out Item):boolean;
+var LocalTailSequence,QueueItemNodeSequence:TPasMPSizeUInt;
+    QueueItemNode:PPasMPThreadSafeBoundedArrayBasedQueueItemNode;
+begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+ TPasMPMemoryBarrier.Read;
+{$ifend}
+ LocalTailSequence:=fTailSequence;
+ repeat
+  QueueItemNode:={%H-}pointer(TPasMPPtrUInt(TPasMPPtrUInt(pointer(fData))+TPasMPPtrUInt(TPasMPPtrUInt(LocalTailSequence and fMask)*TPasMPPtrUInt(fInternalItemSize))));
+{$if defined(CPU386) or defined(CPUx86_64)}
+  TPasMPMemoryBarrier.ReadDependency;
+{$else}
+  TPasMPMemoryBarrier.Read;
+{$ifend}
+  QueueItemNodeSequence:=QueueItemNode^.Sequence;
+  case TPasMPSizeInt(QueueItemNodeSequence-(LocalTailSequence+1)) of
+   0:begin
+    if TPasMPInterlocked.CompareExchange({$ifdef CPU64}TPasMPInt64{$else}TPasMPInt32{$endif}(fTailSequence),
+                                         {$ifdef CPU64}TPasMPInt64{$else}TPasMPInt32{$endif}(LocalTailSequence+1),
+                                         {$ifdef CPU64}TPasMPInt64{$else}TPasMPInt32{$endif}(LocalTailSequence))={$ifdef CPU64}TPasMPInt64{$else}TPasMPInt32{$endif}(LocalTailSequence) then begin
+     break;
+    end;
+   end;
+   Low(TPasMPSizeInt)..-1:begin
+    result:=false;
+    exit;
+   end;
+   else begin
+{$if defined(CPU386) or defined(CPUx86_64)}
+    TPasMPMemoryBarrier.ReadDependency;
+{$else}
+    TPasMPMemoryBarrier.Read;
+{$ifend}
+    LocalTailSequence:=fTailSequence;
+   end;
+  end;
+ until false;
+ CopyItem(@QueueItemNode^.Data,@Item);
+ FinalizeItem(@QueueItemNode^.Data);
+{$if defined(CPU386)}
+ asm
+  mfence;
+ end;
+{$elseif not (defined(CPU386) or defined(CPUx86_64))}
+ TPasMPMemoryBarrier.ReadWrite;
+{$ifend}
+ QueueItemNode^.Sequence:=LocalTailSequence+fMask+1;
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+ TPasMPMemoryBarrier.Write;
+{$ifend}
+ result:=true;
+end;
 
 const PasMPThreadSafeHashTableItemStateDeleted=-1;
       PasMPThreadSafeHashTableItemStateEmpty=0;
@@ -9500,7 +9737,7 @@ var i:TPasMPInt32;
     QueueItem:PPasMPBoundedQueueItem;
 begin
  inherited Create;
- fQueue:=TPasMPThreadSafeQueue.Create(SizeOf(PPasMPBoundedQueueItem));
+ fQueue:=TPasMPThreadSafeQueue.Create(SizeOf(PPasMPBoundedQueueItem),AddCPUCacheLinePaddingToInternalItemDataStructure);
  fFree:=TPasMPThreadSafeStack.Create;
  fMaximalCount:=MaximalCount;
  fItemSize:=ItemSize;
@@ -9567,7 +9804,7 @@ var i:TPasMPInt32;
     QueueItem:PPasMPBoundedTypedQueueItem;
 begin
  inherited Create;
- fQueue:=TPasMPThreadSafeQueue.Create(SizeOf(PPasMPBoundedQueueItem));
+ fQueue:=TPasMPThreadSafeQueue.Create(SizeOf(PPasMPBoundedQueueItem),AddCPUCacheLinePaddingToInternalItemDataStructure);
  fFree:=TPasMPThreadSafeStack.Create;
  fMaximalCount:=MaximalCount;
  fInternalItemSize:=SizeOf(TPasMPBoundedTypedQueueItem);
@@ -9643,443 +9880,97 @@ end;
 {$endif}
 
 constructor TPasMPBoundedArrayBasedQueue.Create(const MaximalCount,ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
-var i:TPasMPInt32;
-    p:PPasMPUInt8;
-    QueueItemNode:PPasMPBoundedArrayBasedQueueItemNode;
 begin
- inherited Create;
- fMaximalCount:=TPasMPMath.RoundUpToPowerOfTwo32(MaximalCount);
- if fMaximalCount<>MaximalCount then begin
-  raise EPasMPBoundedArrayBasedQueue.Create('Maximum count must be power of two');
- end;
- fMask:=fMaximalCount-1;
- fItemSize:=ItemSize;
- fInternalItemSize:=SizeOf(TPasMPBoundedArrayBasedQueueItemNode)+fItemSize;
- if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
-  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
- end else begin
-  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,SizeOf(TPasMPPtrUInt));
- end;
- fHeadSequence:=0;
- fTailSequence:=0;
- TPasMPMemoryBarrier.ReadWrite;
- TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
- p:=fData;
- for i:=0 to fMaximalCount-1 do begin
-  QueueItemNode:=pointer(p);
-  QueueItemNode^.Sequence:=i;
-  inc(p,fInternalItemSize);
- end;
- TPasMPMemoryBarrier.ReadWrite;
+ inherited Create(MaximalCount,ItemSize,AddCPUCacheLinePaddingToInternalItemDataStructure);
 end;
 
 destructor TPasMPBoundedArrayBasedQueue.Destroy;
 begin
- TPasMPMemory.FreeAlignedMemory(fData);
  inherited Destroy;
-end;
-
-function TPasMPBoundedArrayBasedQueue.IsEmpty:boolean;
-var LocalTailSequence,QueueItemNodeSequence:TPasMPInt32;
-    QueueItemNode:PPasMPBoundedArrayBasedQueueItemNode;
-begin
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.ReadWrite;
-{$ifend}
- LocalTailSequence:=fTailSequence;
- QueueItemNode:={%H-}pointer(TPasMPPtrUInt(TPasMPPtrUInt(pointer(fData))+TPasMPPtrUInt(TPasMPPtrUInt(LocalTailSequence and fMask)*TPasMPPtrUInt(fInternalItemSize))));
-{$if defined(CPU386) or defined(CPUx86_64)}
- TPasMPMemoryBarrier.ReadDependency;
-{$else}
- TPasMPMemoryBarrier.Read;
-{$ifend}
- QueueItemNodeSequence:=QueueItemNode^.Sequence;
- result:=(QueueItemNodeSequence-(LocalTailSequence+1))<0;
-end;
-
-function TPasMPBoundedArrayBasedQueue.IsFull:boolean;
-var LocalHeadSequence,QueueItemNodeSequence:TPasMPInt32;
-    QueueItemNode:PPasMPBoundedArrayBasedQueueItemNode;
-begin
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.ReadWrite;
-{$ifend}
- LocalHeadSequence:=fHeadSequence;
- QueueItemNode:={%H-}pointer(TPasMPPtrUInt(TPasMPPtrUInt(pointer(fData))+TPasMPPtrUInt(TPasMPPtrUInt(LocalHeadSequence and fMask)*TPasMPPtrUInt(fInternalItemSize))));
-{$if defined(CPU386) or defined(CPUx86_64)}
- TPasMPMemoryBarrier.ReadDependency;
-{$else}
- TPasMPMemoryBarrier.Read;
-{$ifend}
- QueueItemNodeSequence:=QueueItemNode^.Sequence;
- result:=(QueueItemNodeSequence-LocalHeadSequence)<0;
-end;
-
-function TPasMPBoundedArrayBasedQueue.Enqueue(const Item):boolean;
-var LocalHeadSequence,QueueItemNodeSequence:TPasMPInt32;
-    QueueItemNode:PPasMPBoundedArrayBasedQueueItemNode;
-begin
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.Read;
-{$ifend}
- LocalHeadSequence:=fHeadSequence;
- repeat
-  QueueItemNode:={%H-}pointer(TPasMPPtrUInt(TPasMPPtrUInt(pointer(fData))+TPasMPPtrUInt(TPasMPPtrUInt(LocalHeadSequence and fMask)*TPasMPPtrUInt(fInternalItemSize))));
-{$if defined(CPU386) or defined(CPUx86_64)}
-  TPasMPMemoryBarrier.ReadDependency;
-{$else}
-  TPasMPMemoryBarrier.Read;
-{$ifend}
-  QueueItemNodeSequence:=QueueItemNode^.Sequence;
-  case QueueItemNodeSequence-LocalHeadSequence of
-   0:begin
-    if TPasMPInterlocked.CompareExchange(fHeadSequence,LocalHeadSequence+1,LocalHeadSequence)=LocalHeadSequence then begin
-     break;
-    end;
-   end;
-   Low(TPasMPInt32)..-1:begin
-    result:=false;
-    exit;
-   end;
-   else begin
-{$if defined(CPU386) or defined(CPUx86_64)}
-    TPasMPMemoryBarrier.ReadDependency;
-{$else}
-    TPasMPMemoryBarrier.Read;
-{$ifend}
-    LocalHeadSequence:=fHeadSequence;
-   end;
-  end;
- until false;
- Move(Item,QueueItemNode^.Data,fItemSize);
-{$if defined(CPU386)}
- asm
-  mfence;
- end;
-{$elseif not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.ReadWrite;
-{$ifend}
- QueueItemNode^.Sequence:=LocalHeadSequence+1;
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.Write;
-{$ifend}
- result:=true;
-end;
-
-function TPasMPBoundedArrayBasedQueue.Dequeue(out Item):boolean;
-var LocalTailSequence,QueueItemNodeSequence:TPasMPInt32;
-    QueueItemNode:PPasMPBoundedArrayBasedQueueItemNode;
-begin
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.Read;
-{$ifend}
- LocalTailSequence:=fTailSequence;
- repeat
-  QueueItemNode:={%H-}pointer(TPasMPPtrUInt(TPasMPPtrUInt(pointer(fData))+TPasMPPtrUInt(TPasMPPtrUInt(LocalTailSequence and fMask)*TPasMPPtrUInt(fInternalItemSize))));
-{$if defined(CPU386) or defined(CPUx86_64)}
-  TPasMPMemoryBarrier.ReadDependency;
-{$else}
-  TPasMPMemoryBarrier.Read;
-{$ifend}
-  QueueItemNodeSequence:=QueueItemNode^.Sequence;
-  case QueueItemNodeSequence-(LocalTailSequence+1) of
-   0:begin
-    if TPasMPInterlocked.CompareExchange(fTailSequence,LocalTailSequence+1,LocalTailSequence)=LocalTailSequence then begin
-     break;
-    end;
-   end;
-   Low(TPasMPInt32)..-1:begin
-    result:=false;
-    exit;
-   end;
-   else begin
-{$if defined(CPU386) or defined(CPUx86_64)}
-    TPasMPMemoryBarrier.ReadDependency;
-{$else}
-    TPasMPMemoryBarrier.Read;
-{$ifend}
-    LocalTailSequence:=fTailSequence;
-   end;
-  end;
- until false;
- Move(QueueItemNode^.Data,Item,fItemSize);
-{$if defined(CPU386)}
- asm
-  mfence;
- end;
-{$elseif not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.ReadWrite;
-{$ifend}
- QueueItemNode^.Sequence:=LocalTailSequence+fMask+1;
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.Write;
-{$ifend}
- result:=true;
 end;
 
 {$ifdef HAS_GENERICS}
 constructor TPasMPBoundedArrayBasedQueue<T>.Create(const MaximalCount:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
-var i:TPasMPInt32;
-    p:PPasMPUInt8;
-    QueueItemNode:PPasMPBoundedArrayTypedQueueItemNode;
 begin
- inherited Create;
- fMaximalCount:=TPasMPMath.RoundUpToPowerOfTwo32(MaximalCount);
- if fMaximalCount<>MaximalCount then begin
-  raise EPasMPBoundedArrayBasedQueue.Create('Maximum count must be power of two');
- end;
- fMask:=fMaximalCount-1;
- fInternalItemSize:=SizeOf(TPasMPBoundedArrayTypedQueueItemNode);
- if AddCPUCacheLinePaddingToInternalItemDataStructure then begin
-  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,PasMPCPUCacheLineSize);
- end else begin
-  fInternalItemSize:=TPasMPMath.RoundUpToMask32(fInternalItemSize,SizeOf(TPasMPPtrUInt));
- end;
- fHeadSequence:=0;
- fTailSequence:=0;
- TPasMPMemoryBarrier.ReadWrite;
- TPasMPMemory.AllocateAlignedMemory(fData,fInternalItemSize*fMaximalCount,PasMPCPUCacheLineSize);
- p:=fData;
- for i:=0 to fMaximalCount-1 do begin
-  QueueItemNode:=pointer(p);
-  Initialize(QueueItemNode^);
-  QueueItemNode^.Sequence:=i;
-  inc(p,fInternalItemSize);
- end;
- TPasMPMemoryBarrier.ReadWrite;
+ inherited Create(MaximalCount,SizeOf(T),AddCPUCacheLinePaddingToInternalItemDataStructure);
 end;
 
 destructor TPasMPBoundedArrayBasedQueue<T>.Destroy;
-var i:TPasMPInt32;
-    p:PPasMPUInt8;
-    QueueItemNode:PPasMPBoundedArrayTypedQueueItemNode;
 begin
- p:=fData;
- for i:=0 to fMaximalCount-1 do begin
-  QueueItemNode:=pointer(p);
-  Finalize(QueueItemNode^);
-  inc(p,fInternalItemSize);
- end;
- TPasMPMemory.FreeAlignedMemory(fData);
  inherited Destroy;
 end;
 
-function TPasMPBoundedArrayBasedQueue<T>.IsEmpty:boolean;
-var LocalTailSequence,QueueItemNodeSequence:TPasMPInt32;
-    QueueItemNode:PPasMPBoundedArrayTypedQueueItemNode;
+procedure TPasMPBoundedArrayBasedQueue<T>.InitializeItem(const Data:pointer);
 begin
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.ReadWrite;
-{$ifend}
- LocalTailSequence:=fTailSequence;
- QueueItemNode:={%H-}pointer(TPasMPPtrUInt(TPasMPPtrUInt(pointer(fData))+TPasMPPtrUInt(TPasMPPtrUInt(LocalTailSequence and fMask)*TPasMPPtrUInt(fInternalItemSize))));
-{$if defined(CPU386) or defined(CPUx86_64)}
- TPasMPMemoryBarrier.ReadDependency;
-{$else}
- TPasMPMemoryBarrier.Read;
-{$ifend}
- QueueItemNodeSequence:=QueueItemNode^.Sequence;
- result:=(QueueItemNodeSequence-(LocalTailSequence+1))<0;
+ Initialize(T(Data^));
 end;
 
-function TPasMPBoundedArrayBasedQueue<T>.IsFull:boolean;
-var LocalHeadSequence,QueueItemNodeSequence:TPasMPInt32;
-    QueueItemNode:PPasMPBoundedArrayTypedQueueItemNode;
+procedure TPasMPBoundedArrayBasedQueue<T>.FinalizeItem(const Data:pointer);
 begin
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.ReadWrite;
-{$ifend}
- LocalHeadSequence:=fHeadSequence;
- QueueItemNode:={%H-}pointer(TPasMPPtrUInt(TPasMPPtrUInt(pointer(fData))+TPasMPPtrUInt(TPasMPPtrUInt(LocalHeadSequence and fMask)*TPasMPPtrUInt(fInternalItemSize))));
-{$if defined(CPU386) or defined(CPUx86_64)}
- TPasMPMemoryBarrier.ReadDependency;
-{$else}
- TPasMPMemoryBarrier.Read;
-{$ifend}
- QueueItemNodeSequence:=QueueItemNode^.Sequence;
- result:=(QueueItemNodeSequence-LocalHeadSequence)<0;
+ Finalize(T(Data^));
+end;
+
+procedure TPasMPBoundedArrayBasedQueue<T>.CopyItem(const Source,Destination:pointer);
+begin
+ T(Destination^):=T(Source^);
 end;
 
 function TPasMPBoundedArrayBasedQueue<T>.Enqueue(const Item:T):boolean;
-var LocalHeadSequence,QueueItemNodeSequence:TPasMPInt32;
-    QueueItemNode:PPasMPBoundedArrayTypedQueueItemNode;
 begin
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.Read;
-{$ifend}
- LocalHeadSequence:=fHeadSequence;
- repeat
-  QueueItemNode:={%H-}pointer(TPasMPPtrUInt(TPasMPPtrUInt(pointer(fData))+TPasMPPtrUInt(TPasMPPtrUInt(LocalHeadSequence and fMask)*TPasMPPtrUInt(fInternalItemSize))));
-{$if defined(CPU386) or defined(CPUx86_64)}
-  TPasMPMemoryBarrier.ReadDependency;
-{$else}
-  TPasMPMemoryBarrier.Read;
-{$ifend}
-  QueueItemNodeSequence:=QueueItemNode^.Sequence;
-  case QueueItemNodeSequence-LocalHeadSequence of
-   0:begin
-    if TPasMPInterlocked.CompareExchange(fHeadSequence,LocalHeadSequence+1,LocalHeadSequence)=LocalHeadSequence then begin
-     break;
-    end;
-   end;
-   Low(TPasMPInt32)..-1:begin
-    result:=false;
-    exit;
-   end;
-   else begin
-{$if defined(CPU386) or defined(CPUx86_64)}
-    TPasMPMemoryBarrier.ReadDependency;
-{$else}
-    TPasMPMemoryBarrier.Read;
-{$ifend}
-    LocalHeadSequence:=fHeadSequence;
-   end;
-  end;
- until false;
- QueueItemNode^.Data:=Item;
- TPasMPMemoryBarrier.ReadWrite;
- QueueItemNode^.Sequence:=LocalHeadSequence+1;
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.Write;
-{$ifend}
- result:=true;
+ result:=inherited Enqueue(Item);
 end;
 
 function TPasMPBoundedArrayBasedQueue<T>.Dequeue(out Item:T):boolean;
-var LocalTailSequence,QueueItemNodeSequence:TPasMPInt32;
-    QueueItemNode:PPasMPBoundedArrayTypedQueueItemNode;
 begin
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.Read;
-{$ifend}
- LocalTailSequence:=fTailSequence;
- repeat
-  QueueItemNode:={%H-}pointer(TPasMPPtrUInt(TPasMPPtrUInt(pointer(fData))+TPasMPPtrUInt(TPasMPPtrUInt(LocalTailSequence and fMask)*TPasMPPtrUInt(fInternalItemSize))));
-{$if defined(CPU386) or defined(CPUx86_64)}
-  TPasMPMemoryBarrier.ReadDependency;
-{$else}
-  TPasMPMemoryBarrier.Read;
-{$ifend}
-  QueueItemNodeSequence:=QueueItemNode^.Sequence;
-  case QueueItemNodeSequence-(LocalTailSequence+1) of
-   0:begin
-    if TPasMPInterlocked.CompareExchange(fTailSequence,LocalTailSequence+1,LocalTailSequence)=LocalTailSequence then begin
-     break;
-    end;
-   end;
-   Low(TPasMPInt32)..-1:begin
-    result:=false;
-    exit;
-   end;
-   else begin
-{$if defined(CPU386) or defined(CPUx86_64)}
-    TPasMPMemoryBarrier.ReadDependency;
-{$else}
-    TPasMPMemoryBarrier.Read;
-{$ifend}
-    LocalTailSequence:=fTailSequence;
-   end;
-  end;
- until false;
- Item:=QueueItemNode^.Data;
- Finalize(QueueItemNode^.Data);
- TPasMPMemoryBarrier.ReadWrite;
- QueueItemNode^.Sequence:=LocalTailSequence+fMask+1;
-{$if not (defined(CPU386) or defined(CPUx86_64))}
- TPasMPMemoryBarrier.Write;
-{$ifend}
- result:=true;
+ result:=inherited Dequeue(Item);
 end;
 
 {$endif}
 
 constructor TPasMPUnboundedQueue.Create(const ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 begin
- inherited Create;
- fQueue:=TPasMPThreadSafeQueue.Create(ItemSize,AddCPUCacheLinePaddingToInternalItemDataStructure);
- fItemSize:=ItemSize;
+ inherited Create(ItemSize,AddCPUCacheLinePaddingToInternalItemDataStructure);
 end;
 
 destructor TPasMPUnboundedQueue.Destroy;
 begin
- fQueue.Free;
  inherited Destroy;
-end;
-
-function TPasMPUnboundedQueue.IsEmpty:boolean;
-begin
- result:=fQueue.IsEmpty;
-end;
-
-procedure TPasMPUnboundedQueue.Enqueue(const Item);
-begin
- fQueue.Enqueue(Item);
-end;
-
-function TPasMPUnboundedQueue.Dequeue(out Item):boolean;
-begin
- result:=fQueue.Dequeue(Item);
 end;
 
 {$ifdef HAS_GENERICS}
 constructor TPasMPUnboundedQueue<T>.Create(const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 begin
- inherited Create;
- fQueue:=TPasMPThreadSafeQueue.Create(SizeOf(TPasMPUnboundedQueue<T>.PPasMPUnboundedTypedQueueItem),AddCPUCacheLinePaddingToInternalItemDataStructure);
- fAddCPUCacheLinePaddingToInternalItemDataStructure:=AddCPUCacheLinePaddingToInternalItemDataStructure;
+ inherited Create(SizeOf(TPasMPUnboundedQueue<T>.TPasMPUnboundedTypedQueueItem),AddCPUCacheLinePaddingToInternalItemDataStructure);
 end;
 
 destructor TPasMPUnboundedQueue<T>.Destroy;
-var QueueItem:PPasMPUnboundedTypedQueueItem;
 begin
- while fQueue.Dequeue(QueueItem) do begin
-  if assigned(QueueItem) then begin
-   Finalize(QueueItem^);
-   if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
-    TPasMPMemory.FreeAlignedMemory(QueueItem);
-   end else begin
-    FreeMem(QueueItem);
-   end;
-  end;
- end;
- fQueue.Free;
  inherited Destroy;
 end;
 
-function TPasMPUnboundedQueue<T>.IsEmpty:boolean;
+procedure TPasMPUnboundedQueue<T>.InitializeItem(const Data:pointer);
 begin
- result:=fQueue.IsEmpty;
+ Initialize(T(Data^));
+end;
+
+procedure TPasMPUnboundedQueue<T>.FinalizeItem(const Data:pointer);
+begin
+ Finalize(T(Data^));
+end;
+
+procedure TPasMPUnboundedQueue<T>.CopyItem(const Source,Destination:pointer);
+begin
+ T(Destination^):=T(Source^);
 end;
 
 procedure TPasMPUnboundedQueue<T>.Enqueue(const Item:T);
-var QueueItem:PPasMPUnboundedTypedQueueItem;
 begin
- if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
-  TPasMPMemory.AllocateAlignedMemory(QueueItem,TPasMPMath.RoundUpToMask32(SizeOf(TPasMPUnboundedTypedQueueItem),PasMPCPUCacheLineSize),PasMPCPUCacheLineSize);
- end else begin
-  GetMem(QueueItem,SizeOf(TPasMPUnboundedTypedQueueItem));
- end;
- Initialize(QueueItem^);
- QueueItem^.Data:=Item;
- fQueue.Enqueue(QueueItem);
+ inherited Enqueue(Item);
 end;
 
 function TPasMPUnboundedQueue<T>.Dequeue(out Item:T):boolean;
-var QueueItem:PPasMPUnboundedTypedQueueItem;
 begin
- result:=fQueue.Dequeue(QueueItem);
- if result then begin
-  result:=assigned(QueueItem);
-  if result then begin
-   Item:=QueueItem^.Data;
-   Finalize(QueueItem^);
-   if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
-    TPasMPMemory.FreeAlignedMemory(QueueItem);
-   end else begin
-    FreeMem(QueueItem);
-   end;
-  end;
- end;
+ result:=inherited Dequeue(Item);
 end;
 {$endif}
 
