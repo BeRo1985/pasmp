@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-09-25-07-16-0000                       *
+ *                        Version 2017-09-29-23-39-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1332,7 +1332,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 
      PPasMPThreadSafeBoundedArrayBasedQueueItemNode=^TPasMPThreadSafeBoundedArrayBasedQueueItemNode;
      TPasMPThreadSafeBoundedArrayBasedQueueItemNode=record
-      Sequence:TPasMPSizeUInt;
+      Sequence:TPasMPUInt32;
       Data:record
        // Empty
       end;
@@ -1344,22 +1344,22 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
      TPasMPThreadSafeBoundedArrayBasedQueue=class // only for TPasMP internal usage
       private
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fData:pointer;
-       fMaximalCount:TPasMPSizeUInt;
-       fMask:TPasMPSizeUInt;
-       fItemSize:TPasMPSizeUInt;
-       fInternalItemSize:TPasMPSizeUInt;
+       fMaximalCount:TPasMPUInt32;
+       fMask:TPasMPUInt32;
+       fItemSize:TPasMPUInt32;
+       fInternalItemSize:TPasMPUInt32;
       protected
-       fCacheLineFillUp0:array[0..(PasMPCPUCacheLineSize-(SizeOf(pointer)+(SizeOf(TPasMPSizeUInt)*4)))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
-       {$ifdef HAS_VOLATILE}[volatile]{$endif}fHeadSequence:TPasMPSizeUInt;
-       fCacheLineFillUp1:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSizeUInt))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
-       {$ifdef HAS_VOLATILE}[volatile]{$endif}fTailSequence:TPasMPSizeUInt;
-       fCacheLineFillUp2:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSizeUInt))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
+       fCacheLineFillUp0:array[0..(PasMPCPUCacheLineSize-(SizeOf(pointer)+(SizeOf(TPasMPUInt32)*4)))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fHeadSequence:TPasMPUInt32;
+       fCacheLineFillUp1:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPUInt32))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fTailSequence:TPasMPUInt32;
+       fCacheLineFillUp2:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPUInt32))-1] of TPasMPUInt8; // for to force fields to different CPU cache lines
       protected
        procedure InitializeItem(const Data:pointer); virtual;
        procedure FinalizeItem(const Data:pointer); virtual;
        procedure CopyItem(const Source,Destination:pointer); virtual;
       public
-       constructor Create(const MaximalCount,ItemSize:TPasMPSizeUInt;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
+       constructor Create(const MaximalCount,ItemSize:TPasMPUInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
        procedure Clear;
        function IsEmpty:boolean;
@@ -7747,8 +7747,8 @@ begin
 end;
 {$endif}
 
-constructor TPasMPThreadSafeBoundedArrayBasedQueue.Create(const MaximalCount,ItemSize:TPasMPSizeUInt;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
-var i:TPasMPSizeUInt;
+constructor TPasMPThreadSafeBoundedArrayBasedQueue.Create(const MaximalCount,ItemSize:TPasMPUInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
+var i:TPasMPUInt32;
     p:PPasMPUInt8;
     QueueItemNode:PPasMPThreadSafeBoundedArrayBasedQueueItemNode;
 begin
@@ -7780,7 +7780,7 @@ begin
 end;
 
 destructor TPasMPThreadSafeBoundedArrayBasedQueue.Destroy;
-var i:TPasMPSizeUInt;
+var i:TPasMPUInt32;
     p:PPasMPUInt8;
     QueueItemNode:PPasMPThreadSafeBoundedArrayBasedQueueItemNode;
 begin
@@ -7821,7 +7821,7 @@ begin
 end;
 
 function TPasMPThreadSafeBoundedArrayBasedQueue.IsEmpty:boolean;
-var LocalTailSequence,QueueItemNodeSequence:TPasMPSizeUInt;
+var LocalTailSequence,QueueItemNodeSequence:TPasMPUInt32;
     QueueItemNode:PPasMPThreadSafeBoundedArrayBasedQueueItemNode;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -7835,11 +7835,11 @@ begin
  TPasMPMemoryBarrier.Read;
 {$ifend}
  QueueItemNodeSequence:=QueueItemNode^.Sequence;
- result:=TPasMPSizeInt(QueueItemNodeSequence-(LocalTailSequence+1))<0;
+ result:=TPasMPInt32(QueueItemNodeSequence-(LocalTailSequence+1))<0;
 end;
 
 function TPasMPThreadSafeBoundedArrayBasedQueue.IsFull:boolean;
-var LocalHeadSequence,QueueItemNodeSequence:TPasMPSizeUInt;
+var LocalHeadSequence,QueueItemNodeSequence:TPasMPUInt32;
     QueueItemNode:PPasMPThreadSafeBoundedArrayBasedQueueItemNode;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -7853,11 +7853,11 @@ begin
  TPasMPMemoryBarrier.Read;
 {$ifend}
  QueueItemNodeSequence:=QueueItemNode^.Sequence;
- result:=TPasMPSizeInt(QueueItemNodeSequence-LocalHeadSequence)<0;
+ result:=TPasMPInt32(QueueItemNodeSequence-LocalHeadSequence)<0;
 end;
 
 function TPasMPThreadSafeBoundedArrayBasedQueue.Enqueue(const Item):boolean;
-var LocalHeadSequence,QueueItemNodeSequence:TPasMPSizeUInt;
+var LocalHeadSequence,QueueItemNodeSequence:TPasMPUInt32;
     QueueItemNode:PPasMPThreadSafeBoundedArrayBasedQueueItemNode;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -7872,15 +7872,15 @@ begin
   TPasMPMemoryBarrier.Read;
 {$ifend}
   QueueItemNodeSequence:=QueueItemNode^.Sequence;
-  case TPasMPSizeInt(QueueItemNodeSequence-LocalHeadSequence) of
+  case TPasMPInt32(QueueItemNodeSequence-LocalHeadSequence) of
    0:begin
-    if TPasMPInterlocked.CompareExchange({$ifdef CPU64}TPasMPInt64{$else}TPasMPInt32{$endif}(fHeadSequence),
-                                         {$ifdef CPU64}TPasMPInt64{$else}TPasMPInt32{$endif}(LocalHeadSequence+1),
-                                         {$ifdef CPU64}TPasMPInt64{$else}TPasMPInt32{$endif}(LocalHeadSequence))={$ifdef CPU64}TPasMPInt64{$else}TPasMPInt32{$endif}(LocalHeadSequence) then begin
+    if TPasMPInterlocked.CompareExchange(TPasMPInt32(fHeadSequence),
+                                         TPasMPInt32(LocalHeadSequence+1),
+                                         TPasMPInt32(LocalHeadSequence))=TPasMPInt32(LocalHeadSequence) then begin
      break;
     end;
    end;
-   Low(TPasMPSizeInt)..-1:begin
+   Low(TPasMPInt32)..-1:begin
     result:=false;
     exit;
    end;
@@ -7911,7 +7911,7 @@ begin
 end;
 
 function TPasMPThreadSafeBoundedArrayBasedQueue.Dequeue(out Item):boolean;
-var LocalTailSequence,QueueItemNodeSequence:TPasMPSizeUInt;
+var LocalTailSequence,QueueItemNodeSequence:TPasMPUInt32;
     QueueItemNode:PPasMPThreadSafeBoundedArrayBasedQueueItemNode;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -7926,15 +7926,15 @@ begin
   TPasMPMemoryBarrier.Read;
 {$ifend}
   QueueItemNodeSequence:=QueueItemNode^.Sequence;
-  case TPasMPSizeInt(QueueItemNodeSequence-(LocalTailSequence+1)) of
+  case TPasMPInt32(QueueItemNodeSequence-(LocalTailSequence+1)) of
    0:begin
-    if TPasMPInterlocked.CompareExchange({$ifdef CPU64}TPasMPInt64{$else}TPasMPInt32{$endif}(fTailSequence),
-                                         {$ifdef CPU64}TPasMPInt64{$else}TPasMPInt32{$endif}(LocalTailSequence+1),
-                                         {$ifdef CPU64}TPasMPInt64{$else}TPasMPInt32{$endif}(LocalTailSequence))={$ifdef CPU64}TPasMPInt64{$else}TPasMPInt32{$endif}(LocalTailSequence) then begin
+    if TPasMPInterlocked.CompareExchange(TPasMPInt32(fTailSequence),
+                                         TPasMPInt32(LocalTailSequence+1),
+                                         TPasMPInt32(LocalTailSequence))=TPasMPInt32(LocalTailSequence) then begin
      break;
     end;
    end;
-   Low(TPasMPSizeInt)..-1:begin
+   Low(TPasMPInt32)..-1:begin
     result:=false;
     exit;
    end;
