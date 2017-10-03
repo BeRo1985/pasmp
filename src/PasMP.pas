@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-09-29-23-39-0000                       *
+ *                        Version 2017-10-03-08-46-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -319,17 +319,17 @@ unit PasMP;
  {$endif}
 {$endif}
 {$if defined(CPU386) or defined(CPUx86_64) or defined(CPUAARCH64)}
- {$define HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+ {$define PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 {$elseif defined(CPUARM)}
  {$if defined(CPUARMV6K)}
   // = CPUARMV6K
-  {$ifdef FORCE_ARM_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-   {$define HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+  {$ifdef PASMP_FORCE_ARM_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+   {$define PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
   {$endif}
  {$elseif defined(CPUARM_HAS_DMB) and defined(CPUARM_HAS_LDREX)}
   // >= CPUARMV7A
-  {$ifdef FORCE_ARM_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
-   {$define HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+  {$ifdef PASMP_FORCE_ARM_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+   {$define PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
   {$endif}
  {$ifend}
 {$ifend}
@@ -789,12 +789,12 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        class function Exchange(var Destination:TPasMPBool32;const Source:TPasMPBool32):TPasMPBool32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function CompareExchange(var Destination:TPasMPInt32;const NewValue,Comperand:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function CompareExchange(var Destination:TPasMPUInt32;const NewValue,Comperand:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
-{$if defined(CPU64) or ((defined(CPU386) or defined(CPUARM)) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE))}
+{$if defined(CPU64) or ((defined(CPU386) or defined(CPUARM)) and defined(PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE))}
        class function CompareExchange(var Destination:TPasMPInt64;const NewValue,Comperand:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function CompareExchange(var Destination:TPasMPInt64Record;const NewValue,Comperand:TPasMPInt64Record):TPasMPInt64Record; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function CompareExchange(var Destination:TPasMPUInt64;const NewValue,Comperand:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$ifend}
-{$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
+{$if defined(CPU64) and defined(PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
        class function CompareExchange(var Destination:TPasMPInt128Record;const NewValue,Comperand:TPasMPInt128Record):TPasMPInt128Record; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(fpc)}inline;{$ifend}
 {$ifend}
        class function CompareExchange(var Destination:pointer;const NewValue,Comperand:pointer):pointer; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
@@ -802,11 +802,11 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        class function CompareExchange(var Destination:TPasMPBool32;const NewValue,Comperand:TPasMPBool32):TPasMPBool32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Read(var Source:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Read(var Source:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
-{$if defined(CPU64) or ((defined(CPU386) or defined(CPUARM)) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE))}
+{$if defined(CPU64) or ((defined(CPU386) or defined(CPUARM)) and defined(PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE))}
        class function Read(var Source:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Read(var Source:TPasMPInt64Record):TPasMPInt64Record; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Read(var Source:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
-{$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
+{$if defined(CPU64) and defined(PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
        class function Read(var Source:TPasMPInt128Record):TPasMPInt128Record; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(fpc)}inline;{$ifend}
 {$ifend}
 {$ifend}
@@ -815,11 +815,11 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        class function Read(var Source:TPasMPBool32):TPasMPBool32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Write(var Destination:TPasMPInt32;const Source:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Write(var Destination:TPasMPUInt32;const Source:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
-{$if defined(CPU64) or ((defined(CPU386) or defined(CPUARM)) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE))}
+{$if defined(CPU64) or ((defined(CPU386) or defined(CPUARM)) and defined(PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE))}
        class function Write(var Destination:TPasMPInt64;const Source:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Write(var Destination:TPasMPInt64Record;const Source:TPasMPInt64Record):TPasMPInt64Record; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function Write(var Destination:TPasMPUInt64;const Source:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
-{$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
+{$if defined(CPU64) and defined(PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
        class function Write(var Destination:TPasMPInt128Record;const Source:TPasMPInt128Record):TPasMPInt128Record; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(fpc)}inline;{$ifend}
 {$ifend}
 {$ifend}
@@ -1270,7 +1270,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
      // The lock-based variant is based of my head
      TPasMPThreadSafeStack=class // only for PasMP internal usage
       private
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$ifdef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
        fHead:PPasMPTaggedPointer;
 {$else}
        fCriticalSection:TPasMPCriticalSection;
@@ -1288,7 +1288,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 
      PPasMPThreadSafeQueueNode=^TPasMPThreadSafeQueueNode;
      TPasMPThreadSafeQueueNode=record
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$ifdef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
       Previous:TPasMPTaggedPointer;
       Next:TPasMPTaggedPointer;
 {$else}
@@ -1300,11 +1300,16 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
      end;
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+{$define PASMP_USE_OPTIMISTIC_FIFO_QUEUE}
+{$ifdef PASMP_USE_OPTIMISTIC_FIFO_QUEUE}
      // The lock-free variant is based on http://people.csail.mit.edu/edya/publications/OptimisticFIFOQueue-journal.pdf
+{$else}
+     // The lock-free variant is based on M. M. Michael and M. L. Scott "Simple, fast, and practical non-blocking and blocking concurrent queue algorithms" together with tagged pointer counters
+{$endif}
      // The lock-based variant is based on the two-lock concurrent queue
      TPasMPThreadSafeQueue=class // only for PasMP internal usage
       private
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$ifdef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
        fHead:PPasMPTaggedPointer;
        fTail:PPasMPTaggedPointer;
 {$else}
@@ -1323,10 +1328,10 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       public
        constructor Create(ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
        destructor Destroy; override;
-       procedure Clear; {$ifndef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure Clear; {$ifndef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        function IsEmpty:boolean; {$ifdef CAN_INLINE}inline;{$endif}
-       procedure Enqueue(const Item); {$ifndef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       function Dequeue(out Item):boolean; {$ifndef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure Enqueue(const Item); {$ifndef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       function Dequeue(out Item):boolean; {$ifndef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -3204,7 +3209,7 @@ begin
 end;
 {$endif}
 
-{$if defined(FPC) and defined(CPUARM) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
+{$if defined(FPC) and defined(CPUARM) and defined(PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
 {$if defined(CPUARM_HAS_LDREX)}
 function InterlockedCompareExchange64(var Destination:TPasMPInt64;NewValue,Comperand:TPasMPInt64):TPasMPInt64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 label Loop;
@@ -5134,7 +5139,7 @@ begin
 {$endif}
 end;
 
-{$if defined(CPU64) or ((defined(CPU386) or defined(CPUARM)) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE))}
+{$if defined(CPU64) or ((defined(CPU386) or defined(CPUARM)) and defined(PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE))}
 class function TPasMPInterlocked.CompareExchange(var Destination:TPasMPInt64;const NewValue,Comperand:TPasMPInt64):TPasMPInt64;
 begin
 {$ifdef HAS_ATOMICS}
@@ -5163,7 +5168,7 @@ begin
 end;
 {$ifend}
 
-{$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
+{$if defined(CPU64) and defined(PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
 class function TPasMPInterlocked.CompareExchange(var Destination:TPasMPInt128Record;const NewValue,Comperand:TPasMPInt128Record):TPasMPInt128Record;
 begin
  result:=InterlockedCompareExchange128(Destination,NewValue,Comperand);
@@ -5223,7 +5228,7 @@ begin
 {$endif}
 end;
 
-{$if defined(CPU64) or ((defined(CPU386) or defined(CPUARM)) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE))}
+{$if defined(CPU64) or ((defined(CPU386) or defined(CPUARM)) and defined(PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE))}
 class function TPasMPInterlocked.Read(var Source:TPasMPInt64):TPasMPInt64;
 begin
 {$ifdef HAS_ATOMICS}
@@ -5251,7 +5256,7 @@ begin
 {$endif}
 end;
 
-{$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
+{$if defined(CPU64) and defined(PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
 class function TPasMPInterlocked.Read(var Source:TPasMPInt128Record):TPasMPInt128Record;
 var Temp:TPasMPInt128Record;
 begin
@@ -5315,7 +5320,7 @@ begin
 {$endif}
 end;
 
-{$if defined(CPU64) or ((defined(CPU386) or defined(CPUARM)) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE))}
+{$if defined(CPU64) or ((defined(CPU386) or defined(CPUARM)) and defined(PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE))}
 class function TPasMPInterlocked.Write(var Destination:TPasMPInt64;const Source:TPasMPInt64):TPasMPInt64;
 {$ifdef CPU64}
 {$ifdef HAS_ATOMICS}
@@ -5378,7 +5383,7 @@ end;
 {$endif}
 {$endif}
 
-{$if defined(CPU64) and defined(HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
+{$if defined(CPU64) and defined(PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
 class function TPasMPInterlocked.Write(var Destination:TPasMPInt128Record;const Source:TPasMPInt128Record):TPasMPInt128Record;
 var Old:TPasMPInt128Record;
 begin
@@ -7324,7 +7329,7 @@ end;
 {$ifend}
 
 constructor TPasMPThreadSafeStack.Create;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$ifdef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 begin
  inherited Create;
  TPasMPMemory.AllocateAlignedMemory(fHead,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
@@ -7340,7 +7345,7 @@ end;
 {$endif}
 
 destructor TPasMPThreadSafeStack.Destroy;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$ifdef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 begin
  TPasMPMemory.FreeAlignedMemory(fHead);
  inherited Destroy;
@@ -7353,7 +7358,7 @@ end;
 {$endif}
 
 procedure TPasMPThreadSafeStack.Clear;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$ifdef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 begin
  fHead^.PointerValue:=nil;
  fHead^.TagValue:=0;
@@ -7365,7 +7370,7 @@ end;
 {$endif}
 
 function TPasMPThreadSafeStack.IsEmpty:boolean;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$ifdef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 begin
  result:=not assigned(fHead^.PointerValue);
 end;
@@ -7386,7 +7391,7 @@ end;
 {$endif}
 
 function TPasMPThreadSafeStack.Push(const Item:pointer):pointer;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$ifdef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 var OldHead,NewHead,ComparsionHead:TPasMPTaggedPointer;
 begin
  OldHead:=fHead^;
@@ -7413,7 +7418,7 @@ end;
 {$endif}
 
 function TPasMPThreadSafeStack.Pop:pointer;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$ifdef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 var OldHead,NewHead,ComparsionHead:TPasMPTaggedPointer;
 begin
  if assigned(fHead^.PointerValue) then begin
@@ -7450,7 +7455,7 @@ end;
 {$endif}
 
 constructor TPasMPThreadSafeQueue.Create(ItemSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$ifdef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 var Node:PPasMPThreadSafeQueueNode;
 begin
  inherited Create;
@@ -7466,7 +7471,7 @@ begin
  fTail:=nil;
  TPasMPMemory.AllocateAlignedMemory(fHead,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
  TPasMPMemory.AllocateAlignedMemory(fTail,SizeOf(TPasMPTaggedPointer),PasMPCPUCacheLineSize);
- TPasMPMemory.AllocateAlignedMemory(Node,SizeOf(TPasMPThreadSafeQueueNode),PasMPCPUCacheLineSize);
+ TPasMPMemory.AllocateAlignedMemory(Node,fInternalNodeSize,PasMPCPUCacheLineSize);
  Node^.Previous.PointerValue:=nil;
  Node^.Previous.TagValue:=0;
  Node^.Next.PointerValue:=nil;
@@ -7475,6 +7480,7 @@ begin
  fHead^.TagValue:=0;
  fTail^.PointerValue:=Node;
  fTail^.TagValue:=0;
+ InitializeItem(@Node^.Data);
 end;
 {$else}
 begin
@@ -7500,11 +7506,12 @@ end;
 {$endif}
 
 destructor TPasMPThreadSafeQueue.Destroy;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$ifdef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 var Item:pointer;
 begin
  GetMem(Item,fItemSize);
  try
+  InitializeItem(Item);
   while Dequeue(Item^) do begin
    FinalizeItem(Item);
   end;
@@ -7512,6 +7519,7 @@ begin
   FreeMem(Item);
  end;
  if assigned(PPasMPThreadSafeQueueNode(fTail)^.Previous.PointerValue) then begin
+  FinalizeItem(@PPasMPThreadSafeQueueNode(PPasMPThreadSafeQueueNode(fTail)^.Previous.PointerValue)^.Data);
   TPasMPMemory.FreeAlignedMemory(PPasMPThreadSafeQueueNode(fTail)^.Previous.PointerValue);
  end;
  TPasMPMemory.FreeAlignedMemory(fTail);
@@ -7552,12 +7560,13 @@ begin
 end;
 
 procedure TPasMPThreadSafeQueue.Clear;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$ifdef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 var Node:PPasMPThreadSafeQueueNode;
     Item:pointer;
 begin
  GetMem(Item,fItemSize);
  try
+  InitializeItem(Item);
   while Dequeue(Item^) do begin
    FinalizeItem(Item);
   end;
@@ -7565,6 +7574,7 @@ begin
   FreeMem(Item);
  end;
  if assigned(PPasMPThreadSafeQueueNode(fTail)^.Previous.PointerValue) then begin
+  FinalizeItem(@PPasMPThreadSafeQueueNode(PPasMPThreadSafeQueueNode(fTail)^.Previous.PointerValue)^.Data);
   TPasMPMemory.FreeAlignedMemory(PPasMPThreadSafeQueueNode(fTail)^.Previous.PointerValue);
  end;
  TPasMPMemory.AllocateAlignedMemory(Node,fInternalNodeSize,PasMPCPUCacheLineSize);
@@ -7576,6 +7586,7 @@ begin
  fHead^.TagValue:=0;
  fTail^.PointerValue:=Node;
  fTail^.TagValue:=0;
+ InitializeItem(@Node^.Data);
 end;
 {$else}
 var CurrentNode,NextNode:PPasMPThreadSafeQueueNode;
@@ -7604,7 +7615,7 @@ end;
 {$endif}
 
 function TPasMPThreadSafeQueue.IsEmpty:boolean;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$ifdef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 begin
  result:=fHead^.PointerValue=fTail^.PointerValue;
 end;
@@ -7615,7 +7626,8 @@ end;
 {$endif}
 
 procedure TPasMPThreadSafeQueue.Enqueue(const Item);
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$ifdef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$ifdef PASMP_USE_OPTIMISTIC_FIFO_QUEUE}
 // Based on http://people.csail.mit.edu/edya/publications/OptimisticFIFOQueue-journal.pdf
 var Node:PPasMPThreadSafeQueueNode;
     Tail,OldTail,NewTail:TPasMPTaggedPointer;
@@ -7629,7 +7641,7 @@ begin
  Node^.Previous.TagValue:=0;
  InitializeItem(@Node^.Data);
  CopyItem(@Item,@Node^.Data);
- OldTail:=fTail^;
+ OldTail.Value:=fTail^.Value;
  repeat
   Tail:=OldTail;
   Node^.Next.PointerValue:=Tail.PointerValue;
@@ -7638,9 +7650,49 @@ begin
   NewTail.TagValue:=Tail.TagValue+1;
   OldTail.Value:=TPasMPInterlocked.CompareExchange(fTail^.Value,NewTail.Value,Tail.Value);
  until {$ifdef CPU64}(OldTail.PointerValue=Tail.PointerValue) and (OldTail.TagValue=Tail.TagValue){$else}OldTail.Value.Value=Tail.Value.Value{$endif};
- PPasMPThreadSafeQueueNode(Tail.PointerValue)^.Previous.PointerValue:=Node;
- PPasMPThreadSafeQueueNode(Tail.PointerValue)^.Previous.TagValue:=Tail.TagValue;
+ NewTail.PointerValue:=Node;
+ NewTail.TagValue:=Tail.TagValue;
+ PPasMPThreadSafeQueueNode(Tail.PointerValue)^.Previous.Value:=NewTail.Value;
 end;
+{$else}
+var Node:PPasMPThreadSafeQueueNode;
+    Tail,Next,CheckTail,Temporary,OldNext:TPasMPTaggedPointer;
+begin
+ if fAddCPUCacheLinePaddingToInternalItemDataStructure then begin
+  TPasMPMemory.AllocateAlignedMemory(Node,fInternalNodeSize,PasMPCPUCacheLineSize);
+ end else begin
+  TPasMPMemory.AllocateAlignedMemory(Node,fInternalNodeSize,PasMPDoubleNativeMachineWordAtomicCompareExchangeAlignment);
+ end;
+ Node^.Previous.PointerValue:=nil;
+ Node^.Previous.TagValue:=0;
+ InitializeItem(@Node^.Data);
+ CopyItem(@Item,@Node^.Data);
+ repeat
+  Tail.Value:=fTail^.Value;
+  TPasMPMemoryBarrier.Read;
+	Next.Value:=PPasMPThreadSafeQueueNode(Tail.PointerValue)^.Next.Value;
+  TPasMPMemoryBarrier.Read;
+  CheckTail.Value:=fTail^.Value;
+  if {$ifdef CPU64}(Tail.TagValue=CheckTail.TagValue) and (Tail.PointerValue=CheckTail.PointerValue){$else}Tail.Value.Value=CheckTail.Value.Value{$endif} then begin
+	 if assigned(Next.PointerValue) then begin
+    Temporary.PointerValue:=Next.PointerValue;
+    Temporary.TagValue:=Tail.TagValue+1;
+    TPasMPInterlocked.CompareExchange(fTail^.Value,Temporary.Value,Tail.Value);
+   end else begin
+    Temporary.PointerValue:=Node;
+    Temporary.TagValue:=Next.TagValue+1;
+    OldNext.Value:=TPasMPInterlocked.CompareExchange(PPasMPThreadSafeQueueNode(fTail^.PointerValue)^.Next.Value,Temporary.Value,Next.Value);
+    if {$ifdef CPU64}(OldNext.PointerValue=Next.PointerValue) and (OldNext.TagValue=Next.TagValue){$else}OldNext.Value.Value=Next.Value.Value{$endif} then begin
+     Temporary.PointerValue:=Node;
+     Temporary.TagValue:=Tail.TagValue+1;
+     TPasMPInterlocked.CompareExchange(fTail^.Value,Temporary.Value,Tail.Value);
+     break;
+    end;
+   end;
+  end;
+ until false;
+end;
+{$endif}
 {$else}
 var Node:PPasMPThreadSafeQueueNode;
 begin
@@ -7663,7 +7715,8 @@ end;
 {$endif}
 
 function TPasMPThreadSafeQueue.Dequeue(out Item):boolean;
-{$ifdef HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$ifdef PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
+{$ifdef PASMP_USE_OPTIMISTIC_FIFO_QUEUE}
 // Based on http://people.csail.mit.edu/edya/publications/OptimisticFIFOQueue-journal.pdf
 var Tail,Head,CheckHead,FirstNodePrevious,NewHead,OldHead,CurrentNode,NextNode,NewNode:TPasMPTaggedPointer;
 begin
@@ -7671,7 +7724,9 @@ begin
  repeat
   Head.Value:=fHead^.Value;
   Tail.Value:=fTail^.Value;
-  FirstNodePrevious:=PPasMPThreadSafeQueueNode(Head.PointerValue)^.Previous;
+  TPasMPMemoryBarrier.Read;
+  FirstNodePrevious.Value:=PPasMPThreadSafeQueueNode(Head.PointerValue)^.Previous.Value;
+  TPasMPMemoryBarrier.Read;
   CheckHead.Value:=fHead^.Value;
   if {$ifdef cpu64}(Head.PointerValue=CheckHead.PointerValue) and (Head.TagValue=CheckHead.TagValue){$else}Head.Value.Value=CheckHead.Value.Value{$endif} then begin
    if {$ifdef cpu64}(Head.PointerValue<>Tail.PointerValue) or (Head.TagValue<>Tail.TagValue){$else}Head.Value.Value<>Tail.Value.Value{$endif} then begin
@@ -7691,12 +7746,13 @@ begin
 {$else}
        if (Head.Value.Value=CheckHead.Value.Value) and (CurrentNode.Value.Value<>Head.Value.Value) then begin
 {$endif}
-        NextNode:=PPasMPThreadSafeQueueNode(CurrentNode.PointerValue)^.Next;
+        NextNode.Value:=PPasMPThreadSafeQueueNode(CurrentNode.PointerValue)^.Next.Value;
         NewNode.PointerValue:=CurrentNode.PointerValue;
         NewNode.TagValue:=CurrentNode.TagValue-1;
         PPasMPThreadSafeQueueNode(NextNode.PointerValue)^.Previous.Value:=NewNode.Value;
-        CurrentNode.PointerValue:=NextNode.PointerValue;
-        CurrentNode.TagValue:=NextNode.TagValue-1;
+        NewNode.PointerValue:=NextNode.PointerValue;
+        NewNode.TagValue:=CurrentNode.TagValue-1;
+        CurrentNode.Value:=NewNode.Value;
        end else begin
         break;
        end;
@@ -7720,6 +7776,42 @@ begin
   end;
  until false;
 end;
+{$else}
+var Head,Tail,Next,CheckHead,OldHead,Temporary:TPasMPTaggedPointer;
+begin
+ result:=false;
+ repeat
+  Head.Value:=fHead^.Value;
+  Tail.Value:=fTail^.Value;
+  TPasMPMemoryBarrier.Read;
+	Next.Value:=PPasMPThreadSafeQueueNode(Head.PointerValue)^.Next.Value;
+  TPasMPMemoryBarrier.Read;
+  CheckHead.Value:=fHead^.Value;
+  if {$ifdef cpu64}(Head.PointerValue=CheckHead.PointerValue) and (Head.TagValue=CheckHead.TagValue){$else}Head.Value.Value=CheckHead.Value.Value{$endif} then begin
+	 if Head.PointerValue=Tail.PointerValue then begin
+    if assigned(Next.PointerValue) then begin
+     Temporary.PointerValue:=Next.PointerValue;
+     Temporary.TagValue:=Head.TagValue+1;
+     TPasMPInterlocked.CompareExchange(fTail^.Value,Temporary.Value,Tail.Value);
+    end else begin
+     break;
+    end;
+   end else begin
+    Temporary.PointerValue:=Next.PointerValue;
+    Temporary.TagValue:=Head.TagValue+1;
+    OldHead.Value:=TPasMPInterlocked.CompareExchange(fHead^.Value,Temporary.Value,Head.Value);
+    if {$ifdef CPU64}(OldHead.PointerValue=Head.PointerValue) and (OldHead.TagValue=Head.TagValue){$else}OldHead.Value.Value=Head.Value.Value{$endif} then begin
+     CopyItem(@PPasMPThreadSafeQueueNode(Next.PointerValue)^.Data,@Item);
+     FinalizeItem(@PPasMPThreadSafeQueueNode(Next.PointerValue)^.Data);
+     TPasMPMemory.FreeAlignedMemory(Head.PointerValue);
+     result:=true;
+     exit;
+    end;
+   end;
+  end;
+ until false;
+end;
+{$endif}
 {$else}
 var Node,NewHead:PPasMPThreadSafeQueueNode;
 begin
@@ -7812,6 +7904,7 @@ var Item:pointer;
 begin
  GetMem(Item,fItemSize);
  try
+  InitializeItem(Item);
   while Dequeue(Item^) do begin
    FinalizeItem(Item);
   end;
