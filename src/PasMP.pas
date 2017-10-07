@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-10-03-08-46-0000                       *
+ *                        Version 2017-10-07-12-52-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -7967,9 +7967,9 @@ begin
   QueueItemNodeSequence:=QueueItemNode^.Sequence;
   case TPasMPInt32(QueueItemNodeSequence-LocalHeadSequence) of
    0:begin
-    if TPasMPInterlocked.CompareExchange(TPasMPInt32(fHeadSequence),
-                                         TPasMPInt32(LocalHeadSequence+1),
-                                         TPasMPInt32(LocalHeadSequence))=TPasMPInt32(LocalHeadSequence) then begin
+    if TPasMPInterlocked.CompareExchange(fHeadSequence,
+                                         LocalHeadSequence+1,
+                                         LocalHeadSequence)=LocalHeadSequence then begin
      break;
     end;
    end;
@@ -8021,9 +8021,9 @@ begin
   QueueItemNodeSequence:=QueueItemNode^.Sequence;
   case TPasMPInt32(QueueItemNodeSequence-(LocalTailSequence+1)) of
    0:begin
-    if TPasMPInterlocked.CompareExchange(TPasMPInt32(fTailSequence),
-                                         TPasMPInt32(LocalTailSequence+1),
-                                         TPasMPInt32(LocalTailSequence))=TPasMPInt32(LocalTailSequence) then begin
+    if TPasMPInterlocked.CompareExchange(fTailSequence,
+                                         LocalTailSequence+1,
+                                         LocalTailSequence)=LocalTailSequence then begin
      break;
     end;
    end;
