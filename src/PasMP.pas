@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-10-07-12-52-0000                       *
+ *                        Version 2017-10-18-02-02-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -353,8 +353,13 @@ unit PasMP;
 {$undef UseThreadLocalStorageX8632}
 
 {$if defined(Linux) or defined(Android)}
- {$define PasMPPThreadSpinLock}
- {$define PasMPPThreadBarrier}
+ {$ifdef fpc}
+  {$define PasMPPThreadSpinLock}
+  {$define PasMPPThreadBarrier}
+ {$else}
+  {$undef PasMPPThreadSpinLock}
+  {$undef PasMPPThreadBarrier}
+ {$endif}
 {$else}
  {$undef PasMPPThreadSpinLock}
  {$undef PasMPPThreadBarrier}
