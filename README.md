@@ -3,6 +3,10 @@ PasMP - a parallel-processing/multi-processing library for Object Pascal
 
 License: zlib
 
+## Support me
+
+[Support me at Patreon](https://www.patreon.com/bero)
+
 ## Features
 
 - Low-level-based design with optional high-level-based constructs
