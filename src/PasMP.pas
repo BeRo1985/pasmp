@@ -13028,6 +13028,7 @@ begin
   JobData^.Granularity:=Granularity;
  end;
  JobData^.Depth:=Depth;
+ JobData^.CanSpread:=CanSpread; 
 end;
 
 type PPasMPParallelDirectIntroSortJobData=^TPasMPParallelDirectIntroSortJobData;
