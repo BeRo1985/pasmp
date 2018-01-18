@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2017-10-18-02-02-0000                       *
+ *                        Version 2018-01-18-11-33-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -13028,6 +13028,7 @@ begin
   JobData^.Granularity:=Granularity;
  end;
  JobData^.Depth:=Depth;
+ JobData^.CanSpread:=CanSpread;
 end;
 
 type PPasMPParallelDirectIntroSortJobData=^TPasMPParallelDirectIntroSortJobData;
