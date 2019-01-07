@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2018-03-23-10-18-0000                       *
+ *                        Version 2019-01-07-17-00-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1539,6 +1539,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function Dequeue(out Item):boolean;
        function AvailableForEnqueue:TPasMPInt32;
        function AvailableForDequeue:TPasMPInt32;
+       function IsFull:boolean;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -1560,6 +1561,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function Dequeue(out Item:T):boolean;
        function AvailableForEnqueue:TPasMPInt32;
        function AvailableForDequeue:TPasMPInt32;
+       function IsFull:boolean;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 {$endif}
@@ -9445,6 +9447,26 @@ begin
  end;
 end;
 
+function TPasMPSingleProducerSingleConsumerBoundedQueue.IsFull:boolean;
+var LocalReadIndex,LocalWriteIndex:TPasMPInt32;
+begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+ TPasMPMemoryBarrier.ReadWrite;
+{$ifend}
+ LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ TPasMPMemoryBarrier.ReadDependency;
+{$else}
+ TPasMPMemoryBarrier.Read;
+{$ifend}
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  result:=(LocalWriteIndex-LocalReadIndex)=0;
+ end else begin
+  result:=((fMaximalCount-LocalReadIndex)+LocalWriteIndex)=0;
+ end;
+end;
+
 {$ifdef HAS_GENERICS}
 constructor TPasMPSingleProducerSingleConsumerBoundedQueue<T>.Create(const MaximalCount:TPasMPInt32);
 begin
@@ -9482,6 +9504,7 @@ begin
  end;
  if result then begin
   LocalWriteIndex:=fWriteIndex;
+  Initialize(fData[LocalWriteIndex]);
   fData[LocalWriteIndex]:=Item;
   inc(LocalWriteIndex);
   if LocalWriteIndex>=fMaximalCount then begin
@@ -9513,6 +9536,7 @@ begin
  if result then begin
   LocalReadIndex:=fReadIndex;
   Item:=fData[LocalReadIndex];
+  Finalize(fData[LocalReadIndex]);
   inc(LocalReadIndex);
   if LocalReadIndex>=fMaximalCount then begin
    LocalReadIndex:=0;
@@ -9559,6 +9583,26 @@ begin
   result:=LocalWriteIndex-LocalReadIndex;
  end else begin
   result:=(fMaximalCount-LocalReadIndex)+LocalWriteIndex;
+ end;
+end;
+
+function TPasMPSingleProducerSingleConsumerBoundedQueue<T>.IsFull:boolean;
+var LocalReadIndex,LocalWriteIndex:TPasMPInt32;
+begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+ TPasMPMemoryBarrier.ReadWrite;
+{$ifend}
+ LocalReadIndex:=fReadIndex;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ TPasMPMemoryBarrier.ReadDependency;
+{$else}
+ TPasMPMemoryBarrier.Read;
+{$ifend}
+ LocalWriteIndex:=fWriteIndex;
+ if LocalWriteIndex>=LocalReadIndex then begin
+  result:=(LocalWriteIndex-LocalReadIndex)=0;
+ end else begin
+  result:=((fMaximalCount-LocalReadIndex)+LocalWriteIndex)=0;
  end;
 end;
 {$endif}
