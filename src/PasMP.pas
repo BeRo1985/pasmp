@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2019-01-07-17-00-0000                       *
+ *                        Version 2019-01-15-15-23-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -5671,21 +5671,18 @@ begin
 {$elseif defined(Linux) or defined(Android)}
   NowTime:=GetTime;
   EndTime:=NowTime+pDelay;
-  while true do begin
-   SleepTime:=abs(EndTime-NowTime);
-   if SleepTime>=fFourMillisecondsInterval then begin
-    SleepTime:=(SleepTime+2) shr 2;
-    if SleepTime>0 then begin
-     req.tv_sec:=SleepTime div 1000000000;
-     req.tv_nsec:=SleepTime mod 10000000000;
+  while (NowTime+fFourMillisecondsInterval)<EndTime do begin
+   SleepTime:=((EndTime-NowTime)+2) shr 2;
+   if SleepTime>0 then begin
+    req.tv_sec:=SleepTime div 1000000000;
+    req.tv_nsec:=SleepTime mod 10000000000;
 {$ifdef fpc}
-     fpNanoSleep(@req,@rem);
+    fpNanoSleep(@req,@rem);
 {$else}
-     NanoSleep(req,@rem);
+    NanoSleep(req,@rem);
 {$endif}
-     NowTime:=GetTime;
-     continue;
-    end;
+    NowTime:=GetTime;
+    continue;
    end;
    break;
   end;
@@ -5699,21 +5696,18 @@ begin
 {$elseif defined(Unix)}
   NowTime:=GetTime;
   EndTime:=NowTime+pDelay;
-  while true do begin
-   SleepTime:=abs(EndTime-NowTime);
-   if SleepTime>=fFourMillisecondsInterval then begin
-    SleepTime:=(SleepTime+2) shr 2;
-    if SleepTime>0 then begin
-     req.tv_sec:=SleepTime div 1000000;
-     req.tv_nsec:=(SleepTime mod 1000000)*1000;
+  while (NowTime+fFourMillisecondsInterval)<EndTime do begin
+   SleepTime:=((EndTime-NowTime)+2) shr 2;
+   if SleepTime>0 then begin
+    req.tv_sec:=SleepTime div 1000000;
+    req.tv_nsec:=(SleepTime mod 1000000)*1000;
 {$ifdef fpc}
-     fpNanoSleep(@req,@rem);
+    fpNanoSleep(@req,@rem);
 {$else}
-     NanoSleep(req,@rem);
+    NanoSleep(req,@rem);
 {$endif}
-     NowTime:=GetTime;
-     continue;
-    end;
+    NowTime:=GetTime;
+    continue;
    end;
    break;
   end;
