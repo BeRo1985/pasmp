@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2019-01-15-15-23-0000                       *
+ *                        Version 2019-08-25-00-58-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -318,7 +318,7 @@ unit PasMP;
   {$define Unix}
  {$endif}
 {$endif}
-{$if defined(CPU386) or defined(CPUx86_64) or defined(CPUAARCH64)}
+{$if defined(CPU386) or defined(CPUx86_64)} // or defined(CPUAARCH64)}
  {$define PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 {$elseif defined(CPUARM)}
  {$if defined(CPUARMV6K)}
@@ -1101,7 +1101,9 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       private
        fReadWriteLock:pthread_rwlock_t;
       protected
+{$if not (defined(Android) and defined(CPUAArch64))}
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_rwlock_t))-1] of TPasMPUInt8;
+{$ifend}
 {$else}
       private
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fReaders:TPasMPInt32;
@@ -1172,7 +1174,9 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       private
        fReadWriteLock:pthread_rwlock_t;
       protected
+{$if not (defined(Android) and defined(CPUAArch64))}
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_rwlock_t))-1] of TPasMPUInt8;
+{$ifend}
 {$else}
       private
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fCount:TPasMPInt32;
