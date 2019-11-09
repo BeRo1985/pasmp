@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2019-08-25-00-58-0000                       *
+ *                        Version 2019-11-09-17-38-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1227,6 +1227,42 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPBenaphore=class(TSynchroObject)
+      private
+       fSemaphore:TPasMPSemaphore;
+       fLockCount:TPasMPUInt32;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-(SizeOf(TPasMPSemaphore)+SizeOf(TPasMPUInt32)))-1] of TPasMPUInt8;
+      public
+       constructor Create;
+       destructor Destroy; override;
+       procedure Acquire; override;
+       function TryAcquire:longbool; {$if not defined(Unix)}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$ifend}{$ifend}
+       procedure Release; override;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+     EPasMPRecursiveBenaphore=class(Exception);
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPRecursiveBenaphore=class(TSynchroObject)
+      private
+       fSemaphore:TPasMPSemaphore;
+       fOwningThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif};
+       fLockCount:TPasMPUInt32;
+       fRecursionCount:TPasMPUInt32;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-(SizeOf(TPasMPSemaphore)+SizeOf({$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif})+(SizeOf(TPasMPUInt32)*2)))-1] of TPasMPUInt8;
+      public
+       constructor Create;
+       destructor Destroy; override;
+       procedure Acquire; override;
+       function TryAcquire:longbool; {$if not defined(Unix)}{$if defined(cpu386) or defined(cpux86_64)}register;{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$ifend}{$ifend}
+       procedure Release; override;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
 {$if defined(PasMPPThreadBarrier)}
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      PPasMPSpinLockPThreadBarrier=^TPasMPSpinLockPThreadBarrier;
@@ -2389,6 +2425,12 @@ threadvar CurrentJobWorkerThread:TPasMPJobWorkerThread;
 {$endif}
 
 var GlobalPasMPCriticalSection:TPasMPCriticalSection=nil;
+
+{$ifdef PasMPUseGlobalPasMPCountOfHardwareThreads}
+    GlobalPasMPCountOfHardwareThreads:TPasMPInt32=-1;
+
+    GlobalPasMPAvailableCPUCores:TPasMPAvailableCPUCores;
+{$endif}
 
 {$ifdef fpc}
  {$undef OldDelphi}
@@ -7261,6 +7303,117 @@ begin
 end;
 {$ifend}
 
+constructor TPasMPBenaphore.Create;
+begin
+ inherited Create;
+ fSemaphore:=TPasMPSemaphore.Create(0,1);
+ fLockCount:=0;
+end;
+
+destructor TPasMPBenaphore.Destroy;
+begin
+ FreeAndNil(fSemaphore);
+ inherited Destroy;
+end;
+
+procedure TPasMPBenaphore.Acquire;
+begin
+ if TPasMPInterlocked.Increment(fLockCount)>1 then begin
+  fSemaphore.Acquire;
+ end;
+end;
+
+function TPasMPBenaphore.TryAcquire:longbool;
+begin
+ result:=TPasMPInterlocked.CompareExchange(fLockCount,1,0)=0;
+end;
+
+procedure TPasMPBenaphore.Release;
+begin
+ if TPasMPInterlocked.Decrement(fLockCount)>0 then begin
+  fSemaphore.Release;
+ end;
+end;
+
+constructor TPasMPRecursiveBenaphore.Create;
+begin
+ inherited Create;
+ fSemaphore:=TPasMPSemaphore.Create(0,1);
+ fOwningThreadID:=0;
+ fLockCount:=0;
+ fRecursionCount:=0;
+end;
+
+destructor TPasMPRecursiveBenaphore.Destroy;
+begin
+ FreeAndNil(fSemaphore);
+ inherited Destroy;
+end;
+
+procedure TPasMPRecursiveBenaphore.Acquire;
+var CurrentThreadID:TThreadID;
+begin
+{$if (defined(NEXTGEN) or not defined(Windows)) and not defined(FPC)}
+ CurrentThreadID:=TThread.CurrentThread.ThreadID;
+{$else}
+ CurrentThreadID:=GetCurrentThreadID;
+{$ifend}
+ if TPasMPInterlocked.Increment(fLockCount)>1 then begin
+  if fOwningThreadID=CurrentThreadID then begin
+   inc(fRecursionCount);
+   exit;
+  end else begin
+   fSemaphore.Acquire;
+  end;
+ end;
+ fOwningThreadID:=CurrentThreadID;
+ fRecursionCount:=1;
+end;
+
+function TPasMPRecursiveBenaphore.TryAcquire:longbool;
+var CurrentThreadID:TThreadID;
+begin
+{$if (defined(NEXTGEN) or not defined(Windows)) and not defined(FPC)}
+ CurrentThreadID:=TThread.CurrentThread.ThreadID;
+{$else}
+ CurrentThreadID:=GetCurrentThreadID;
+{$ifend}
+ if TPasMPInterlocked.CompareExchange(fLockCount,1,0)=0 then begin
+  fOwningThreadID:=CurrentThreadID;
+  fRecursionCount:=1;
+  result:=true;
+ end else if fOwningThreadID=CurrentThreadID then begin
+  TPasMPInterlocked.Increment(fLockCount);
+  inc(fRecursionCount);
+  result:=true;
+ end else begin
+  result:=false;
+ end;
+end;
+
+procedure TPasMPRecursiveBenaphore.Release;
+var CurrentThreadID:TThreadID;
+begin
+{$if (defined(NEXTGEN) or not defined(Windows)) and not defined(FPC)}
+ CurrentThreadID:=TThread.CurrentThread.ThreadID;
+{$else}
+ CurrentThreadID:=GetCurrentThreadID;
+{$ifend}
+ if fOwningThreadID=CurrentThreadID then begin
+  dec(fRecursionCount);
+  if fRecursionCount=0 then begin
+   fOwningThreadID:={$ifdef fpc}TThreadID(0){$else}0{$endif};
+   if TPasMPInterlocked.Decrement(fLockCount)>0 then begin
+    fSemaphore.Release;
+   end;
+  end else begin
+   TPasMPInterlocked.Decrement(fLockCount);
+  end;
+ end else begin
+  raise EPasMPRecursiveBenaphore.Create('Releasing TPasMPRecursiveBenaphore not owned by current thread!');
+ end;
+end;
+
 constructor TPasMPBarrier.Create(const Count:TPasMPInt32);
 begin
  inherited Create;
@@ -11730,7 +11883,12 @@ begin
   fProfiler:=nil;
  end;
 
+{$ifdef PasMPUseGlobalPasMPCountOfHardwareThreads}
+ fCountJobWorkerThreads:=GlobalPasMPCountOfHardwareThreads-ThreadHeadRoomForForeignTasks;
+ fAvailableCPUCores:=GlobalPasMPAvailableCPUCores;
+{$else}
  fCountJobWorkerThreads:=TPasMP.GetCountOfHardwareThreads(fAvailableCPUCores)-ThreadHeadRoomForForeignTasks;
+{$endif}
  if fCountJobWorkerThreads<1 then begin
   fCountJobWorkerThreads:=1;
  end;
@@ -13949,6 +14107,12 @@ initialization
 {$endif}
  GlobalPasMP:=nil;
  GlobalPasMPCriticalSection:=TPasMPCriticalSection.Create;
+{$ifdef PasMPUseGlobalPasMPCountOfHardwareThreads}
+ GlobalPasMPCountOfHardwareThreads:=TPasMP.GetCountOfHardwareThreads(GlobalPasMPAvailableCPUCores);
+ if GlobalPasMPCountOfHardwareThreads<1 then begin
+  GlobalPasMPCountOfHardwareThreads:=1;
+ end;
+{$endif}
 {$ifdef Windows}
  timeBeginPeriod(1);
 {$endif}
