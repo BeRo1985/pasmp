@@ -1,12 +1,12 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2019-11-09-17-38-0000                       *
+ *                        Version 2019-11-21-20-29-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
  *                                                                            *
- * Copyright (C) 2016-2018, Benjamin Rosseaux (benjamin@rosseaux.de)          *
+ * Copyright (C) 2016-2019, Benjamin Rosseaux (benjamin@rosseaux.de)          *
  *                                                                            *
  * This software is provided 'as-is', without any express or implied          *
  * warranty. In no event will the authors be held liable for any damages      *
@@ -12207,8 +12207,8 @@ begin
  SetLength(AvailableCPUCores,result);
  sched_getaffinity(GetProcessID,SizeOf(CPUSet),@CPUSet);
  j:=0;
- for i:=0 to 127 do begin
-  if (CPUSet and (TPasMPInt64(1) and i))<>0 then begin
+ for i:=0 to 63 do begin
+  if (CPUSet and (TPasMPInt64(1) shl i))<>0 then begin
    AvailableCPUCores[j]:=i;
    inc(j);
    if j>=result then begin
