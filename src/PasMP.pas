@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2019-11-21-20-29-0000                       *
+ *                        Version 2019-11-21-22-40-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -12205,20 +12205,27 @@ var i,j:TPasMPInt32;
 begin
  result:=sysconf(_SC_NPROCESSORS_CONF);
  SetLength(AvailableCPUCores,result);
- sched_getaffinity(GetProcessID,SizeOf(CPUSet),@CPUSet);
- j:=0;
- for i:=0 to 63 do begin
-  if (CPUSet and (TPasMPInt64(1) shl i))<>0 then begin
-   AvailableCPUCores[j]:=i;
-   inc(j);
-   if j>=result then begin
-    break;
+ CPUSet:=0;
+ if sched_getaffinity(GetProcessID,SizeOf(CPUSet),@CPUSet)=0 then begin
+  j:=0;
+  for i:=0 to 63 do begin
+   if (CPUSet and (TPasMPInt64(1) shl i))<>0 then begin
+    AvailableCPUCores[j]:=i;
+    inc(j);
+    if j>=result then begin
+     break;
+    end;
    end;
   end;
- end;
- if result>j then begin
-  result:=j;
+  if result>j then begin
+   result:=j;
+   SetLength(AvailableCPUCores,result);
+  end;
+ end else begin
   SetLength(AvailableCPUCores,result);
+  for i:=0 to result-1 do begin
+   AvailableCPUCores[i]:=i;
+  end;
  end;
 end;
 {$elseif defined(Solaris)}
