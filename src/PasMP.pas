@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2019-11-21-22-43-0000                       *
+ *                        Version 2019-12-01-00-59-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2288,6 +2288,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure Release(const Jobs:array of PPasMPJob); overload;
        procedure Run(const Job:PPasMPJob); overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure Run(const Jobs:array of PPasMPJob); overload;
+       function StealAndExecuteJob:boolean;
        procedure Wait(const Job:PPasMPJob); overload;
        procedure Wait(const Jobs:array of PPasMPJob); overload;
        procedure RunWait(const Job:PPasMPJob); overload; {$ifdef CAN_INLINE}inline;{$endif}
@@ -12768,6 +12769,21 @@ begin
   end;
  end;
  WakeUpAll;
+end;
+
+function TPasMP.StealAndExecuteJob:boolean;
+var NextJob:PPasMPJob;
+    JobWorkerThread:TPasMPJobWorkerThread;
+begin
+ result:=false;
+ JobWorkerThread:=GetJobWorkerThread;
+ if assigned(JobWorkerThread) then begin
+  NextJob:=JobWorkerThread.GetJob;
+  if assigned(NextJob) then begin
+   ExecuteJob(NextJob,JobWorkerThread);
+   result:=true;
+  end;
+ end;
 end;
 
 procedure TPasMP.Wait(const Job:PPasMPJob);
