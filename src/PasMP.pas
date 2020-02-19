@@ -1,12 +1,12 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2019-12-01-00-59-0000                       *
+ *                        Version 2020-02-19-01-19-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
  *                                                                            *
- * Copyright (C) 2016-2019, Benjamin Rosseaux (benjamin@rosseaux.de)          *
+ * Copyright (C) 2016-2020, Benjamin Rosseaux (benjamin@rosseaux.de)          *
  *                                                                            *
  * This software is provided 'as-is', without any express or implied          *
  * warranty. In no event will the authors be held liable for any damages      *
@@ -429,30 +429,26 @@ uses {$ifdef Windows}
      {$endif}
      Math,SyncObjs;
 
-type PPasMPInt8=^TPasMPInt8;
-     TPasMPInt8=shortint;
+type TPasMPInt8={$if declared(Int8)}Int8{$else}shortint{$ifend};
+     PPasMPInt8=^TPasMPInt8;
 
+     TPasMPUInt8={$if declared(UInt8)}UInt8{$else}byte{$ifend};
      PPasMPUInt8=^TPasMPUInt8;
-     TPasMPUInt8=byte;
 
+     TPasMPInt16={$if declared(Int16)}Int16{$else}smallint{$ifend};
      PPasMPInt16=^TPasMPInt16;
-     TPasMPInt16=smallint;
 
+     TPasMPUInt16={$if declared(UInt16)}UInt16{$else}word{$ifend};
      PPasMPUInt16=^TPasMPUInt16;
-     TPasMPUInt16=word;
 
+     TPasMPInt32={$if declared(Int32)}Int32{$else}longint{$ifend};
      PPasMPInt32=^TPasMPInt32;
-     TPasMPInt32=longint;
 
+     TPasMPUInt32={$if declared(UInt32)}UInt32{$else}longword{$ifend};
      PPasMPUInt32=^TPasMPUInt32;
-     TPasMPUInt32=longword;
 
-     PPasMPInt64=^TPasMPInt64;
      TPasMPInt64=int64;
-
-     PPasMPUInt64=^TPasMPUInt64;
-     PPasMPPtrUInt=^TPasMPPtrUInt;
-     PPasMPPtrInt=^TPasMPPtrInt;
+     PPasMPInt64=^TPasMPInt64;
 
 {$ifdef fpc}
  {$undef OldDelphi}
@@ -488,29 +484,34 @@ type PPasMPInt8=^TPasMPInt8;
   {$endif}
 {$endif}
 
-     PPasMPNativeUInt=^TPasMPNativeUInt;
+     PPasMPUInt64=^TPasMPUInt64;
+
+     PPasMPPtrUInt=^TPasMPPtrUInt;
+     PPasMPPtrInt=^TPasMPPtrInt;
+
      TPasMPNativeUInt=TPasMPPtrUInt;
+     PPasMPNativeUInt=^TPasMPNativeUInt;
 
-     PPasMPNativeInt=^TPasMPNativeInt;
      TPasMPNativeInt=TPasMPPtrInt;
+     PPasMPNativeInt=^TPasMPNativeInt;
 
-     PPasMPSizeUInt=^TPasMPSizeUInt;
      TPasMPSizeUInt=TPasMPPtrUInt;
+     PPasMPSizeUInt=^TPasMPSizeUInt;
 
-     PPasMPSizeInt=^TPasMPSizeInt;
      TPasMPSizeInt=TPasMPPtrInt;
+     PPasMPSizeInt=^TPasMPSizeInt;
 
-     PPasMPBoolean=^TPasMPBoolean;
      TPasMPBoolean=boolean;
+     PPasMPBoolean=^TPasMPBoolean;
 
-     PPasMPBool8=^TPasMPBool8;
      TPasMPBool8=bytebool;
+     PPasMPBool8=^TPasMPBool8;
 
-     PPasMPBool16=^TPasMPBool16;
      TPasMPBool16=wordbool;
+     PPasMPBool16=^TPasMPBool16;
 
-     PPasMPBool32=^TPasMPBool32;
      TPasMPBool32=longbool;
+     PPasMPBool32=^TPasMPBool32;
 
 const PasMPAllocatorPoolBucketBits=12;
       PasMPAllocatorPoolBucketSize=1 shl PasMPAllocatorPoolBucketBits;
@@ -5170,7 +5171,11 @@ end;
 class function TPasMPInterlocked.Exchange(var Destination:TPasMPBool32;const Source:TPasMPBool32):TPasMPBool32;
 begin
 {$ifdef HAS_ATOMICS}
+{$if defined(cpu64bits) and defined(nextgen)}
+ result:=TPasMPBool32(TPasMPInt64(AtomicExchange(TPasMPInt32(Destination),TPasMPInt32(Source))));
+{$else}
  result:=TPasMPBool32(TPasMPInt32(AtomicExchange(TPasMPInt32(Destination),TPasMPInt32(Source))));
+{$ifend}
 {$else}
  result:=TPasMPBool32(TPasMPInt32(InterlockedExchange(TPasMPInt32(Destination),TPasMPInt32(Source))));
 {$endif}
