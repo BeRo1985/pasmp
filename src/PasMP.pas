@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2020-02-19-01-19-0000                       *
+ *                        Version 2020-05-11-04-06-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -546,6 +546,9 @@ const PasMPAllocatorPoolBucketBits=12;
       PasMPJobPriorityLow=(TPasMPUInt32(1) shl PasMPJobPriorityShift) and PasMPJobPriorityShiftedMask;
       PasMPJobPriorityNormal=(TPasMPUInt32(2) shl PasMPJobPriorityShift) and PasMPJobPriorityShiftedMask;
       PasMPJobPriorityHigh=(TPasMPUInt32(3) shl PasMPJobPriorityShift) and PasMPJobPriorityShiftedMask;
+
+      PasMPJobFlagRequeue=TPasMPUInt32(TPasMPUInt32(1) shl 28);
+      PasMPJobFlagRequeueAndNotMask=TPasMPUInt32(not PasMPJobFlagRequeue);
 
       PasMPJobFlagHasOwnerWorkerThread=TPasMPUInt32(TPasMPUInt32(1) shl 29);
       PasMPJobFlagReleaseOnFinish=TPasMPUInt32(TPasMPUInt32(1) shl 30);
@@ -12699,7 +12702,7 @@ begin
 
  JobWorkerThread.fCurrentJobPriority:=LastJobPriority;
 
- if Job^.ChildrenJobs>0 then begin
+ if ((Job^.InternalData and PasMPJobFlagRequeue)=0) and (Job^.ChildrenJobs>0) then begin
   WaitOnChildrenJobs(Job);
  end;
 
@@ -12708,14 +12711,24 @@ begin
   dec(JobWorkerThread.fProfilerStackDepth);
  end;
 
- if assigned(Job^.ParentJob) then begin
-  TPasMPInterlocked.Decrement(Job^.ParentJob^.ChildrenJobs);
- end;
+ if (Job^.InternalData and PasMPJobFlagRequeue)<>0 then begin
 
- TPasMPInterlocked.BitwiseAnd(Job^.InternalData,PasMPJobFlagActiveAndNotMask);
+  TPasMPInterlocked.BitwiseAnd(Job^.InternalData,PasMPJobFlagRequeueAndNotMask);
 
- if (Job^.InternalData and PasMPJobFlagReleaseOnFinish)<>0 then begin
-  Release(Job);
+  Run(Job);
+
+ end else begin
+
+  if assigned(Job^.ParentJob) then begin
+   TPasMPInterlocked.Decrement(Job^.ParentJob^.ChildrenJobs);
+  end;
+
+  TPasMPInterlocked.BitwiseAnd(Job^.InternalData,PasMPJobFlagActiveAndNotMask);
+
+  if (Job^.InternalData and PasMPJobFlagReleaseOnFinish)<>0 then begin
+   Release(Job);
+  end;
+
  end;
 
 end;
