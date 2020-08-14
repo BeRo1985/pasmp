@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2020-08-14-10-43-0000                       *
+ *                        Version 2020-08-14-12-34-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2139,6 +2139,8 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
+     TPasMPJobWorkerThreads=array of TPasMPJobWorkerThread;
+
      TPasMPJobWorkerThreadHashTable=array[0..PasMPJobWorkerThreadHashTableSize-1] of TPasMPJobWorkerThread;
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
@@ -2222,7 +2224,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fFPUPrecisionMode:TFPUPrecisionMode;
        fFPURoundingMode:TFPURoundingMode;
 {$endif}
-       fJobWorkerThreads:array of TPasMPJobWorkerThread;
+       fJobWorkerThreads:TPasMPJobWorkerThreads;
        fCountJobWorkerThreads:TPasMPInt32;
        fSleepingJobWorkerThreads:TPasMPInt32;
        fWorkingJobWorkerThreads:TPasMPInt32;
@@ -2323,6 +2325,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function ParallelDirectMergeSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0):PPasMPJob;
        function ParallelIndirectMergeSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0):PPasMPJob;
        property JobWorkerThread:TPasMPJobWorkerThread read GetJobWorkerThread;
+       property JobWorkerThreads:TPasMPJobWorkerThreads read fJobWorkerThreads;
        property CountJobWorkerThreads:TPasMPInt32 read fCountJobWorkerThreads;
        property Profiler:TPasMPProfiler read fProfiler;
      end;
