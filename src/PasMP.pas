@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2020-05-11-04-06-0000                       *
+ *                        Version 2020-08-14-05-00-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -108,6 +108,9 @@ unit PasMP;
  {$ifend}
  {$define HAS_GENERICS}
  {$define HAS_STATIC}
+ {$if defined(FPC_VERSION) and (FPC_VERSION>=3)}
+  {$define HAS_NAMETHREADFORDEBUGGING}
+ {$ifend}
 {$else}
  {$realcompatibility off}
  {$localsymbols on}
@@ -290,6 +293,9 @@ unit PasMP;
     {$define Delphi10Berlin}
    {$ifend}
    {$define Delphi10BerlinAndUp}
+  {$ifend}
+  {$if CompilerVersion>=31.0}
+   {$define HAS_NAMETHREADFORDEBUGGING}
   {$ifend}
  {$endif}
  {$ifndef Delphi4or5}
@@ -10950,6 +10956,9 @@ end;
 
 procedure TPasMPWorkerSystemThread.Execute;
 begin
+{$ifdef HAS_NAMETHREADFORDEBUGGING}
+ NameThreadForDebugging('TPasMPWorkerSystemThread');
+{$endif}
  ReturnValue:=0;
  fJobWorkerThread.ThreadProc;
  ReturnValue:=1;
