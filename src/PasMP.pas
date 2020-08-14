@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2020-08-14-05-00-0000                       *
+ *                        Version 2020-08-14-10-08-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2113,7 +2113,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fNext:TPasMPJobWorkerThread;
        fThreadIndex:TPasMPInt32;
        fCurrentJobPriority:TPasMPUInt32;
-       fProfilerStackDepth:TPasMPUInt32;
+       fDepth:TPasMPUInt32;
 {$ifndef UseThreadLocalStorage}
        fThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif};
 {$endif}
@@ -2131,6 +2131,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       public
        constructor Create(const APasMPInstance:TPasMP;const AThreadIndex:TPasMPInt32);
        destructor Destroy; override;
+       property Depth:TPasMPUInt32 read fDepth;
        property ThreadIndex:TPasMPInt32 read fThreadIndex;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
@@ -2318,6 +2319,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function ParallelIndirectIntroSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
        function ParallelDirectMergeSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
        function ParallelIndirectMergeSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0):PPasMPJob;
+       property JobWorkerThread:TPasMPJobWorkerThread read GetJobWorkerThread;
        property CountJobWorkerThreads:TPasMPInt32 read fCountJobWorkerThreads;
        property Profiler:TPasMPProfiler read fProfiler;
      end;
@@ -11201,7 +11203,7 @@ begin
  fIsReadyEvent:=TPasMPEvent.Create(nil,false,false,'');
  fThreadIndex:=AThreadIndex;
  fCurrentJobPriority:=PasMPJobPriorityNormal;
- fProfilerStackDepth:=0;
+ fDepth:=0;
  fXorShift32:=(TPasMPUInt32(AThreadIndex+1)*83492791) or 1;
  if (fThreadIndex>0) or fPasMPInstance.fAllWorkerThreadsHaveOwnSystemThreads then begin
   fSystemThread:=TPasMPWorkerSystemThread.Create(self);
@@ -12687,12 +12689,13 @@ begin
  if assigned(fProfiler) then begin
   ProfilerHistoryRingBufferItem:=fProfiler.Acquire;
   ProfilerHistoryRingBufferItem^.JobTag:=TPasMP.DecodeJobTagFromJobFlags(Job^.InternalData);
-  ProfilerHistoryRingBufferItem^.ThreadIndexStackDepth:=TPasMPUInt32(JobWorkerThread.fThreadIndex and $ffff) or (JobWorkerThread.fProfilerStackDepth shl 16);
+  ProfilerHistoryRingBufferItem^.ThreadIndexStackDepth:=TPasMPUInt32(JobWorkerThread.fThreadIndex and $ffff) or (JobWorkerThread.fDepth shl 16);
   ProfilerHistoryRingBufferItem^.StartTime:=fProfiler.fHighResolutionTimer.GetTime+fProfiler.fOffsetTime;
-  inc(JobWorkerThread.fProfilerStackDepth);
  end else begin
   ProfilerHistoryRingBufferItem:=nil;
  end;
+
+ inc(JobWorkerThread.fDepth);
 
  LastJobPriority:=JobWorkerThread.fCurrentJobPriority;
  JobWorkerThread.fCurrentJobPriority:=Job^.InternalData and PasMPJobPriorityShiftedMask;
@@ -12717,8 +12720,9 @@ begin
 
  if assigned(ProfilerHistoryRingBufferItem) then begin
   ProfilerHistoryRingBufferItem^.EndTime:=fProfiler.fHighResolutionTimer.GetTime+fProfiler.fOffsetTime;
-  dec(JobWorkerThread.fProfilerStackDepth);
  end;
+
+ dec(JobWorkerThread.fDepth);
 
  if (Job^.InternalData and PasMPJobFlagRequeue)<>0 then begin
 
