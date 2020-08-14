@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2020-08-14-12-34-0000                       *
+ *                        Version 2020-08-14-13-28-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2258,7 +2258,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function AllocateJob(const MethodCode,MethodData,Data:pointer;const ParentJob:PPasMPJob;const Flags,AreaMask:TPasMPUInt32):PPasMPJob; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure WaitOnChildrenJobs(const Job:PPasMPJob);
        procedure ExecuteJobTask(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread;const ThreadIndex:TPasMPInt32); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       procedure ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}{inline;}{$endif}{$endif}
        procedure PushJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef HAS_ANONYMOUS_METHODS}
        procedure JobReferenceProcedureJobFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
@@ -12685,7 +12685,7 @@ begin
  end;
 end;
 
-procedure TPasMP.ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMP.ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}{inline;}{$endif}{$endif}
 var LastJobPriority,OldAreaMask:TPasMPUInt32;
     ProfilerHistoryRingBufferItem:PPasMPProfilerHistoryRingBufferItem;
 begin
