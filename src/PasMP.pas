@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2020-12-16-05-37-0000                       *
+ *                        Version 2020-12-16-05-44-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -929,7 +929,9 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$ifend}
      TPasMPCriticalSection=class(TCriticalSection)
       protected
+{$if not defined(Darwin)}
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPCriticalSectionInstance))-1] of TPasMPUInt8;
+{$ifend}
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -944,7 +946,9 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       private
        fMutex:pthread_mutex_t;
       protected
+{$if not defined(Darwin)}
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_mutex_t))-1] of TPasMPUInt8;
+{$ifend}
 {$else}
       private
        fCriticalSection:TPasMPCriticalSection;
@@ -983,7 +987,9 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       private
        fMutex:pthread_mutex_t;
       protected
+{$if not defined(Darwin)}
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_mutex_t))-1] of TPasMPUInt8;
+{$ifend}
 {$else}
       private
        fCriticalSection:TPasMPCriticalSection;
