@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2020-09-12-20-18-0000                       *
+ *                        Version 2020-12-16-05-37-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1111,7 +1111,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       private
        fReadWriteLock:pthread_rwlock_t;
       protected
-{$if not (defined(Android) and defined(CPUAArch64))}
+{$if not ((defined(Android) and defined(CPUAArch64)) or defined(Darwin))}
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_rwlock_t))-1] of TPasMPUInt8;
 {$ifend}
 {$else}
@@ -1184,7 +1184,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       private
        fReadWriteLock:pthread_rwlock_t;
       protected
-{$if not (defined(Android) and defined(CPUAArch64))}
+{$if not ((defined(Android) and defined(CPUAArch64)) or defined(Darwin))}
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_rwlock_t))-1] of TPasMPUInt8;
 {$ifend}
 {$else}
@@ -4185,8 +4185,15 @@ begin
 end;
 
 class function TPasMP.GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif}):TPasMPUInt32;
+{$if defined(Darwin)}
+var ThreadIDCasted:TPasMPUInt32 absolute ThreadID;
+{$endif}
 begin
+{$if defined(Darwin)}
+ result:=(ThreadIDCasted*83492791) xor ((ThreadIDCasted shr 24)*19349669) xor ((ThreadIDCasted shr 16)*73856093) xor ((ThreadIDCasted shr 8)*50331653);
+{$else}
  result:=(ThreadID*83492791) xor ((ThreadID shr 24)*19349669) xor ((ThreadID shr 16)*73856093) xor ((ThreadID shr 8)*50331653);
+{$ifend}
 end;
 
 class function TPasMP.EncodeJobPriorityToJobFlags(const JobPriority:TPasMPJobPriority):TPasMPUInt32;
@@ -7240,7 +7247,7 @@ asm
  test dword ptr [edi+TPasMPSpinLock.fState],1
  jnz @SpinLoop
 @TryAgain:
- lock bts dword ptr [rdi+PasMPSpinLock.fState],0
+ lock bts dword ptr [rdi+TPasMPSpinLock.fState],0
  jnc @TryDone
 @SpinLoop:
  pause
@@ -12272,10 +12279,10 @@ begin
  mib[0]:=CTL_HW;
  mib[1]:=HW_AVAILCPU;
  len:=SizeOf(t);
- fpsysctl(PAnsiChar(@mib),2,@t,@len,nil,0);
+ fpsysctl(Pointer(@mib),2,@t,@len,nil,0);
  if t<1 then begin
   mib[1]:=HW_NCPU;
-  fpsysctl(PAnsiChar(@mib),2,@t,@len,nil,0);
+  fpsysctl(Pointer(@mib),2,@t,@len,nil,0);
   if t<1 then begin
    t:=1;
   end;
