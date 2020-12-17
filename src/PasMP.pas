@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2020-12-16-05-44-0000                       *
+ *                        Version 2020-12-17-01-54-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1019,8 +1019,11 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$elseif defined(Unix)}
       private
        fConditionVariable:pthread_cond_t;
+       fConditionVariableAttributes:pthread_condattr_t;
+       fHasConditionVariableAttributes:TPasMPBool32;
+       fClockID:TPasMPInt32;
       protected
-       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_cond_t))-1] of TPasMPUInt8;
+       fCacheLineFillUp:array[0..((PasMPCPUCacheLineSize*2)-(SizeOf(pthread_cond_t)+SizeOf(pthread_condattr_t)+SizeOf(TPasMPBool32)+SizeOf(TPasMPInt32)))-1] of TPasMPUInt8;
 {$else}
       private
        {$ifdef HAS_VOLATILE}[volatile]{$endif}fWaitCounter:TPasMPInt32;
@@ -2647,6 +2650,10 @@ function pthread_barrier_wait(__barrier:Ppthread_barrier_t):TPasMPInt32; cdecl; 
 
 {$endif}
 
+{$ifend}
+
+{$if defined(Linux) and not (defined(Android) or defined(fpc))}
+function pthread_condattr_setclock(var Attr:pthread_condattr_t;clockid:TPasMPInt32):TPasMPInt32; cdecl; external 'c' name 'pthread_condattr_setclock';
 {$ifend}
 
 {$if defined(cpu386)}
@@ -6082,16 +6089,54 @@ begin
 end;
 
 constructor TPasMPConditionVariable.Create;
+{$if defined(Unix)}
+const CLOCK_REALTIME=0;
+      CLOCK_MONOTONIC=1;
+      CLOCK_MONOTONIC_RAW=4;
+var r:TPasMPInt32;
+    TimeSpec_:TPasMPTimeSpec;
+{$ifend}
 begin
  inherited Create;
 {$if defined(Windows)}
  InitializeConditionVariable(@fConditionVariable);
 {$elseif defined(Unix)}
-{$ifdef fpc}
- pthread_cond_init(@fConditionVariable,nil);
-{$else}
- pthread_cond_init(fConditionVariable,nil);
-{$endif}
+ fClockID:=CLOCK_REALTIME;
+ fHasConditionVariableAttributes:=false;
+ // TODO: FIX-ME: Also use monotonic clock source for other *nix targets than just Linux, otherwise we
+ // can have NTP-related deadlock fun on these Non-Linux *nix targets!
+{$if defined(Linux) and not defined(Android)}
+ r:=pthread_condattr_init({$ifdef fpc}@fConditionVariableAttributes{$else}fConditionVariableAttributes{$endif});
+ if r=0 then begin
+  try
+   if clock_gettime(CLOCK_MONOTONIC_RAW,@TimeSpec_)=0 then begin
+    r:=pthread_condattr_setclock({$ifdef fpc}@fConditionVariableAttributes{$else}fConditionVariableAttributes{$endif},CLOCK_MONOTONIC_RAW);
+   end else begin
+    r:=-1; // No support for CLOCK_MONOTONIC_RAW
+   end;
+   if r=0 then begin
+    fClockID:=CLOCK_MONOTONIC_RAW;
+   end else begin
+    if clock_gettime(CLOCK_MONOTONIC,@TimeSpec_)=0 then begin
+     r:=pthread_condattr_setclock({$ifdef fpc}@fConditionVariableAttributes{$else}fConditionVariableAttributes{$endif},CLOCK_MONOTONIC);
+     if r=0 then begin
+      fClockID:=CLOCK_MONOTONIC;
+     end;
+    end;
+   end;
+  finally
+   if fClockID<>CLOCK_REALTIME then begin
+    fHasConditionVariableAttributes:=true;
+   end else begin
+    pthread_condattr_destroy({$ifdef fpc}@fConditionVariableAttributes{$else}fConditionVariableAttributes{$endif});
+   end;
+  end;
+ end;
+ if fHasConditionVariableAttributes then begin
+  pthread_cond_init({$ifdef fpc}@fConditionVariable{$else}fConditionVariable{$endif},@fConditionVariableAttributes);
+ end else{$ifend}begin
+  pthread_cond_init({$ifdef fpc}@fConditionVariable{$else}fConditionVariable{$endif},nil);
+ end;
 {$else}
  fWaitCounter:=0;
  fCriticalSection:=TPasMPCriticalSection.Create;
@@ -6110,6 +6155,13 @@ begin
 {$else}
  pthread_cond_destroy(fConditionVariable);
 {$endif}
+ if fHasConditionVariableAttributes then begin
+  try
+   pthread_condattr_destroy({$ifdef fpc}@fConditionVariableAttributes{$else}fConditionVariableAttributes{$endif});
+  finally
+   fHasConditionVariableAttributes:=false;
+  end;
+ end;
 {$else}
  fCriticalSection.Free;
  fEvent.Free;
@@ -6135,6 +6187,8 @@ begin
 end;
 {$elseif defined(Unix)}
 var TimeSpec_:TPasMPTimeSpec;
+    tv:timeval;
+    tz:TPasMPTimeZone;
 begin
  if dwMilliSeconds=INFINITE then begin
   case pthread_cond_wait({$ifdef fpc}@fConditionVariable,@Lock.fMutex{$else}fConditionVariable,Lock.fMutex{$endif}) of
@@ -6152,8 +6206,23 @@ begin
    end;
   end;
  end else begin
-  TimeSpec_.tv_sec:=dwMilliSeconds div 1000;
-  TimeSpec_.tv_nsec:=(dwMilliSeconds mod 1000)*1000000000;
+ {$if defined(Linux)}if clock_gettime(fClockID,@TimeSpec_)<>0 then{$ifend}begin
+   tz.tz_minuteswest:=0;
+   tz.tz_dsttime:=0;
+{$ifdef fpc}
+   fpgettimeofday(@tv,@tz);
+{$else}
+   gettimeofday(tv,@tz);
+{$endif}
+   TimeSpec_.tv_sec:=tv.tv_sec;
+   TimeSpec_.tv_nsec:=tv.tv_usec*1000;
+  end;
+  TimeSpec_.tv_sec:=TimeSpec_.tv_sec+(TPasMPInt64(dwMilliSeconds) div 1000);
+  TimeSpec_.tv_nsec:=((TPasMPInt64(dwMilliSeconds) mod 1000)*1000000)+(TimeSpec_.tv_nsec);
+  if TimeSpec_.tv_nsec>=1000000000 then begin
+   inc(TimeSpec_.tv_sec);
+   dec(TimeSpec_.tv_nsec,1000000000);
+  end;
   case pthread_cond_timedwait({$ifdef fpc}@fConditionVariable,@Lock.fMutex,@TimeSpec_{$else}fConditionVariable,Lock.fMutex,TimeSpec_{$endif}) of
    0:begin
     result:=wrSignaled;
