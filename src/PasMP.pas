@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2020-12-17-01-54-0000                       *
+ *                        Version 2020-12-30-15-19-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -7929,6 +7929,8 @@ begin
  end;
  Node^.Previous.PointerValue:=nil;
  Node^.Previous.TagValue:=0;
+ Node^.Next.PointerValue:=nil;
+ Node^.Next.TagValue:=0;
  InitializeItem(@Node^.Data);
  CopyItem(@Item,@Node^.Data);
  repeat
@@ -7945,7 +7947,7 @@ begin
    end else begin
     Temporary.PointerValue:=Node;
     Temporary.TagValue:=Next.TagValue+1;
-    OldNext.Value:=TPasMPInterlocked.CompareExchange(PPasMPThreadSafeQueueNode(fTail^.PointerValue)^.Next.Value,Temporary.Value,Next.Value);
+    OldNext.Value:=TPasMPInterlocked.CompareExchange(PPasMPThreadSafeQueueNode(Tail^.PointerValue)^.Next.Value,Temporary.Value,Next.Value);
     if {$ifdef CPU64}(OldNext.PointerValue=Next.PointerValue) and (OldNext.TagValue=Next.TagValue){$else}OldNext.Value.Value=Next.Value.Value{$endif} then begin
      Temporary.PointerValue:=Node;
      Temporary.TagValue:=Tail.TagValue+1;
