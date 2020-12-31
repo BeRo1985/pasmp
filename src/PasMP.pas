@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2020-12-30-15-19-0000                       *
+ *                        Version 2020-12-31-04-06-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2257,6 +2257,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fJobWorkerThreadHashTable:TPasMPJobWorkerThreadHashTable;
 {$endif}
        fProfiler:TPasMPProfiler;
+       fWorkerThreadPriority:TThreadPriority;
        class function GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif}):TPasMPUInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        function GetJobWorkerThread:TPasMPJobWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
        procedure WaitForWakeUp;
@@ -2285,7 +2286,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure ParallelIndirectMergeSortJobFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
        procedure ParallelIndirectMergeSortRootJobFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
       public
-       constructor Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const AllWorkerThreadsHaveOwnSystemThreads:boolean=false;const Profiling:boolean=false);
+       constructor Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const AllWorkerThreadsHaveOwnSystemThreads:boolean=false;const Profiling:boolean=false;const WorkerThreadPriority:TThreadPriority=TThreadPriority.tpNormal);
        destructor Destroy; override;
        class function CreateGlobalInstance:TPasMP;
        class procedure DestroyGlobalInstance;
@@ -2348,6 +2349,7 @@ var GlobalPasMP:TPasMP=nil; // "Optional" singleton-like global PasMP instance
     GlobalPasMPSleepingOnIdle:boolean=true;
     GlobalPasMPAllWorkerThreadsHaveOwnSystemThreads:boolean=false;
     GlobalPasMPProfiling:boolean=false;
+    GlobalPasMPWorkerThreadPriority:TThreadPriority=TThreadPriority.tpNormal;
 
     GPasMP:TPasMP absolute GlobalPasMP; // A shorter name for lazy peoples
 
@@ -11038,6 +11040,7 @@ end;
 constructor TPasMPWorkerSystemThread.Create(const AJobWorkerThread:TPasMPJobWorkerThread);
 begin
  fJobWorkerThread:=AJobWorkerThread;
+ Priority:=AJobWorkerThread.fPasMPInstance.fWorkerThreadPriority;
  inherited Create(false);
 end;
 
@@ -11052,6 +11055,7 @@ begin
  NameThreadForDebugging('TPasMPWorkerSystemThread');
 {$endif}
  ReturnValue:=0;
+ Priority:=fJobWorkerThread.fPasMPInstance.fWorkerThreadPriority;
  fJobWorkerThread.ThreadProc;
  ReturnValue:=1;
 end;
@@ -11968,7 +11972,7 @@ begin
  result:=@fHistory[TPasMPUInt32(TPasMPInterlocked.Increment(TPasMPInt32(fCount))-1) and PasMPProfilerHistoryRingBufferSizeMask];
 end;
 
-constructor TPasMP.Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const AllWorkerThreadsHaveOwnSystemThreads:boolean=false;const Profiling:boolean=false);
+constructor TPasMP.Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const AllWorkerThreadsHaveOwnSystemThreads:boolean=false;const Profiling:boolean=false;const WorkerThreadPriority:TThreadPriority=TThreadPriority.tpNormal);
 var Index:TPasMPInt32;
 begin
 
@@ -11987,6 +11991,8 @@ begin
  fSleepingOnIdle:=SleepingOnIdle;
 
  fAllWorkerThreadsHaveOwnSystemThreads:=AllWorkerThreadsHaveOwnSystemThreads;
+
+ fWorkerThreadPriority:=WorkerThreadPriority;
 
  if Profiling then begin
   fProfiler:=TPasMPProfiler.Create(self);
@@ -12121,7 +12127,8 @@ begin
                                GlobalPasMPDoCPUCorePinning,
                                GlobalPasMPSleepingOnIdle,
                                GlobalPasMPAllWorkerThreadsHaveOwnSystemThreads,
-                               GlobalPasMPProfiling);
+                               GlobalPasMPProfiling,
+                               GlobalPasMPWorkerThreadPriority);
     TPasMPMemoryBarrier.Sync;
    end;
   finally
