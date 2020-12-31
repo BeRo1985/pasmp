@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2020-12-31-04-06-0000                       *
+ *                        Version 2020-12-31-16-37-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1565,10 +1565,12 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fCacheLineFillUp1:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPInt32))-1] of TPasMPUInt8; // for to force fWriteIndex and fData to different CPU cache lines
        fData:array of TPasMPUInt8;
        fSize:TPasMPInt32;
-       fCacheLineFillUp2:array[0..(PasMPCPUCacheLineSize-(SizeOf(pointer)+SizeOf(TPasMPInt32)))-1] of TPasMPUInt8; // as CPU cache line alignment
+       fLockState:TPasMPInt32;
+       fCacheLineFillUp2:array[0..(PasMPCPUCacheLineSize-(SizeOf(pointer)+SizeOf(TPasMPInt32)+SizeOf(TPasMPInt32)))-1] of TPasMPUInt8; // as CPU cache line alignment
       public
        constructor Create(const Size:TPasMPInt32);
        destructor Destroy; override;
+       procedure Clear;
        function Read(const Buffer:pointer;Bytes:TPasMPInt32):TPasMPInt32;
        function TryRead(const Buffer:pointer;Bytes:TPasMPInt32):TPasMPInt32;
        function ReadAsMuchAsPossible(const Buffer:pointer;Bytes:TPasMPInt32):TPasMPInt32;
@@ -9216,12 +9218,21 @@ begin
  fWriteIndex:=0;
  fData:=nil;
  SetLength(fData,fSize);
+ fLockState:=0;
 end;
 
 destructor TPasMPSingleProducerSingleConsumerRingBuffer.Destroy;
 begin
  SetLength(fData,0);
  inherited Destroy;
+end;
+
+procedure TPasMPSingleProducerSingleConsumerRingBuffer.Clear;
+begin
+ TPasMPMultipleReaderSingleWriterSpinLock.AcquireWrite(fLockState);
+ fReadIndex:=0;
+ fWriteIndex:=0;
+ TPasMPMultipleReaderSingleWriterSpinLock.ReleaseWrite(fLockState);
 end;
 
 function TPasMPSingleProducerSingleConsumerRingBuffer.Read(const Buffer:pointer;Bytes:TPasMPInt32):TPasMPInt32;
@@ -9231,6 +9242,7 @@ begin
  if (Bytes=0) or (Bytes>fSize) then begin
   result:=0;
  end else begin
+  TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(fLockState);
   repeat
 {$if not (defined(CPU386) or defined(CPUx86_64))}
    TPasMPMemoryBarrier.ReadWrite;
@@ -9276,6 +9288,7 @@ begin
   TPasMPMemoryBarrier.ReadWrite;
 {$endif}
   fReadIndex:=LocalReadIndex;
+  TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(fLockState);
   result:=Bytes;
  end;
 end;
@@ -9287,6 +9300,7 @@ begin
  if (Bytes=0) or (Bytes>fSize) then begin
   result:=0;
  end else begin
+  TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(fLockState);
 {$if not (defined(CPU386) or defined(CPUx86_64))}
   TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
@@ -9330,6 +9344,7 @@ begin
    fReadIndex:=LocalReadIndex;
    result:=Bytes;
   end;
+  TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(fLockState);
  end;
 end;
 
@@ -9340,6 +9355,7 @@ begin
  if (Bytes=0) or (Bytes>fSize) then begin
   result:=0;
  end else begin
+  TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(fLockState);
 {$if not (defined(CPU386) or defined(CPUx86_64))}
   TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
@@ -9383,6 +9399,7 @@ begin
 {$endif}
    fReadIndex:=LocalReadIndex;
   end;
+  TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(fLockState);
   result:=Bytes;
  end;
 end;
@@ -9394,6 +9411,7 @@ begin
  if (Bytes=0) or (Bytes>fSize) then begin
   result:=0;
  end else begin
+  TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(fLockState);
   repeat
 {$if not (defined(CPU386) or defined(CPUx86_64))}
    TPasMPMemoryBarrier.ReadWrite;
@@ -9439,6 +9457,7 @@ begin
   TPasMPMemoryBarrier.ReadWrite;
 {$endif}
   fWriteIndex:=LocalWriteIndex;
+  TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(fLockState);
   result:=Bytes;
  end;
 end;
@@ -9450,6 +9469,7 @@ begin
  if (Bytes=0) or (Bytes>fSize) then begin
   result:=0;
  end else begin
+  TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(fLockState);
 {$if not (defined(CPU386) or defined(CPUx86_64))}
   TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
@@ -9493,6 +9513,7 @@ begin
    fWriteIndex:=LocalWriteIndex;
    result:=Bytes;
   end;
+  TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(fLockState);
  end;
 end;
 
@@ -9503,6 +9524,7 @@ begin
  if (Bytes=0) or (Bytes>fSize) then begin
   result:=0;
  end else begin
+  TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(fLockState);
 {$if not (defined(CPU386) or defined(CPUx86_64))}
   TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
@@ -9546,6 +9568,7 @@ begin
 {$endif}
    fWriteIndex:=LocalWriteIndex;
   end;
+  TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(fLockState);
   result:=Bytes;
  end;
 end;
@@ -9553,6 +9576,7 @@ end;
 function TPasMPSingleProducerSingleConsumerRingBuffer.AvailableForRead:TPasMPInt32;
 var LocalReadIndex,LocalWriteIndex:TPasMPInt32;
 begin
+ TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(fLockState);
 {$if not (defined(CPU386) or defined(CPUx86_64))}
  TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
@@ -9563,6 +9587,7 @@ begin
  TPasMPMemoryBarrier.Read;
 {$ifend}
  LocalWriteIndex:=fWriteIndex;
+ TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(fLockState);
  if LocalWriteIndex>=LocalReadIndex then begin
   result:=LocalWriteIndex-LocalReadIndex;
  end else begin
@@ -9573,6 +9598,7 @@ end;
 function TPasMPSingleProducerSingleConsumerRingBuffer.AvailableForWrite:TPasMPInt32;
 var LocalReadIndex,LocalWriteIndex:TPasMPInt32;
 begin
+ TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(fLockState);
 {$if not (defined(CPU386) or defined(CPUx86_64))}
  TPasMPMemoryBarrier.ReadWrite;
 {$ifend}
@@ -9583,6 +9609,7 @@ begin
  TPasMPMemoryBarrier.Read;
 {$ifend}
  LocalWriteIndex:=fWriteIndex;
+ TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(fLockState);
  if LocalWriteIndex>=LocalReadIndex then begin
   result:=((fSize+LocalReadIndex)-LocalWriteIndex)-1;
  end else begin
