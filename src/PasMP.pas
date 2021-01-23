@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2021-01-08-21-28-0000                       *
+ *                        Version 2021-01-23-22-12-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -11067,8 +11067,8 @@ end;
 constructor TPasMPWorkerSystemThread.Create(const AJobWorkerThread:TPasMPJobWorkerThread);
 begin
  fJobWorkerThread:=AJobWorkerThread;
- Priority:=AJobWorkerThread.fPasMPInstance.fWorkerThreadPriority;
  inherited Create(false);
+ Priority:=AJobWorkerThread.fPasMPInstance.fWorkerThreadPriority;
 end;
 
 destructor TPasMPWorkerSystemThread.Destroy;
