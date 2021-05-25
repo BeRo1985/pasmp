@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2021-01-23-22-12-0000                       *
+ *                        Version 2021-05-25-21-26-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2656,9 +2656,15 @@ function pthread_barrier_wait(__barrier:Ppthread_barrier_t):TPasMPInt32; cdecl; 
 
 {$ifend}
 
-{$if defined(Linux) and not (defined(Android) or defined(fpc))}
+{$ifdef fpc}
+{$if defined(Linux) and not (defined(Android) or declared(pthread_condattr_setclock))}
+function pthread_condattr_setclock(Attr:ppthread_condattr_t;clockid:TPasMPInt32):TPasMPInt32; cdecl; external 'c' name 'pthread_condattr_setclock';
+{$ifend}
+{$else}
+{$if defined(Linux) and not defined(Android)}
 function pthread_condattr_setclock(var Attr:pthread_condattr_t;clockid:TPasMPInt32):TPasMPInt32; cdecl; external 'c' name 'pthread_condattr_setclock';
 {$ifend}
+{$endif}
 
 {$if defined(cpu386)}
 {$ifndef fpc}
