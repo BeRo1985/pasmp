@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2021-05-25-21-26-0000                       *
+ *                        Version 2021-06-24-18-22-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2222,6 +2222,23 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        property OffsetTime:TPasMPHighResolutionTime read fOffsetTime;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+{$if declared(TThreadPriority)}
+  {$define HasRealTThreadPriority}
+{$else}
+  {$undef HasRealTThreadPriority}
+     // Workaround for Delphi mobile targets
+     TThreadPriority=
+      (
+       tpIdle,
+       tpLowest,
+       tpLower,
+       tpNormal,
+       tpHigher,
+       tpHighest,
+       tpTimeCritical
+      );
+{$ifend}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMP=class
@@ -11074,7 +11091,9 @@ constructor TPasMPWorkerSystemThread.Create(const AJobWorkerThread:TPasMPJobWork
 begin
  fJobWorkerThread:=AJobWorkerThread;
  inherited Create(false);
+{$ifdef HasRealTThreadPriority}
  Priority:=AJobWorkerThread.fPasMPInstance.fWorkerThreadPriority;
+{$endif}
 end;
 
 destructor TPasMPWorkerSystemThread.Destroy;
@@ -11088,7 +11107,9 @@ begin
  NameThreadForDebugging('TPasMPWorkerSystemThread');
 {$endif}
  ReturnValue:=0;
+{$ifdef HasRealTThreadPriority}
  Priority:=fJobWorkerThread.fPasMPInstance.fWorkerThreadPriority;
+{$endif}
  fJobWorkerThread.ThreadProc;
  ReturnValue:=1;
 end;
