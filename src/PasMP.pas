@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2021-06-24-18-22-0000                       *
+ *                        Version 2021-08-05-01-35-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1120,7 +1120,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       private
        fReadWriteLock:pthread_rwlock_t;
       protected
-{$if not ((defined(Android) and defined(CPUAArch64)) or defined(Darwin))}
+{$if not (defined(CPUAArch64) or defined(Darwin))}
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_rwlock_t))-1] of TPasMPUInt8;
 {$ifend}
 {$else}
@@ -1193,7 +1193,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       private
        fReadWriteLock:pthread_rwlock_t;
       protected
-{$if not ((defined(Android) and defined(CPUAArch64)) or defined(Darwin))}
+{$if not (defined(CPUAArch64) or defined(Darwin))}
        fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-SizeOf(pthread_rwlock_t))-1] of TPasMPUInt8;
 {$ifend}
 {$else}
