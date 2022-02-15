@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2022-01-29-08-00-0000                       *
+ *                        Version 2022-02-15-21-38-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -7359,7 +7359,7 @@ asm
 @TryDone:
 end;
 {$endif}
-{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$else}//{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 begin
  while TPasMPInterlocked.CompareExchange(fState,-1,0)<>0 do begin
   TPasMP.Yield;
@@ -7429,7 +7429,7 @@ asm
  mov dword ptr [rdi+TPasMPSpinLock.fState],0
 end;
 {$endif}
-{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$else}//{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 begin
  TPasMPInterlocked.Exchange(fState,0);
 end;
