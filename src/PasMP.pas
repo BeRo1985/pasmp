@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2022-02-15-21-38-0000                       *
+ *                        Version 2022-12-11-18-59-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -5774,11 +5774,11 @@ begin
   NowTime:=GetTime;
   EndTime:=NowTime+pDelay;
   while (NowTime+fTwoMillisecondsInterval)<EndTime do begin
-   Sleep(1);
+   Windows.Sleep(1);
    NowTime:=GetTime;
   end;
   while (NowTime+fMillisecondInterval)<EndTime do begin
-   Sleep(0);
+   Windows.Sleep(0);
    NowTime:=GetTime;
   end;
   while NowTime<EndTime do begin
