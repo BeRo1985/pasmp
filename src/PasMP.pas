@@ -1,12 +1,12 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2022-12-11-18-59-0000                       *
+ *                        Version 2023-01-20-22-25-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
  *                                                                            *
- * Copyright (C) 2016-2022, Benjamin Rosseaux (benjamin@rosseaux.de)          *
+ * Copyright (C) 2016-2023, Benjamin Rosseaux (benjamin@rosseaux.de)          *
  *                                                                            *
  * This software is provided 'as-is', without any express or implied          *
  * warranty. In no event will the authors be held liable for any damages      *
@@ -96,6 +96,14 @@ unit PasMP;
  {$else}
   {$undef HAS_TYPE_SINGLE}
  {$endif}
+ {$if defined(FPC_FULLVERSION) and (FPC_FULLVERSION>=30301)}
+  {$modeswitch functionreferences}
+  {$modeswitch anonymousfunctions}
+  {$warn 5036 off}
+  {$define HAS_ANONYMOUS_METHODS}
+ {$else}
+  {$undef HAS_ANONYMOUS_METHODS}
+ {$ifend}
  {$if declared(RawByteString)}
   {$define HAS_TYPE_RAWBYTESTRING}
  {$else}
