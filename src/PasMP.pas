@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2023-01-20-22-25-0000                       *
+ *                        Version 2023-01-22-08-10-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -96,7 +96,7 @@ unit PasMP;
  {$else}
   {$undef HAS_TYPE_SINGLE}
  {$endif}
- {$if defined(FPC_FULLVERSION) and (FPC_FULLVERSION>=30301)}
+ {$if defined(FPC_FULLVERSION) and (FPC_FULLVERSION>=30301) and not defined(PASMP_NO_ANONYMOUS_METHODS)}
   {$modeswitch functionreferences}
   {$modeswitch anonymousfunctions}
   {$warn 5036 off}
@@ -228,7 +228,9 @@ unit PasMP;
     {$define Delphi2009}
    {$ifend}
    {$define Delphi2009AndUp}
-   {$define HAS_ANONYMOUS_METHODS}
+   {$ifndef PASMP_NO_ANONYMOUS_METHODS}
+    {$define HAS_ANONYMOUS_METHODS}
+   {$endif} 
    {$define HAS_GENERICS}
    {$define HAS_STATIC}
   {$ifend}
