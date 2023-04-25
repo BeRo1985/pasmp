@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2023-04-25-15-46-0000                       *
+ *                        Version 2023-04-25-19-10-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -3353,158 +3353,198 @@ asm
  .popnv
 end;*)
 
-{$ifdef Darwin}
+{$if defined(Darwin)}
 // Using casp instruction (recommended for ARMv8.1-A and later)
-function InterlockedCompareExchange128(var Destination:TPasMPInt128Record;const NewValue,Comperand:TPasMPInt128Record):TPasMPInt128Record; assembler;
-{$ifdef fpc}
-function InterlockedCompareExchange128(var Destination: TPasMPInt128Record; const NewValue, Comperand: TPasMPInt128Record): TPasMPInt128Record; assembler;
+(*function _InterlockedCompareExchange128_(Dest:PPasMPInt64;XChgHigh,XChgLow:TPasMPInt64;Compare:PPasMPInt64):TPasMPUInt8; assembler; nostackframe;
 asm
- // Save callee-saved registers
- stp x19, x20, [sp, #-32]!
- stp x21, x22, [sp, #16]
+ sub sp, sp, #32
+ str x0, [sp, #24]
+ str x1, [sp, #16]
+ str x2, [sp, #8]
+ str x3, [sp]
+ ldr x8, [sp, #24]
+ ldr x9, [sp]
+ ldr q0, [x9]
+ ldr x9, [sp, #16]
+ mov x11, xzr
+ ldr x10, [sp, #8]
+ orr x2, x11, x10
+ // orr x9, x9, x10, asr #63
+ .byte 0x29
+ .byte 0xfd
+ .byte 0x8a
+ .byte 0xaa
+ fmov d2, d0
+ mov d1, v0.d[1]
+ fmov x0, d2
+ fmov x1, d1
+ mov x3, x9
+ // caspal x0, x1, x2, x3, [x8]
+ .byte 0xe8
+ .byte 0x03
+ .byte 0x00
+ .byte 0xaa
+ mov x8, x0
+ mov x9, x1
+ fmov d1, d0
+ mov d0, v0.d[1]
+ fmov x10, d1
+ eor x8, x8, x10
+ fmov x10, d0
+ eor x9, x9, x10
+ orr x8, x8, x9
+ subs x8, x8, #0
+ cset w8, eq
+ and w0, w8, #0x1
+ add sp, sp, #32
+end;*)
 
- // Load expected values to registers x3 and x4
- ldp x3, x4, [x2] // x2: Comperand
-
- // Use the pair of 64-bit CAS instructions (casp) in a loop
- 1:
- // Load the NewValue into x5 and x6
- ldp x5, x6, [x1] // x1: NewValue
-
- // casp instruction for 128-bit compare and exchange
- casp x3, x4, x5, x6, [x0] // x0: Destination
-
- // Check if the operation was successful
- eor x8, x3, x5
- eor x9, x4, x6
- orr x10, x8, x9
- cbz x10, 2f
-
- // If not successful, try again
- b 1b
-
- 2:
- // Store the previous value of the Destination in the return record
- stp x3, x4, [x29, #-16] // Store the values in x3 and x4 (Lo and Hi parts) into the stack-allocated return record
-
- // Restore callee-saved registers
- ldp x21, x22, [sp, #16]
- ldp x19, x20, [sp], #32
-
-//ret
-end;
-{$else}
+procedure _InterlockedCompareExchange128(Dest:PPasMPInt64;XChgHigh,XChgLow:TPasMPInt64;Compare,Result_:PPasMPInt64); assembler; nostackframe;
 asm
- .pushnv
- .arch armv8-a
-
- // Load expected values to registers x3 and x4
- ldp x3, x4, [x2] // x2: Comperand
-
- // Use the pair of 64-bit CAS instructions (casp) in a loop
- 1:
- // Load the NewValue into x5 and x6
- ldp x5, x6, [x1] // x1: NewValue
-
- // casp instruction for 128-bit compare and exchange
- casp x3, x4, x5, x6, [x0] // x0: Destination
-
- // Check if the operation was successful
- eor x8, x3, x5
- eor x9, x4, x6
- orr x10, x8, x9
- cbz x10, 2f
-
- // If not successful, try again
- b 1b
-
- 2:
- // Store the previous value of the Destination in the return record
- stp x3, x4, [x29, #-16] // Store the values in x3 and x4 (Lo and Hi parts) into the stack-allocated return record
-
- .popnv
+ sub sp, sp, #48
+ str x0, [sp, #40]
+ str x1, [sp, #32]
+ str x2, [sp, #24]
+ str x3, [sp, #16]
+ str x4, [sp, #8]
+ ldr x8, [sp, #40]
+ ldr x9, [sp, #16]
+ ldr q0, [x9]
+ ldr x9, [sp, #32]
+ mov x11, xzr
+ ldr x10, [sp, #24]
+ orr x2, x11, x10
+ //.dword 0xaa8afd29 // orr x9, x9, x10, asr #63
+ .byte 0x29
+ .byte 0xfd
+ .byte 0x8a
+ .byte 0xaa
+ fmov d1, d0
+ mov d0, v0.d[1]
+ fmov x0, d1
+ fmov x1, d0
+ mov x3, x9
+ // .dword 0x4860fd02 // caspal x0, x1, x2, x3, [x8]
+ .byte 0x02
+ .byte 0xfd
+ .byte 0x60
+ .byte 0x48
+ mov x9, x0
+ mov x8, x1
+ mov v0.d[0], x9
+ mov v0.d[1], x8
+ ldr x8, [sp, #8]
+ str q0, [x8]
+ add sp, sp, #48
 end;
-{$endif}
 {$else}
 // Using ldxp and stxp instructions (for broader compatibility, including ARMv8-A)
-function InterlockedCompareExchange128(var Destination:TPasMPInt128Record;const NewValue,Comperand:TPasMPInt128Record):TPasMPInt128Record; assembler;
-{$ifdef fpc}
+(*function _InterlockedCompareExchange128_(Dest:PPasMPInt64;XChgHigh,XChgLow:TPasMPInt64;Compare:PPasMPInt64):TPasMPUInt8; assembler; nostackframe;
+label LBB0_1,LBB0_2,LBB0_3,LBB0_4;
 asm
- // Save callee-saved registers
- stp x19, x20, [sp, #-32]!
- stp x21, x22, [sp, #16]
+ sub sp, sp, #32
+ str x0, [sp, #24]
+ str x1, [sp, #16]
+ str x2, [sp, #8]
+ str x3, [sp]
+ ldr x11, [sp, #24]
+ ldr x8, [sp]
+ ldr q0, [x8]
+ ldr x8, [sp, #16]
+ mov x10, xzr
+ ldr x9, [sp, #8]
+ orr x14, x10, x9
+ // orr x15, x8, x9, asr #63
+ .byte 0x0f
+ .byte 0xfd
+ .byte 0x89
+ .byte 0xaa
+ fmov d1, d0
+ mov d2, v0.d[1]
+ fmov x13, d2
+ fmov x12, d1
+LBB0_1: // =>This Inner Loop Header: Depth=1
+ ldaxp x8, x9, [x11]
+ cmp x8, x12
+ cset w10, ne
+ cmp x9, x13
+ cinc w10, w10, ne
+ cbnz w10, .LBB0_3
+ stlxp w10, x14, x15, [x11]
+ cbnz w10, LBB0_1
+ b LBB0_4
+LBB0_3: // in Loop: Header=BB0_1 Depth=1
+ stlxp w10, x8, x9, [x11]
+ cbnz w10, LBB0_1
+LBB0_4:
+ fmov d1, d0
+ mov d0, v0.d[1]
+ fmov x10, d1
+ eor x8, x8, x10
+ fmov x10, d0
+ eor x9, x9, x10
+ orr x8, x8, x9
+ subs x8, x8, #0
+ cset w8, eq
+ and w0, w8, #0x1
+ add sp, sp, #32
+end;*)
 
- // Load expected values to registers x3 and x4
- ldp x3, x4, [x2] // x2: Comperand
-
- // Use the ldxp and stxp instructions in a loop
- 1:
- // Load the current Destination value into x5 and x6
- ldxp x5, x6, [x0] // x0: Destination
-
- // Compare the Destination value with the expected value
- eor x8, x3, x5
- eor x9, x4, x6
- orr x10, x8, x9
- cbnz x10, 2f
-
- // If equal, try to store the NewValue into the Destination
- ldp x7, x8, [x1] // x1: NewValue
- stxp w9, x7, x8, [x0]
-
- // Check if the store operation was successful
- cbz w9, 2f
-
- // If not successful, try again
- b 1b
-
- 2:
- // Store the previous value of the Destination in the return record
- stp x5, x6, [x29, #-16] // Store the values in x5 and x6 (Lo and Hi parts) into the stack-allocated return record
-
- // Restore callee-saved registers
- ldp x21, x22, [sp, #16]
- ldp x19, x20, [sp], #32
-
-//ret
-end;
-{$else}
+procedure _InterlockedCompareExchange128(Dest:PPasMPInt64;XChgHigh,XChgLow:TPasMPInt64;Compare,Result_:PPasMPInt64); assembler; nostackframe;
+label LBB1_1,LBB1_3,LBB1_4;
 asm
- .pushnv
- .arch armv8-a
-
- // Load expected values to registers x3 and x4
- ldp x3, x4, [x2] // x2: Comperand
-
- // Use the ldxp and stxp instructions in a loop
- 1:
- // Load the current Destination value into x5 and x6
- ldxp x5, x6, [x0] // x0: Destination
-
- // Compare the Destination value with the expected value
- eor x8, x3, x5
- eor x9, x4, x6
- orr x10, x8, x9
- cbnz x10, 2f
-
- // If equal, try to store the NewValue into the Destination
- ldp x7, x8, [x1] // x1: NewValue
- stxp w9, x7, x8, [x0]
-
- // Check if the store operation was successful
- cbz w9, 2f
-
- // If not successful, try again
- b 1b
-
- 2:
- // Store the previous value of the Destination in the return record
- stp x5, x6, [x29, #-16] // Store the values in x5 and x6 (Lo and Hi parts) into the stack-allocated return record
-
- .popnv
+ sub sp, sp, #48
+ str x0, [sp, #40]
+ str x1, [sp, #32]
+ str x2, [sp, #24]
+ str x3, [sp, #16]
+ str x4, [sp, #8]
+ ldr x11, [sp, #40]
+ ldr x8, [sp, #16]
+ ldr q1, [x8]
+ ldr x8, [sp, #32]
+ mov x10, xzr
+ ldr x9, [sp, #24]
+ orr x14, x10, x9
+ // .dword 0xaa89fd0f // orr x15, x8, x9, asr #63
+ .byte 0x0f
+ .byte 0xfd
+ .byte 0x89
+ .byte 0xaa
+ fmov d0, d1
+ mov d1, v1.d[1]
+ fmov x13, d1
+ fmov x12, d0
+LBB1_1: // =>This Inner Loop Header: Depth=1
+ // .dword 0xc87fa169 // ldaxp x9, x8, [x11]
+ .byte 0x69
+ .byte 0xa1
+ .byte 0x7f
+ .byte 0xc8
+ cmp x9, x12
+ cset w10, ne
+ cmp x8, x13
+ cinc w10, w10, ne
+ cbnz w10, LBB1_3
+ stlxp w10, x14, x15, [x11]
+ cbnz w10, LBB1_1
+ b LBB1_4
+LBB1_3: // in Loop: Header=BB1_1 Depth=1
+ stlxp w10, x9, x8, [x11]
+ cbnz w10, LBB1_1
+LBB1_4:
+ mov v0.d[0], x9
+ mov v0.d[1], x8
+ ldr x8, [sp, #8]
+ str q0, [x8]
+ add sp, sp, #48
 end;
-{$endif}
-{$endif}
+{$ifend}
+
+function InterlockedCompareExchange128(var Destination:TPasMPInt128Record;const NewValue,Comperand:TPasMPInt128Record):TPasMPInt128Record;
+begin
+ _InterlockedCompareExchange128(PPasMPInt64(@Destination),NewValue.Hi,NewValue.Lo,PPasMPInt64(@Comperand),PPasMPInt64(@result));
+end;
 
 {$elseif defined(FPC) and defined(CPUARM) and defined(PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
 {$if defined(CPUARM_HAS_LDREX)}
