@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2023-04-25-19-10-0000                       *
+ *                        Version 2023-04-25-22-14-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -12627,6 +12627,32 @@ end;
 var i:TPasMPInt32;
 begin
  result:=sysconf(_SC_NPROC_ONLN);
+ SetLength(AvailableCPUCores,result);
+ for i:=0 to result-1 do begin
+  AvailableCPUCores[i]:=i;
+ end;
+end;
+{$elseif defined(fpc) and defined(Darwin)}
+const IDs:array[0..3] of RawByteString=
+       (
+        'machdep.cpu.thread_count',
+        'hw.logicalcpu',
+        'machdep.cpu.core_count',
+        'hw.physicalcpu'  
+       );
+var status,t,i:cint;
+    len:size_t;
+begin
+ result:=1;
+ len:=SizeOf(t);
+ for i:=Low(IDs) to High(IDs) do begin 
+  t:=0;
+  status:=fpSysCtlByName(PAnsiChar(IDs[i]),@t,@len,nil,0);
+  if (status=0) and (t>=1) then begin
+   result:=t;
+   break;
+  end;
+ end;
  SetLength(AvailableCPUCores,result);
  for i:=0 to result-1 do begin
   AvailableCPUCores[i]:=i;
