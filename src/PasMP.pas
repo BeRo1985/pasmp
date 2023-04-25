@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2023-01-22-08-10-0000                       *
+ *                        Version 2023-04-25-15-46-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -334,7 +334,7 @@ unit PasMP;
   {$define Unix}
  {$endif}
 {$endif}
-{$if defined(CPU386) or defined(CPUx86_64)} // or defined(CPUAARCH64)}
+{$if defined(CPU386) or defined(CPUx86_64) or (defined(FPC) and defined(CPUAARCH64))}
  {$define PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE}
 {$elseif defined(CPUARM)}
  {$if defined(CPUARMV6K)}
@@ -3332,7 +3332,181 @@ begin
 end;
 {$endif}
 
-{$if defined(FPC) and defined(CPUARM) and defined(PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
+{$if defined(FPC) and defined(CPUAArch64) and defined(PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
+(*function IsCASPInstructionSupported:Boolean; assembler;
+asm
+ .pushnv
+ .arch armv8-a
+
+ mrs x0, ID_AA64PFR0_EL1 // Read ID_AA64PFR0_EL1 system register into x0
+ and x0, x0, #(15 shl 16) // Extract bits [19:16] to check the architecture version
+ cmp x0, #(1 shl 16) // Compare the extracted bits with ARMv8.1-A
+ b.ge 1f // If the architecture is ARMv8.1-A or later, set the return value to True
+
+ mov x0, #0 // Set the return value to False (casp is not supported)
+ b 2f
+
+ 1:
+ mov x0, #1 // Set the return value to True (casp is supported)
+
+ 2:
+ .popnv
+end;*)
+
+{$ifdef Darwin}
+// Using casp instruction (recommended for ARMv8.1-A and later)
+function InterlockedCompareExchange128(var Destination:TPasMPInt128Record;const NewValue,Comperand:TPasMPInt128Record):TPasMPInt128Record; assembler;
+{$ifdef fpc}
+function InterlockedCompareExchange128(var Destination: TPasMPInt128Record; const NewValue, Comperand: TPasMPInt128Record): TPasMPInt128Record; assembler;
+asm
+ // Save callee-saved registers
+ stp x19, x20, [sp, #-32]!
+ stp x21, x22, [sp, #16]
+
+ // Load expected values to registers x3 and x4
+ ldp x3, x4, [x2] // x2: Comperand
+
+ // Use the pair of 64-bit CAS instructions (casp) in a loop
+ 1:
+ // Load the NewValue into x5 and x6
+ ldp x5, x6, [x1] // x1: NewValue
+
+ // casp instruction for 128-bit compare and exchange
+ casp x3, x4, x5, x6, [x0] // x0: Destination
+
+ // Check if the operation was successful
+ eor x8, x3, x5
+ eor x9, x4, x6
+ orr x10, x8, x9
+ cbz x10, 2f
+
+ // If not successful, try again
+ b 1b
+
+ 2:
+ // Store the previous value of the Destination in the return record
+ stp x3, x4, [x29, #-16] // Store the values in x3 and x4 (Lo and Hi parts) into the stack-allocated return record
+
+ // Restore callee-saved registers
+ ldp x21, x22, [sp, #16]
+ ldp x19, x20, [sp], #32
+
+//ret
+end;
+{$else}
+asm
+ .pushnv
+ .arch armv8-a
+
+ // Load expected values to registers x3 and x4
+ ldp x3, x4, [x2] // x2: Comperand
+
+ // Use the pair of 64-bit CAS instructions (casp) in a loop
+ 1:
+ // Load the NewValue into x5 and x6
+ ldp x5, x6, [x1] // x1: NewValue
+
+ // casp instruction for 128-bit compare and exchange
+ casp x3, x4, x5, x6, [x0] // x0: Destination
+
+ // Check if the operation was successful
+ eor x8, x3, x5
+ eor x9, x4, x6
+ orr x10, x8, x9
+ cbz x10, 2f
+
+ // If not successful, try again
+ b 1b
+
+ 2:
+ // Store the previous value of the Destination in the return record
+ stp x3, x4, [x29, #-16] // Store the values in x3 and x4 (Lo and Hi parts) into the stack-allocated return record
+
+ .popnv
+end;
+{$endif}
+{$else}
+// Using ldxp and stxp instructions (for broader compatibility, including ARMv8-A)
+function InterlockedCompareExchange128(var Destination:TPasMPInt128Record;const NewValue,Comperand:TPasMPInt128Record):TPasMPInt128Record; assembler;
+{$ifdef fpc}
+asm
+ // Save callee-saved registers
+ stp x19, x20, [sp, #-32]!
+ stp x21, x22, [sp, #16]
+
+ // Load expected values to registers x3 and x4
+ ldp x3, x4, [x2] // x2: Comperand
+
+ // Use the ldxp and stxp instructions in a loop
+ 1:
+ // Load the current Destination value into x5 and x6
+ ldxp x5, x6, [x0] // x0: Destination
+
+ // Compare the Destination value with the expected value
+ eor x8, x3, x5
+ eor x9, x4, x6
+ orr x10, x8, x9
+ cbnz x10, 2f
+
+ // If equal, try to store the NewValue into the Destination
+ ldp x7, x8, [x1] // x1: NewValue
+ stxp w9, x7, x8, [x0]
+
+ // Check if the store operation was successful
+ cbz w9, 2f
+
+ // If not successful, try again
+ b 1b
+
+ 2:
+ // Store the previous value of the Destination in the return record
+ stp x5, x6, [x29, #-16] // Store the values in x5 and x6 (Lo and Hi parts) into the stack-allocated return record
+
+ // Restore callee-saved registers
+ ldp x21, x22, [sp, #16]
+ ldp x19, x20, [sp], #32
+
+//ret
+end;
+{$else}
+asm
+ .pushnv
+ .arch armv8-a
+
+ // Load expected values to registers x3 and x4
+ ldp x3, x4, [x2] // x2: Comperand
+
+ // Use the ldxp and stxp instructions in a loop
+ 1:
+ // Load the current Destination value into x5 and x6
+ ldxp x5, x6, [x0] // x0: Destination
+
+ // Compare the Destination value with the expected value
+ eor x8, x3, x5
+ eor x9, x4, x6
+ orr x10, x8, x9
+ cbnz x10, 2f
+
+ // If equal, try to store the NewValue into the Destination
+ ldp x7, x8, [x1] // x1: NewValue
+ stxp w9, x7, x8, [x0]
+
+ // Check if the store operation was successful
+ cbz w9, 2f
+
+ // If not successful, try again
+ b 1b
+
+ 2:
+ // Store the previous value of the Destination in the return record
+ stp x5, x6, [x29, #-16] // Store the values in x5 and x6 (Lo and Hi parts) into the stack-allocated return record
+
+ .popnv
+end;
+{$endif}
+{$endif}
+
+{$elseif defined(FPC) and defined(CPUARM) and defined(PASMP_HAS_DOUBLE_NATIVE_MACHINE_WORD_ATOMIC_COMPARE_EXCHANGE)}
 {$if defined(CPUARM_HAS_LDREX)}
 function InterlockedCompareExchange64(var Destination:TPasMPInt64;NewValue,Comperand:TPasMPInt64):TPasMPInt64; assembler; {$ifdef fpc}nostackframe;{$else}register;{$endif}
 label Loop;
