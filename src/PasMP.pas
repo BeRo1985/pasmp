@@ -12713,6 +12713,7 @@ end;
 var CountCountIDs,CoreID,CPUIndex,Index:Int32;
     CoreIDFile:Text;
     CoreIDs:array of Int32;
+    CPUIDs:array of Int32;
     CPUPath:string;
     IsUnique:Boolean;
     CoreIDStr:string;
@@ -12723,60 +12724,73 @@ begin
  CountCountIDs:=0;
  CPUIndex:=0;
  
- while true do begin
- 
-  // Construct the file path for each CPU core's core_id file
-  CPUPath:='/sys/devices/system/cpu/cpu'+IntToStr(CPUIndex)+'/topology/core_id';
+ CoreIDs:=nil;
+ CPUIDs:=nil;
+ try
 
-  // Check if the core_id file exists
-  if not FileExists(CPUPath) then begin
-   break;  // Exit loop if there are no more CPUs
-  end;
-
-  // Try to open the core_id file
-  AssignFile(CoreIDFile,CPUPath);
-  {$i-}System.Reset(CoreIDFile);{$i+}
-  if IOResult<>0 then begin
-   break;  // Exit loop if there are no more CPUs
-  end;
-
-   // Read the core_id as a string and close the file
-  ReadLn(CoreIDFile,CoreIDStr);
-  CloseFile(CoreIDFile);
-
-  // Convert core_id to integer
-  CoreID:=StrToIntDef(CoreIDStr,-1);
-  if CoreID<0 then begin
-   continue;  // Skip if conversion fails
-  end;
-
-  // Check if this CoreID is unique
-  IsUnique:=true;
-  for Index:=0 to CountCountIDs-1 do begin
-   if CoreIDs[Index]=CoreID then begin
-    IsUnique:=false;
-    break;
-   end;
-  end;
-
-  // If unique, add to dynamic array of CoreIDs
-  if IsUnique then  begin
-   if length(CoreIDs)<=CountCountIDs then begin
-    SetLength(CoreIDs,(CountCountIDs+1)*2);
-   end;
-   CoreIDs[CountCountIDs]:=CoreID;
-   inc(CountCountIDs);
-   inc(result);
-  end;
+  while true do begin
   
-  inc(CPUIndex);
+   // Construct the file path for each CPU core's core_id file
+   CPUPath:='/sys/devices/system/cpu/cpu'+IntToStr(CPUIndex)+'/topology/core_id';
 
- end;
+   // Check if the core_id file exists
+   if not FileExists(CPUPath) then begin
+    break;  // Exit loop if there are no more CPUs
+   end;
 
- SetLength(AvailableCPUCores,result);
- for Index:=0 to result-1 do begin
-  AvailableCPUCores[Index]:=CoreIDs[Index];
- end;
+   // Try to open the core_id file
+   AssignFile(CoreIDFile,CPUPath);
+   {$i-}System.Reset(CoreIDFile);{$i+}
+   if IOResult<>0 then begin
+    break;  // Exit loop if there are no more CPUs
+   end;
+
+    // Read the core_id as a string and close the file
+   ReadLn(CoreIDFile,CoreIDStr);
+   CloseFile(CoreIDFile);
+
+   // Convert core_id to integer
+   CoreID:=StrToIntDef(CoreIDStr,-1);
+   if CoreID<0 then begin
+    continue;  // Skip if conversion fails
+   end;
+
+   // Check if this CoreID is unique
+   IsUnique:=true;
+   for Index:=0 to CountCountIDs-1 do begin
+    if CoreIDs[Index]=CoreID then begin
+     IsUnique:=false;
+     break;
+    end;
+   end;
+
+   // If unique, add to dynamic array of CoreIDs
+   if IsUnique then begin
+    if length(CoreIDs)<=CountCountIDs then begin
+     SetLength(CoreIDs,(CountCountIDs+1)*2);
+    end;
+    if length(CPUIDs)<=CountCountIDs then begin
+     SetLength(CPUIDs,(CountCountIDs+1)*2);
+    end;
+    CoreIDs[CountCountIDs]:=CoreID; 
+    CPUIDs[CountCountIDs]:=CPUIndex;
+    inc(CountCountIDs);
+    inc(result);
+   end;
+   
+   inc(CPUIndex);
+
+  end;
+
+  SetLength(AvailableCPUCores,result);
+  for Index:=0 to result-1 do begin
+   AvailableCPUCores[Index]:=CPUIDs[Index];
+  end;
+
+ finally
+  CoreIDs:=nil;
+  CPUIDs:=nil;
+ end; 
 
 end;
 {$elseif defined(Solaris)}
