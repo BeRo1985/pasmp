@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2024-10-27-10-29-0000                       *
+ *                        Version 2024-10-27-10-35-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -11337,25 +11337,30 @@ begin
   MinPriority:=sched_get_priority_min(Policy);
   MaxPriority:=sched_get_priority_max(Policy);
  
-  // Calculate back-scaled priority from a 10 bit resolution (1024 levels) value (with halfway rounding) and restrict it to the valid range
-  ScaledPriority:=Min(Max(MinPriority+((((MaxPriority-MinPriority)*POSIXPriorities[Value])+512) shr 10),MinPriority),MaxPriority);
- 
-  // Check if the priority has changed at all 
-  if Param.sched_priority<>ScaledPriority then begin
- 
-   // If yes, set the new priority to Param 
-   Param.sched_priority:=ScaledPriority;
+  // Check if the priority range is valid, because both MinPriority and MaxPriority could be the same value, for example at SCHED_OTHER policy 
+  if MinPriority<MaxPriority then begin
 
-   // And set the new scheduling policy and priority 
-   if pthread_setschedparam(Handle,Policy,@Param)=0 then begin
+   // Calculate back-scaled priority from a 10 bit resolution (1024 levels) value (with halfway rounding) and restrict it to the valid range
+   ScaledPriority:=Min(Max(MinPriority+(((TPasMPInt64(MaxPriority-MinPriority)*POSIXPriorities[Value])+512) shr 10),MinPriority),MaxPriority);
+  
+   // Check if the priority has changed at all 
+   if Param.sched_priority<>ScaledPriority then begin
+  
+    // If yes, set the new priority to Param 
+    Param.sched_priority:=ScaledPriority;
 
-    // Success (nothing to do)
+    // And set the new scheduling policy and priority 
+    if pthread_setschedparam(Handle,Policy,@Param)=0 then begin
 
-   end else begin
+     // Success (nothing to do)
 
-    // Error (maybe raise exception?)
+    end else begin
 
-   end;
+     // Error (maybe raise exception?)
+
+    end;
+
+   end; 
 
   end;
 
