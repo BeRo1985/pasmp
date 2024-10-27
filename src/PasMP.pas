@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2024-10-27-11-08-0000                       *
+ *                        Version 2024-10-27-13-47-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2376,6 +2376,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        property JobWorkerThreads:TPasMPJobWorkerThreads read fJobWorkerThreads;
        property CountJobWorkerThreads:TPasMPInt32 read fCountJobWorkerThreads;
        property Profiler:TPasMPProfiler read fProfiler;
+       property SleepingOnIdle:longbool read fSleepingOnIdle write fSleepingOnIdle;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -13294,7 +13295,7 @@ end;
 procedure TPasMP.WakeUpAll;
 {$ifdef PasMPUseWakeUpConditionVariable}
 begin
- if fSleepingOnIdle and (fSleepingJobWorkerThreads>0) then begin
+ if fSleepingJobWorkerThreads>0 then begin
   fWakeUpConditionVariableLock.Acquire;
   try
    inc(fWakeUpCounter);
@@ -13306,7 +13307,7 @@ begin
 end;
 {$else}
 begin
- if fSleepingOnIdle and (fSleepingJobWorkerThreads>0) then begin
+ if fSleepingJobWorkerThreads>0 then begin
   fWakeUpEvent.SetEvent;
  end;
 end;
