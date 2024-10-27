@@ -12580,7 +12580,7 @@ begin
 
   // Try to open the core_id file
   AssignFile(CoreIDFile,CPUPath);
-  {$i-}Reset(CoreIDFile);{$i+}
+  {$i-}System.Reset(CoreIDFile);{$i+}
   if IOResult<>0 then begin
    break;  // Exit loop if there are no more CPUs
   end;
