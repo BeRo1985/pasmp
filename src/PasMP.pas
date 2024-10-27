@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2024-10-27-10-44-0000                       *
+ *                        Version 2024-10-27-11-08-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2388,6 +2388,7 @@ var GlobalPasMP:TPasMP=nil; // "Optional" singleton-like global PasMP instance
     GlobalPasMPAllWorkerThreadsHaveOwnSystemThreads:boolean=false;
     GlobalPasMPProfiling:boolean=false;
     GlobalPasMPWorkerThreadPriority:TThreadPriority=TThreadPriority.tpNormal;
+    GlobalPasMPOverrideThreadPriorityFunctions:boolean=false;    
 
     GPasMP:TPasMP absolute GlobalPasMP; // A shorter name for lazy peoples
 
@@ -11270,46 +11271,50 @@ var Policy,MinPriority,MaxPriority,ScaledPriority,BestDifference,Difference:TPas
     CurrentPriority:TThreadPriority;
 begin
 
- // Default to tpNormal
- result:=TThreadPriority.tpNormal;
+ if GlobalPasMPOverrideThreadPriorityFunctions then begin
+ 
+  // Default to tpNormal
+  result:=TThreadPriority.tpNormal;
 
- // Initialize Param with zero
- Param.sched_priority:=0;
+  // Initialize Param with zero
+  Param.sched_priority:=0;
 
- // Get the current scheduling policy and priority
- if (Handle<>0) and (pthread_getschedparam(Handle,@Policy,@Param)=0) then begin
+  // Get the current scheduling policy and priority
+  if (Handle<>0) and (pthread_getschedparam(Handle,@Policy,@Param)=0) then begin
 
-  // Get the minimum and maximum priority levels for the current policy
-  MinPriority:=sched_get_priority_min(Policy);
-  MaxPriority:=sched_get_priority_max(Policy);
+   // Get the minimum and maximum priority levels for the current policy
+   MinPriority:=sched_get_priority_min(Policy);
+   MaxPriority:=sched_get_priority_max(Policy);
 
-  // Check if the priority range is valid, because both MinPriority and MaxPriority could be the same value, for example at SCHED_OTHER policy
-  if MinPriority<MaxPriority then begin
+   // Check if the priority range is valid, because both MinPriority and MaxPriority could be the same value, for example at SCHED_OTHER policy
+   if MinPriority<MaxPriority then begin
 
-   // Calculate scaled priority to a 10 bit resolution (1024 levels) value (with halfway rounding)
-   ScaledPriority:=((TPasMPInt64(Param.sched_priority-MinPriority) shl 10)+(((MaxPriority-MinPriority)+1) shr 1)) div (MaxPriority-MinPriority);
+    // Calculate scaled priority to a 10 bit resolution (1024 levels) value (with halfway rounding)
+    ScaledPriority:=((TPasMPInt64(Param.sched_priority-MinPriority) shl 10)+(((MaxPriority-MinPriority)+1) shr 1)) div (MaxPriority-MinPriority);
 
-   // Find the closest priority level
-   BestDifference:=High(TPasMPInt32);
+    // Find the closest priority level
+    BestDifference:=High(TPasMPInt32);
 
-   // Iterate over all possible priorities
-   for CurrentPriority:=Low(TThreadPriority) to High(TThreadPriority) do begin
+    // Iterate over all possible priorities
+    for CurrentPriority:=Low(TThreadPriority) to High(TThreadPriority) do begin
 
-    // Calculate the absolute difference
-    Difference:=abs(POSIXPriorities[CurrentPriority]-ScaledPriority);
+     // Calculate the absolute difference
+     Difference:=abs(POSIXPriorities[CurrentPriority]-ScaledPriority);
 
-    // Check if the current difference is better than the best difference
-    if BestDifference>Difference then begin
+     // Check if the current difference is better than the best difference
+     if BestDifference>Difference then begin
 
-     // Update the best difference
-     BestDifference:=Difference;
+      // Update the best difference
+      BestDifference:=Difference;
 
-     // Update the result with the current priority
-     result:=CurrentPriority;
+      // Update the result with the current priority
+      result:=CurrentPriority;
 
-     // Check if the best difference is zero
-     if BestDifference=0 then begin
-      break; // If it is the case, we can't get any better and we can stop the search
+      // Check if the best difference is zero
+      if BestDifference=0 then begin
+       break; // If it is the case, we can't get any better and we can stop the search
+      end;
+
      end;
 
     end;
@@ -11318,7 +11323,11 @@ begin
 
   end;
 
- end;
+ end else begin
+
+  result:=inherited Priority;
+
+ end; 
 
 end;
 
@@ -11327,44 +11336,52 @@ var Policy,MinPriority,MaxPriority,ScaledPriority:TPasMPInt32;
     Param:Tsched_param;
 begin
  
- // Initialize Param with zero
- Param.sched_priority:=0;
- 
- // Get the current scheduling policy and priority
- if (Handle<>0) and (pthread_getschedparam(Handle,@Policy,@Param)=0) then begin
- 
-  // Get the minimum and maximum priority levels for the current policy
-  MinPriority:=sched_get_priority_min(Policy);
-  MaxPriority:=sched_get_priority_max(Policy);
- 
-  // Check if the priority range is valid, because both MinPriority and MaxPriority could be the same value, for example at SCHED_OTHER policy 
-  if MinPriority<MaxPriority then begin
+ if GlobalPasMPOverrideThreadPriorityFunctions then begin
 
-   // Calculate back-scaled priority from a 10 bit resolution (1024 levels) value (with halfway rounding) and restrict it to the valid range
-   ScaledPriority:=Min(Max(MinPriority+(((TPasMPInt64(MaxPriority-MinPriority)*POSIXPriorities[Value])+512) shr 10),MinPriority),MaxPriority);
+  // Initialize Param with zero
+  Param.sched_priority:=0;
   
-   // Check if the priority has changed at all 
-   if Param.sched_priority<>ScaledPriority then begin
+  // Get the current scheduling policy and priority
+  if (Handle<>0) and (pthread_getschedparam(Handle,@Policy,@Param)=0) then begin
   
-    // If yes, set the new priority to Param 
-    Param.sched_priority:=ScaledPriority;
+   // Get the minimum and maximum priority levels for the current policy
+   MinPriority:=sched_get_priority_min(Policy);
+   MaxPriority:=sched_get_priority_max(Policy);
+  
+   // Check if the priority range is valid, because both MinPriority and MaxPriority could be the same value, for example at SCHED_OTHER policy 
+   if MinPriority<MaxPriority then begin
 
-    // And set the new scheduling policy and priority 
-    if pthread_setschedparam(Handle,Policy,@Param)=0 then begin
+    // Calculate back-scaled priority from a 10 bit resolution (1024 levels) value (with halfway rounding) and restrict it to the valid range
+    ScaledPriority:=Min(Max(MinPriority+(((TPasMPInt64(MaxPriority-MinPriority)*POSIXPriorities[Value])+512) shr 10),MinPriority),MaxPriority);
+   
+    // Check if the priority has changed at all 
+    if Param.sched_priority<>ScaledPriority then begin
+   
+     // If yes, set the new priority to Param 
+     Param.sched_priority:=ScaledPriority;
 
-     // Success (nothing to do)
+     // And set the new scheduling policy and priority 
+     if pthread_setschedparam(Handle,Policy,@Param)=0 then begin
 
-    end else begin
+      // Success (nothing to do)
 
-     // Error (maybe raise exception?)
+     end else begin
 
-    end;
+      // Error (maybe raise exception?)
 
-   end; 
+     end;
+
+    end; 
+
+   end;
 
   end;
 
- end;
+ end else begin
+
+  inherited Priority:=Value;
+
+ end; 
 
 end;
 {$ifend}
