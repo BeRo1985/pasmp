@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2024-10-27-02-46-0000                       *
+ *                        Version 2024-10-27-10-29-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1988,7 +1988,15 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$endif}
 
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
-     TPasMPThread=class(TThread);
+     TPasMPThread=class(TThread)
+{$if defined(fpc) and (defined(Linux) or defined(Android)) and declared(TThreadPriority)}
+      private
+       function GetPriority:TThreadPriority; reintroduce;
+       procedure SetPriority(Value:TThreadPriority); reintroduce;
+      public
+       property Priority:TThreadPriority read GetPriority write SetPriority;
+{$ifend}
+     end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
      PPasMPJobPriority=^TPasMPJobPriority;
@@ -11213,6 +11221,148 @@ begin
  end;
 end;
 {$endif}
+
+{$if defined(fpc) and (defined(Linux) or defined(Android)) and declared(TThreadPriority)}
+
+{$if not declared(pthread_t)}
+type pthread_t=ptruint;
+{$ifend}
+
+{$if not (declared(Psched_param) and declared(Tsched_param) and declared(sched_param))}
+type sched_param=record
+      sched_priority:TPasMPInt32;
+     end;
+     Tsched_param=sched_param;
+     Psched_param=^Tsched_param;
+{$ifend}
+
+{$if not declared(sched_get_priority_min)}
+function sched_get_priority_min(policy:TPasMPInt32):TPasMPInt32; cdecl; external 'c' name 'sched_get_priority_min';
+{$ifend}
+
+{$if not declared(sched_get_priority_max)}
+function sched_get_priority_max(policy:TPasMPInt32):TPasMPInt32; cdecl; external 'c' name 'sched_get_priority_max';
+{$ifend}
+
+{$if not declared(pthread_getschedparam)}
+function pthread_getschedparam(thread:pthread_t;policy:PPasMPInt32;param:Psched_param):TPasMPInt32; cdecl; external 'c' name 'pthread_getschedparam';
+{$ifend}
+
+{$if not declared(pthread_setschedparam)}
+function pthread_setschedparam(thread:pthread_t;policy:TPasMPInt32;param:Psched_param):TPasMPInt32; cdecl; external 'c' name 'pthread_getschedparam';
+{$ifend}
+
+// A mapping of TThreadPriority to POSIX thread priorities as normalized-scaled 10 bit resolution (1024 levels) values
+const POSIXPriorities:array[TThreadPriority] of TPasMPInt32=
+       (
+        0,    // tpIdle, THREAD_PRIORITY_IDLE, lowest possible priority, 0/6 = 0.00% * 1024 ~= 0
+        171,  // tpLowest, THREAD_PRIORITY_LOWEST, low priority, 1/6 = 16.66% * 1024 ~= 171
+        341,  // tpLower, THREAD_PRIORITY_BELOW_NORMAL, below-normal priority, 2/6 = 33.33% * 1024 ~= 341
+        512,  // tpNormal, THREAD_PRIORITY_NORMAL, normal priority, 3/6 = 50.00% * 1024 ~= 512
+        683,  // tpHigher, THREAD_PRIORITY_ABOVE_NORMAL, above-normal priority, 4/6 = 66.66% * 1024 ~= 683
+        853,  // tpHighest, THREAD_PRIORITY_HIGHEST, high priority, 5/6 = 83.33% * 1024 ~= 853
+        1024  // tpTimeCritical, THREAD_PRIORITY_TIME_CRITICAL, highest possible priority, 6/6 = 100.00% * 1024 ~= 1024
+       );
+
+function TPasMPThread.GetPriority:TThreadPriority;
+var Policy,MinPriority,MaxPriority,ScaledPriority,BestDifference,Difference:TPasMPInt32;
+    Param:Tsched_param;
+    CurrentPriority:TThreadPriority;
+begin
+
+ // Default to tpNormal
+ result:=TThreadPriority.tpNormal;
+
+ // Initialize Param with zero
+ Param.sched_priority:=0;
+
+ // Get the current scheduling policy and priority
+ if pthread_getschedparam(Handle,@Policy,@Param)=0 then begin
+
+  // Get the minimum and maximum priority levels for the current policy
+  MinPriority:=sched_get_priority_min(Policy);
+  MaxPriority:=sched_get_priority_max(Policy);
+
+  // Check if the priority range is valid, because both MinPriority and MaxPriority could be the same value, for example at SCHED_OTHER policy
+  if MinPriority<MaxPriority then begin
+
+   // Calculate scaled priority to a 10 bit resolution (1024 levels) value (with halfway rounding)
+   ScaledPriority:=((TPasMPInt64(Param.sched_priority-MinPriority) shl 10)+(((MaxPriority-MinPriority)+1) shr 1)) div (MaxPriority-MinPriority);
+
+   // Find the closest priority level
+   BestDifference:=High(TPasMPInt32);
+
+   // Iterate over all possible priorities
+   for CurrentPriority:=Low(TThreadPriority) to High(TThreadPriority) do begin
+
+    // Calculate the absolute difference
+    Difference:=abs(POSIXPriorities[CurrentPriority]-ScaledPriority);
+
+    // Check if the current difference is better than the best difference
+    if BestDifference>Difference then begin
+
+     // Update the best difference
+     BestDifference:=Difference;
+
+     // Update the result with the current priority
+     result:=CurrentPriority;
+
+     // Check if the best difference is zero
+     if BestDifference=0 then begin
+      break; // If it is the case, we can't get any better and we can stop the search
+     end;
+
+    end;
+
+   end;
+
+  end;
+
+ end;
+
+end;
+
+procedure TPasMPThread.SetPriority(Value:TThreadPriority);
+var Policy,MinPriority,MaxPriority,ScaledPriority:TPasMPInt32;
+    Param:Tsched_param;
+begin
+ 
+ // Initialize Param with zero
+ Param.sched_priority:=0;
+ 
+ // Get the current scheduling policy and priority
+ if pthread_getschedparam(Handle,@Policy,@Param)=0 then begin
+ 
+  // Get the minimum and maximum priority levels for the current policy
+  MinPriority:=sched_get_priority_min(Policy);
+  MaxPriority:=sched_get_priority_max(Policy);
+ 
+  // Calculate back-scaled priority from a 10 bit resolution (1024 levels) value (with halfway rounding) and restrict it to the valid range
+  ScaledPriority:=Min(Max(MinPriority+((((MaxPriority-MinPriority)*POSIXPriorities[Value])+512) shr 10),MinPriority),MaxPriority);
+ 
+  // Check if the priority has changed at all 
+  if Param.sched_priority<>ScaledPriority then begin
+ 
+   // If yes, set the new priority to Param 
+   Param.sched_priority:=ScaledPriority;
+
+   // And set the new scheduling policy and priority 
+   if pthread_setschedparam(Handle,Policy,@Param)=0 then begin
+
+    // Success (nothing to do)
+
+   end else begin
+
+    // Error (maybe raise exception?)
+
+   end;
+
+  end;
+
+ end;
+
+end;
+{$ifend}
 
 constructor TPasMPJobTask.Create;
 begin
