@@ -1,12 +1,12 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2023-04-25-22-14-0000                       *
+ *                        Version 2024-10-27-02-46-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
  *                                                                            *
- * Copyright (C) 2016-2023, Benjamin Rosseaux (benjamin@rosseaux.de)          *
+ * Copyright (C) 2016-2024, Benjamin Rosseaux (benjamin@rosseaux.de)          *
  *                                                                            *
  * This software is provided 'as-is', without any express or implied          *
  * warranty. In no event will the authors be held liable for any damages      *
@@ -2320,6 +2320,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        class function CreateGlobalInstance:TPasMP;
        class procedure DestroyGlobalInstance;
        class function GetGlobalInstance:TPasMP; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       class function GetCountOfPhysicalCores(var AvailableCPUCores:TPasMPAvailableCPUCores):TPasMPInt32; {$ifdef HAS_STATIC}static;{$endif}
        class function GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):TPasMPInt32; {$ifdef HAS_STATIC}static;{$endif}
        class procedure Relax; {$ifdef HAS_STATIC}static;{$endif}{$if defined(CPU386) or defined(CPUx86_64)}{$elseif defined(CAN_INLINE)}inline;{$ifend}
        class procedure Yield; {$ifdef HAS_STATIC}static;{$endif}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
@@ -12434,6 +12435,264 @@ begin
  result:=GlobalPasMP;
 end;
 
+class function TPasMP.GetCountOfPhysicalCores(var AvailableCPUCores:TPasMPAvailableCPUCores):TPasMPInt32;
+{$if defined(Windows)}
+var PhysicalCores,LogicalCores,i,j:TPasMPInt32;
+    sinfo:SYSTEM_INFO;
+    dwProcessAffinityMask,dwSystemAffinityMask:TPasMPPtrUInt;
+    CPUProcessorMasks:array of TPasMPPtrUInt;
+    CPUFirstLogicalCore:array of TPasMPInt32;
+ procedure GetCPUInfo(var PhysicalCores,LogicalCores:TPasMPInt32);
+ const RelationProcessorCore=0;
+       RelationNumaNode=1;
+       RelationCache=2;
+       RelationProcessorPackage=3;
+       RelationGroup=4;
+       RelationAll=$ffff;
+       CacheUnified=0;
+       CacheInstruction=1;
+       CacheData=2;
+       CacheTrace=3;
+ type TLogicalProcessorRelationship=TPasMPUInt32;
+      TProcessorCacheType=TPasMPUInt32;
+      TCacheDescriptor=packed record
+       Level:TPasMPUInt8;
+       Associativity:TPasMPUInt8;
+       LineSize:TPasMPUInt16;
+       Size:TPasMPUInt32;
+       pcType:TProcessorCacheType;
+      end;
+      PSystemLogicalProcessorInformation=^TSystemLogicalProcessorInformation;
+      TSystemLogicalProcessorInformation=packed record
+       ProcessorMask:TPasMPPtrUInt;
+       case Relationship:TLogicalProcessorRelationship of
+        0:(
+         Flags:TPasMPUInt8;
+        );
+        1:(
+         NodeNumber:TPasMPUInt32;
+        );
+        2:(
+         Cache:TCacheDescriptor;
+        );
+        3:(
+         Reserved:array[0..1] of TPasMPInt64;
+        );
+      end;
+      TGetLogicalProcessorInformation=function(Buffer:PSystemLogicalProcessorInformation;out ReturnLength:TPasMPUInt32):BOOL; stdcall;
+  function CountSetBits(Value:TPasMPPtrUInt):TPasMPInt32;
+  begin
+   result:=0;
+   while Value<>0 do begin
+    inc(result);
+    Value:=Value and (Value-1);
+   end;
+  end;
+ var GetLogicalProcessorInformation:TGetLogicalProcessorInformation;
+     Buffer:array of TSystemLogicalProcessorInformation;
+     ReturnLength:TPasMPUInt32;
+     Index,Count:TPasMPInt32;
+ begin
+  Buffer:=nil;
+  PhysicalCores:=0;
+  LogicalCores:=0;
+  try
+   CPUProcessorMasks:=nil;
+   CPUFirstLogicalCore:=nil;
+   GetLogicalProcessorInformation:=GetProcAddress(GetModuleHandle('kernel32'),'GetLogicalProcessorInformation');
+   if assigned(GetLogicalProcessorInformation) then begin
+    SetLength(Buffer,64);
+    Count:=0;
+    repeat
+     ReturnLength:=length(Buffer)*SizeOf(TSystemLogicalProcessorInformation);
+     if GetLogicalProcessorInformation(@Buffer[0],ReturnLength) then begin
+      Count:=ReturnLength div SizeOf(TSystemLogicalProcessorInformation);
+     end else begin
+      if GetLastError=ERROR_INSUFFICIENT_BUFFER then begin
+       SetLength(Buffer,(ReturnLength div SizeOf(TSystemLogicalProcessorInformation))+1);
+       continue;
+      end;
+     end;
+     break;
+    until false;
+    if Count>0 then begin
+     PhysicalCores:=0;
+     for Index:=0 to Count-1 do begin
+      if Buffer[Index].Relationship=RelationProcessorCore then begin
+       if length(CPUProcessorMasks)<=PhysicalCores then begin
+        SetLength(CPUProcessorMasks,(PhysicalCores+1)*2);
+       end;
+       if length(CPUFirstLogicalCore)<=PhysicalCores then begin
+        SetLength(CPUFirstLogicalCore,(PhysicalCores+1)*2);
+       end;
+       CPUProcessorMasks[PhysicalCores]:=Buffer[Index].ProcessorMask;
+       CPUFirstLogicalCore[PhysicalCores]:=Index;
+       inc(PhysicalCores);
+       inc(LogicalCores,CountSetBits(Buffer[Index].ProcessorMask));
+      end;
+     end;
+    end;
+   end;
+  finally
+   SetLength(Buffer,0);
+  end;
+ end;
+begin
+ CPUProcessorMasks:=nil;
+ CPUFirstLogicalCore:=nil;
+ try
+  GetCPUInfo(PhysicalCores,LogicalCores);
+  result:=PhysicalCores;
+  GetSystemInfo(sinfo);
+  GetProcessAffinityMask(GetCurrentProcess,dwProcessAffinityMask,dwSystemAffinityMask);
+  SetLength(AvailableCPUCores,result);
+  for i:=0 to PhysicalCores-1 do begin
+   AvailableCPUCores[i]:=CPUFirstLogicalCore[i];
+  end;
+ finally
+  CPUProcessorMasks:=nil;
+  CPUFirstLogicalCore:=nil;
+ end; 
+end;
+{$elseif defined(Linux) or defined(Android)}
+var CountCountIDs,CoreID,CPUIndex,Index:Int32;
+    CoreIDFile:Text;
+    CoreIDs:array of Int32;
+    CPUPath:string;
+    IsUnique:Boolean;
+    CoreIDStr:string;
+begin
+ 
+ result:=0;
+ 
+ CountCountIDs:=0;
+ CPUIndex:=0;
+ 
+ while true do begin
+ 
+  // Construct the file path for each CPU core's core_id file
+  CPUPath:='/sys/devices/system/cpu/cpu'+IntToStr(CPUIndex)+'/topology/core_id';
+
+  // Check if the core_id file exists
+  if not FileExists(CPUPath) then begin
+   break;  // Exit loop if there are no more CPUs
+  end;
+
+  // Try to open the core_id file
+  AssignFile(CoreIDFile,CPUPath);
+  {$i-}Reset(CoreIDFile);{$i+}
+  if IOResult<>0 then begin
+   break;  // Exit loop if there are no more CPUs
+  end;
+
+   // Read the core_id as a string and close the file
+  ReadLn(CoreIDFile,CoreIDStr);
+  CloseFile(CoreIDFile);
+
+  // Convert core_id to integer
+  CoreID:=StrToIntDef(CoreIDStr,-1);
+  if CoreID<0 then begin
+   continue;  // Skip if conversion fails
+  end;
+
+  // Check if this CoreID is unique
+  IsUnique:=true;
+  for Index:=0 to CountCountIDs-1 do begin
+   if CoreIDs[Index]=CoreID then begin
+    IsUnique:=false;
+    break;
+   end;
+  end;
+
+  // If unique, add to dynamic array of CoreIDs
+  if IsUnique then  begin
+   if length(CoreIDs)<=CountCountIDs then begin
+    SetLength(CoreIDs,(CountCountIDs+1)*2);
+   end;
+   CoreIDs[CountCountIDs]:=CoreID;
+   inc(CountCountIDs);
+   inc(result);
+  end;
+  
+  inc(CPUIndex);
+
+ end;
+
+ SetLength(AvailableCPUCores,result);
+ for Index:=0 to result-1 do begin
+  AvailableCPUCores[Index]:=CoreIDs[Index];
+ end;
+
+end;
+{$elseif defined(Solaris)}
+var i:TPasMPInt32;
+begin
+ result:=sysconf(_SC_NPROC_ONLN);
+ SetLength(AvailableCPUCores,result);
+ for i:=0 to result-1 do begin
+  AvailableCPUCores[i]:=i;
+ end;
+end;
+{$elseif defined(fpc) and defined(Darwin)}
+const IDs:array[0..3] of RawByteString=
+       (
+        'machdep.cpu.core_count',
+        'hw.physicalcpu', 
+        'machdep.cpu.thread_count',
+        'hw.logicalcpu',
+       );
+var status,t,i:cint;
+    len:size_t;
+begin
+ result:=1;
+ len:=SizeOf(t);
+ for i:=Low(IDs) to High(IDs) do begin 
+  t:=0;
+  status:=fpSysCtlByName(PAnsiChar(IDs[i]),@t,@len,nil,0);
+  if (status=0) and (t>=1) then begin
+   result:=t;
+   break;
+  end;
+ end;
+ SetLength(AvailableCPUCores,result);
+ for i:=0 to result-1 do begin
+  AvailableCPUCores[i]:=i;
+ end;
+end;
+{$elseif defined(Unix)}
+var mib:array[0..1] of cint;
+    len:cint;
+    t:cint;
+    i:TPasMPInt32;
+begin
+ mib[0]:=CTL_HW;
+ mib[1]:=HW_AVAILCPU;
+ len:=SizeOf(t);
+ fpsysctl(Pointer(@mib),2,@t,@len,nil,0);
+ if t<1 then begin
+  mib[1]:=HW_NCPU;
+  fpsysctl(Pointer(@mib),2,@t,@len,nil,0);
+  if t<1 then begin
+   t:=1;
+  end;
+ end;
+ result:=t;
+ SetLength(AvailableCPUCores,result);
+ for i:=0 to result-1 do begin
+  AvailableCPUCores[i]:=i;
+ end;
+end;
+{$else}
+var i:TPasMPInt32;
+begin
+ result:=1;
+ SetLength(AvailableCPUCores,result);
+ for i:=0 to result-1 do begin
+  AvailableCPUCores[i]:=i;
+ end;
+end;
+{$ifend}
+
 class function TPasMP.GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):TPasMPInt32;
 {$if defined(Windows)}
 var PhysicalCores,LogicalCores,i,j:TPasMPInt32;
@@ -12496,7 +12755,7 @@ var PhysicalCores,LogicalCores,i,j:TPasMPInt32;
   try
    GetLogicalProcessorInformation:=GetProcAddress(GetModuleHandle('kernel32'),'GetLogicalProcessorInformation');
    if assigned(GetLogicalProcessorInformation) then begin
-    SetLength(Buffer,16);
+    SetLength(Buffer,64);
     Count:=0;
     repeat
      ReturnLength:=length(Buffer)*SizeOf(TSystemLogicalProcessorInformation);
