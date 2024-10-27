@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2024-10-27-10-35-0000                       *
+ *                        Version 2024-10-27-10-44-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -11277,7 +11277,7 @@ begin
  Param.sched_priority:=0;
 
  // Get the current scheduling policy and priority
- if pthread_getschedparam(Handle,@Policy,@Param)=0 then begin
+ if (Handle<>0) and (pthread_getschedparam(Handle,@Policy,@Param)=0) then begin
 
   // Get the minimum and maximum priority levels for the current policy
   MinPriority:=sched_get_priority_min(Policy);
@@ -11331,7 +11331,7 @@ begin
  Param.sched_priority:=0;
  
  // Get the current scheduling policy and priority
- if pthread_getschedparam(Handle,@Policy,@Param)=0 then begin
+ if (Handle<>0) and (pthread_getschedparam(Handle,@Policy,@Param)=0) then begin
  
   // Get the minimum and maximum priority levels for the current policy
   MinPriority:=sched_get_priority_min(Policy);
