@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2024-10-28-17-41-0000                       *
+ *                        Version 2024-10-28-18-24-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2298,6 +2298,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fProfiler:TPasMPProfiler;
        fWorkerThreadPriority:TThreadPriority;
        fWorkerThreadStackSize:TPasMPSizeUInt;
+       fWorkerThreadMaxDepth:TPasMPUInt32;
        fOnWorkerThreadException:TPasMPOnWorkerThreadException;
        class function GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif}):TPasMPUInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        function GetJobWorkerThread:TPasMPJobWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
@@ -2327,7 +2328,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure ParallelIndirectMergeSortJobFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
        procedure ParallelIndirectMergeSortRootJobFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
       public
-       constructor Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const AllWorkerThreadsHaveOwnSystemThreads:boolean=false;const Profiling:boolean=false;const WorkerThreadPriority:TThreadPriority=TThreadPriority.tpNormal;const WorkerThreadStackSize:TPasMPSizeUInt=0);
+       constructor Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const AllWorkerThreadsHaveOwnSystemThreads:boolean=false;const Profiling:boolean=false;const WorkerThreadPriority:TThreadPriority=TThreadPriority.tpNormal;const WorkerThreadStackSize:TPasMPSizeUInt=0;const WorkerThreadMaxDepth:TPasMPUInt32=0);
        destructor Destroy; override;
        class function CreateGlobalInstance:TPasMP;
        class procedure DestroyGlobalInstance;
@@ -2396,6 +2397,7 @@ var GlobalPasMP:TPasMP=nil; // "Optional" singleton-like global PasMP instance
     GlobalPasMPWorkerThreadPriority:TThreadPriority=TThreadPriority.tpNormal;
     GlobalPasMPOverrideThreadPriorityFunctions:boolean=false;
     GlobalPasMPWorkerThreadStackSize:TPasMPSizeUInt=0;
+    GlobalPasMPWorkerThreadMaxDepth:TPasMPUInt32=0;
 
     GPasMP:TPasMP absolute GlobalPasMP; // A shorter name for lazy peoples
 
@@ -12446,7 +12448,15 @@ begin
  result:=@fHistory[TPasMPUInt32(TPasMPInterlocked.Increment(TPasMPInt32(fCount))-1) and PasMPProfilerHistoryRingBufferSizeMask];
 end;
 
-constructor TPasMP.Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const AllWorkerThreadsHaveOwnSystemThreads:boolean=false;const Profiling:boolean=false;const WorkerThreadPriority:TThreadPriority=TThreadPriority.tpNormal;const WorkerThreadStackSize:TPasMPSizeUInt=0);
+constructor TPasMP.Create(const MaxThreads:TPasMPInt32;
+                          const ThreadHeadRoomForForeignTasks:TPasMPInt32;
+                          const DoCPUCorePinning:boolean;
+                          const SleepingOnIdle:boolean;
+                          const AllWorkerThreadsHaveOwnSystemThreads:boolean;
+                          const Profiling:boolean;
+                          const WorkerThreadPriority:TThreadPriority;
+                          const WorkerThreadStackSize:TPasMPSizeUInt;
+                          const WorkerThreadMaxDepth:TPasMPUInt32);
 var Index:TPasMPInt32;
 begin
 
@@ -12471,6 +12481,8 @@ begin
  fWorkerThreadPriority:=WorkerThreadPriority;
 
  fWorkerThreadStackSize:=WorkerThreadStackSize;
+
+ fWorkerThreadMaxDepth:=WorkerThreadMaxDepth;
 
  if Profiling then begin
   fProfiler:=TPasMPProfiler.Create(self);
@@ -12607,7 +12619,8 @@ begin
                                GlobalPasMPAllWorkerThreadsHaveOwnSystemThreads,
                                GlobalPasMPProfiling,
                                GlobalPasMPWorkerThreadPriority,
-                               GlobalPasMPWorkerThreadStackSize);
+                               GlobalPasMPWorkerThreadStackSize,
+                               GlobalPasMPWorkerThreadMaxDepth);
     TPasMPMemoryBarrier.Sync;
    end;
   finally
@@ -13534,7 +13547,7 @@ begin
   SpinCount:=0;
   CountMaxSpinCount:=128;
   while Job^.ChildrenJobs>0 do begin
-   if assigned(JobWorkerThread) then begin
+   if assigned(JobWorkerThread) and ((fWorkerThreadMaxDepth=0) or (JobWorkerThread.fDepth<fWorkerThreadMaxDepth)) then begin
     NextJob:=JobWorkerThread.GetJob;
     if assigned(NextJob) then begin
      ExecuteJob(NextJob,JobWorkerThread);
@@ -13689,7 +13702,7 @@ var NextJob:PPasMPJob;
 begin
  result:=false;
  JobWorkerThread:=GetJobWorkerThread;
- if assigned(JobWorkerThread) then begin
+ if assigned(JobWorkerThread) and ((fWorkerThreadMaxDepth=0) or (JobWorkerThread.fDepth<fWorkerThreadMaxDepth)) then begin
   NextJob:=JobWorkerThread.GetJob;
   if assigned(NextJob) then begin
    ExecuteJob(NextJob,JobWorkerThread);
@@ -13708,7 +13721,7 @@ begin
   SpinCount:=0;
   CountMaxSpinCount:=128;
   while (Job^.InternalData and PasMPJobFlagActive)<>0 do begin
-   if assigned(JobWorkerThread) then begin
+   if assigned(JobWorkerThread) and ((fWorkerThreadMaxDepth=0) or (JobWorkerThread.fDepth<fWorkerThreadMaxDepth)) then begin
     NextJob:=JobWorkerThread.GetJob;
     if assigned(NextJob) then begin
      ExecuteJob(NextJob,JobWorkerThread);
@@ -13750,7 +13763,7 @@ begin
    if Done then begin
     break;
    end else begin
-    if assigned(JobWorkerThread) then begin
+    if assigned(JobWorkerThread) and ((fWorkerThreadMaxDepth=0) or (JobWorkerThread.fDepth<fWorkerThreadMaxDepth)) then begin
      NextJob:=JobWorkerThread.GetJob;
      if assigned(NextJob) then begin
       ExecuteJob(NextJob,JobWorkerThread);
