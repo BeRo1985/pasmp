@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2024-10-28-16-42-0000                       *
+ *                        Version 2024-10-28-17-41-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2367,10 +2367,10 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure Invoke(const JobTask:TPasMPJobTask); overload; {$ifdef CAN_INLINE}inline;{$endif}
        procedure Invoke(const JobTasks:array of TPasMPJobTask); overload;
 {$ifdef HAS_ANONYMOUS_METHODS}
-       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForReferenceProcedure:TPasMPParallelForReferenceProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0):PPasMPJob; overload;
+       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForReferenceProcedure:TPasMPParallelForReferenceProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const RecursiveSplit:Boolean=true):PPasMPJob; overload;
 {$endif}
-       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForProcedure:TPasMPParallelForProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0):PPasMPJob; overload;
-       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForMethod:TPasMPParallelForMethod;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0):PPasMPJob; overload;
+       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForProcedure:TPasMPParallelForProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const RecursiveSplit:Boolean=true):PPasMPJob; overload;
+       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForMethod:TPasMPParallelForMethod;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const RecursiveSplit:Boolean=true):PPasMPJob; overload;
        function ParallelDirectIntroSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0):PPasMPJob;
        function ParallelIndirectIntroSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0):PPasMPJob;
        function ParallelDirectMergeSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0):PPasMPJob;
@@ -13837,6 +13837,7 @@ type PPasMPParallelForReferenceProcedureStartJobData=^TPasMPParallelForReference
       Granularity:TPasMPInt32;
       Depth:TPasMPInt32;
       CanSpread:longbool;
+      RecursiveSplit:longbool;
      end;
 
      PPasMPParallelForReferenceProcedureJobData=^TPasMPParallelForReferenceProcedureJobData;
@@ -13866,7 +13867,7 @@ begin
  JobData:=PPasMPParallelForReferenceProcedureJobData(pointer(@Job^.Data));
  if JobData^.FirstIndex<=JobData^.LastIndex then begin
   StartJobData:=JobData^.StartJobData;
-  if (((JobData^.LastIndex-JobData^.FirstIndex)+1)<=StartJobData^.Granularity) or (JobData^.RemainDepth=0) then begin
+  if (((JobData^.LastIndex-JobData^.FirstIndex)+1)<=StartJobData^.Granularity) or (JobData^.RemainDepth=0) or not StartJobData^.RecursiveSplit then begin
    ParallelForJobReferenceProcedureProcess(Job,ThreadIndex);
   end else begin
    if ((Job^.InternalData and PasMPJobFlagHasOwnerWorkerThread)<>0) and
@@ -13909,7 +13910,7 @@ begin
 end;
 
 procedure TPasMP.ParallelForStartJobReferenceProcedureFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
-var NewJobs:array[0..31] of PPasMPJob;
+var NewJobs:array of PPasMPJob;
     JobData:PPasMPParallelForReferenceProcedureStartJobData;
     NewJobData,NewJobDataEx:PPasMPParallelForReferenceProcedureJobData;
     Index,EndIndex,Granularity,Count,CountJobs,PartSize,Rest,Size:TPasMPNativeInt;
@@ -13932,7 +13933,8 @@ begin
     NewJobDataEx^.RemainDepth:=JobData^.Depth;
     ParallelForJobReferenceProcedureProcess(@JobEx,ThreadIndex);
    end else begin
-    if JobData^.CanSpread then begin
+    NewJobs:=nil;
+    if JobData^.CanSpread or not JobData^.RecursiveSplit then begin
      // Only try to spread, when all worker threads (except us) are jobless
      CountJobs:=Count div Granularity;
     end else begin
@@ -13940,30 +13942,34 @@ begin
     end;
     if CountJobs<1 then begin
      CountJobs:=1;
-    end else if CountJobs>length(NewJobs) then begin
-     CountJobs:=length(NewJobs);
     end;
-    PartSize:=Count div CountJobs;
-    Rest:=Count-(CountJobs*PartSize);
-    for JobIndex:=0 to CountJobs-1 do begin
-     Size:=PartSize;
-     if Rest>JobIndex then begin
-      inc(Size);
+    NewJobs:=nil;
+    try
+     SetLength(NewJobs,CountJobs);
+     PartSize:=Count div CountJobs;
+     Rest:=Count-(CountJobs*PartSize);
+     for JobIndex:=0 to CountJobs-1 do begin
+      Size:=PartSize;
+      if Rest>JobIndex then begin
+       inc(Size);
+      end;
+      NewJobs[JobIndex]:=Acquire(ParallelForJobReferenceProcedureFunction,nil,nil,Job^.InternalData and PasMPJobTagShiftedMask,Job^.AreaMask);
+      NewJobData:=PPasMPParallelForReferenceProcedureJobData(pointer(@NewJobs[JobIndex]^.Data));
+      NewJobData^.StartJobData:=JobData;
+      NewJobData^.FirstIndex:=Index;
+      NewJobData^.LastIndex:=(Index+Size)-1;
+      if NewJobData^.LastIndex>JobData^.LastIndex then begin
+       NewJobData^.LastIndex:=JobData^.LastIndex;
+      end;
+      NewJobData^.RemainDepth:=JobData^.Depth;
+      Run(NewJobs[JobIndex]);
+      inc(Index,Size);
      end;
-     NewJobs[JobIndex]:=Acquire(ParallelForJobReferenceProcedureFunction,nil,nil,Job^.InternalData and PasMPJobTagShiftedMask,Job^.AreaMask);
-     NewJobData:=PPasMPParallelForReferenceProcedureJobData(pointer(@NewJobs[JobIndex]^.Data));
-     NewJobData^.StartJobData:=JobData;
-     NewJobData^.FirstIndex:=Index;
-     NewJobData^.LastIndex:=(Index+Size)-1;
-     if NewJobData^.LastIndex>JobData^.LastIndex then begin
-      NewJobData^.LastIndex:=JobData^.LastIndex;
+     for JobIndex:=0 to CountJobs-1 do begin
+      WaitRelease(NewJobs[JobIndex]);
      end;
-     NewJobData^.RemainDepth:=JobData^.Depth;
-     Run(NewJobs[JobIndex]);
-     inc(Index,Size);
-    end;
-    for JobIndex:=0 to CountJobs-1 do begin
-     WaitRelease(NewJobs[JobIndex]);
+    finally
+     NewJobs:=nil;
     end;
    end;
   end;
@@ -13972,7 +13978,7 @@ begin
  end;
 end;
 
-function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForReferenceProcedure:TPasMPParallelForReferenceProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0):PPasMPJob;
+function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForReferenceProcedure:TPasMPParallelForReferenceProcedure;const Granularity:TPasMPInt32;const Depth:TPasMPInt32;const ParentJob:PPasMPJob;const Flags:TPasMPUInt32;const AreaMask:TPasMPUInt32;const RecursiveSplit:Boolean):PPasMPJob;
 var JobData:PPasMPParallelForReferenceProcedureStartJobData;
 begin
  result:=Acquire(ParallelForStartJobReferenceProcedureFunction,nil,ParentJob,Flags,AreaMask);
@@ -13985,6 +13991,7 @@ begin
  JobData^.Granularity:=Granularity;
  JobData^.Depth:=Depth;
  JobData^.CanSpread:=CanSpread;
+ JobData^.RecursiveSplit:=RecursiveSplit;
 end;
 {$endif}
 
@@ -13997,6 +14004,7 @@ type PPasMPParallelForStartJobData=^TPasMPParallelForStartJobData;
       Granularity:TPasMPInt32;
       Depth:TPasMPInt32;
       CanSpread:longbool;
+      RecursiveSplit:longbool;
      end;
 
      PPasMPParallelForJobData=^TPasMPParallelForJobData;
@@ -14028,7 +14036,7 @@ begin
  JobData:=PPasMPParallelForJobData(pointer(@Job^.Data));
  if JobData^.FirstIndex<=JobData^.LastIndex then begin
   StartJobData:=JobData^.StartJobData;
-  if (((JobData^.LastIndex-JobData^.FirstIndex)+1)<=StartJobData^.Granularity) or (JobData^.RemainDepth<=0) then begin
+  if (((JobData^.LastIndex-JobData^.FirstIndex)+1)<=StartJobData^.Granularity) or (JobData^.RemainDepth<=0) or not StartJobData^.RecursiveSplit then begin
    ParallelForJobFunctionProcess(Job,ThreadIndex);
   end else begin
    if ((Job^.InternalData and PasMPJobFlagHasOwnerWorkerThread)<>0) and
@@ -14071,7 +14079,7 @@ begin
 end;
 
 procedure TPasMP.ParallelForStartJobFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
-var NewJobs:array[0..31] of PPasMPJob;
+var NewJobs:array of PPasMPJob;
     JobData:PPasMPParallelForStartJobData;
     NewJobData,NewJobDataEx:PPasMPParallelForJobData;
     Index,EndIndex,Granularity,Count,CountJobs,PartSize,Rest,Size:TPasMPNativeInt;
@@ -14093,7 +14101,7 @@ begin
    NewJobDataEx^.RemainDepth:=JobData^.Depth;
    ParallelForJobFunctionProcess(@JobEx,ThreadIndex);
   end else begin
-   if JobData^.CanSpread then begin
+   if JobData^.CanSpread or not JobData^.RecursiveSplit then begin
     // Only try to spread, when all worker threads (except us) are jobless
     CountJobs:=Count div Granularity;
    end else begin
@@ -14101,37 +14109,41 @@ begin
    end;
    if CountJobs<1 then begin
     CountJobs:=1;
-   end else if CountJobs>length(NewJobs) then begin
-    CountJobs:=length(NewJobs);
    end;
-   PartSize:=Count div CountJobs;
-   Rest:=Count-(CountJobs*PartSize);
-   NewJobs[0]:=nil;
-   for JobIndex:=0 to CountJobs-1 do begin
-    Size:=PartSize;
-    if Rest>JobIndex then begin
-     inc(Size);
+   NewJobs:=nil;
+   try
+    SetLength(NewJobs,CountJobs);
+    PartSize:=Count div CountJobs;
+    Rest:=Count-(CountJobs*PartSize);
+    NewJobs[0]:=nil;
+    for JobIndex:=0 to CountJobs-1 do begin
+     Size:=PartSize;
+     if Rest>JobIndex then begin
+      inc(Size);
+     end;
+     NewJobs[JobIndex]:=Acquire(ParallelForJobFunction,nil,nil,Job^.InternalData and PasMPJobTagShiftedMask,Job^.AreaMask);
+     NewJobData:=PPasMPParallelForJobData(pointer(@NewJobs[JobIndex]^.Data));
+     NewJobData^.StartJobData:=JobData;
+     NewJobData^.FirstIndex:=Index;
+     NewJobData^.LastIndex:=(Index+Size)-1;
+     if NewJobData^.LastIndex>JobData^.LastIndex then begin
+      NewJobData^.LastIndex:=JobData^.LastIndex;
+     end;
+     NewJobData^.RemainDepth:=JobData^.Depth;
+     Run(NewJobs[JobIndex]);
+     inc(Index,Size);
     end;
-    NewJobs[JobIndex]:=Acquire(ParallelForJobFunction,nil,nil,Job^.InternalData and PasMPJobTagShiftedMask,Job^.AreaMask);
-    NewJobData:=PPasMPParallelForJobData(pointer(@NewJobs[JobIndex]^.Data));
-    NewJobData^.StartJobData:=JobData;
-    NewJobData^.FirstIndex:=Index;
-    NewJobData^.LastIndex:=(Index+Size)-1;
-    if NewJobData^.LastIndex>JobData^.LastIndex then begin
-     NewJobData^.LastIndex:=JobData^.LastIndex;
+    for JobIndex:=0 to CountJobs-1 do begin
+     WaitRelease(NewJobs[JobIndex]);
     end;
-    NewJobData^.RemainDepth:=JobData^.Depth;
-    Run(NewJobs[JobIndex]);
-    inc(Index,Size);
-   end;
-   for JobIndex:=0 to CountJobs-1 do begin
-    WaitRelease(NewJobs[JobIndex]);
+   finally
+    NewJobs:=nil;
    end;
   end;
  end;
 end;
 
-function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForProcedure:TPasMPParallelForProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0):PPasMPJob;
+function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForProcedure:TPasMPParallelForProcedure;const Granularity:TPasMPInt32;const Depth:TPasMPInt32;const ParentJob:PPasMPJob;const Flags:TPasMPUInt32;const AreaMask:TPasMPUInt32;const RecursiveSplit:Boolean):PPasMPJob;
 var JobData:PPasMPParallelForStartJobData;
 begin
  result:=Acquire(ParallelForStartJobFunction,nil,ParentJob,Flags,AreaMask);
@@ -14148,9 +14160,10 @@ begin
  end;
  JobData^.Depth:=Depth;
  JobData^.CanSpread:=CanSpread;
+ JobData^.RecursiveSplit:=RecursiveSplit;
 end;
 
-function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForMethod:TPasMPParallelForMethod;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0):PPasMPJob;
+function TPasMP.ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForMethod:TPasMPParallelForMethod;const Granularity:TPasMPInt32;const Depth:TPasMPInt32;const ParentJob:PPasMPJob;const Flags:TPasMPUInt32;const AreaMask:TPasMPUInt32;const RecursiveSplit:Boolean):PPasMPJob;
 var JobData:PPasMPParallelForStartJobData;
 begin
  result:=Acquire(ParallelForStartJobFunction,nil,ParentJob,Flags,AreaMask);
@@ -14166,6 +14179,7 @@ begin
  end;
  JobData^.Depth:=Depth;
  JobData^.CanSpread:=CanSpread;
+ JobData^.RecursiveSplit:=RecursiveSplit;
 end;
 
 type PPasMPParallelDirectIntroSortJobData=^TPasMPParallelDirectIntroSortJobData;
