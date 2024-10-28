@@ -2297,6 +2297,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$endif}
        fProfiler:TPasMPProfiler;
        fWorkerThreadPriority:TThreadPriority;
+       fWorkerThreadStackSize:TPasMPSizeUInt;
        fOnWorkerThreadException:TPasMPOnWorkerThreadException;
        class function GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif}):TPasMPUInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        function GetJobWorkerThread:TPasMPJobWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
@@ -2326,7 +2327,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure ParallelIndirectMergeSortJobFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
        procedure ParallelIndirectMergeSortRootJobFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
       public
-       constructor Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const AllWorkerThreadsHaveOwnSystemThreads:boolean=false;const Profiling:boolean=false;const WorkerThreadPriority:TThreadPriority=TThreadPriority.tpNormal);
+       constructor Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const AllWorkerThreadsHaveOwnSystemThreads:boolean=false;const Profiling:boolean=false;const WorkerThreadPriority:TThreadPriority=TThreadPriority.tpNormal;const WorkerThreadStackSize:TPasMPSizeUInt=0);
        destructor Destroy; override;
        class function CreateGlobalInstance:TPasMP;
        class procedure DestroyGlobalInstance;
@@ -2394,6 +2395,7 @@ var GlobalPasMP:TPasMP=nil; // "Optional" singleton-like global PasMP instance
     GlobalPasMPProfiling:boolean=false;
     GlobalPasMPWorkerThreadPriority:TThreadPriority=TThreadPriority.tpNormal;
     GlobalPasMPOverrideThreadPriorityFunctions:boolean=false;
+    GlobalPasMPWorkerThreadStackSize:TPasMPSizeUInt=0;
 
     GPasMP:TPasMP absolute GlobalPasMP; // A shorter name for lazy peoples
 
@@ -11492,7 +11494,11 @@ end;
 constructor TPasMPWorkerSystemThread.Create(const AJobWorkerThread:TPasMPJobWorkerThread);
 begin
  fJobWorkerThread:=AJobWorkerThread;
- inherited Create(false);
+ if AJobWorkerThread.fPasMPInstance.fWorkerThreadStackSize>0 then begin
+  inherited Create(false,AJobWorkerThread.fPasMPInstance.fWorkerThreadStackSize);
+ end else begin
+  inherited Create(false);
+ end;
 {$ifdef HasRealTThreadPriority}
  Priority:=AJobWorkerThread.fPasMPInstance.fWorkerThreadPriority;
 {$endif}
@@ -12440,7 +12446,7 @@ begin
  result:=@fHistory[TPasMPUInt32(TPasMPInterlocked.Increment(TPasMPInt32(fCount))-1) and PasMPProfilerHistoryRingBufferSizeMask];
 end;
 
-constructor TPasMP.Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const AllWorkerThreadsHaveOwnSystemThreads:boolean=false;const Profiling:boolean=false;const WorkerThreadPriority:TThreadPriority=TThreadPriority.tpNormal);
+constructor TPasMP.Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const AllWorkerThreadsHaveOwnSystemThreads:boolean=false;const Profiling:boolean=false;const WorkerThreadPriority:TThreadPriority=TThreadPriority.tpNormal;const WorkerThreadStackSize:TPasMPSizeUInt=0);
 var Index:TPasMPInt32;
 begin
 
@@ -12463,6 +12469,8 @@ begin
  fAllWorkerThreadsHaveOwnSystemThreads:=AllWorkerThreadsHaveOwnSystemThreads;
 
  fWorkerThreadPriority:=WorkerThreadPriority;
+
+ fWorkerThreadStackSize:=WorkerThreadStackSize;
 
  if Profiling then begin
   fProfiler:=TPasMPProfiler.Create(self);
@@ -12598,7 +12606,8 @@ begin
                                GlobalPasMPSleepingOnIdle,
                                GlobalPasMPAllWorkerThreadsHaveOwnSystemThreads,
                                GlobalPasMPProfiling,
-                               GlobalPasMPWorkerThreadPriority);
+                               GlobalPasMPWorkerThreadPriority,
+                               GlobalPasMPWorkerThreadStackSize);
     TPasMPMemoryBarrier.Sync;
    end;
   finally
