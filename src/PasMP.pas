@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2024-10-27-13-47-0000                       *
+ *                        Version 2024-10-28-16-42-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -230,7 +230,7 @@ unit PasMP;
    {$define Delphi2009AndUp}
    {$ifndef PASMP_NO_ANONYMOUS_METHODS}
     {$define HAS_ANONYMOUS_METHODS}
-   {$endif} 
+   {$endif}
    {$define HAS_GENERICS}
    {$define HAS_STATIC}
   {$ifend}
@@ -2258,6 +2258,8 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       );
 {$ifend}
 
+     TPasMPOnWorkerThreadException=function(const aException:Exception):Boolean of object;
+
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMP=class
       private
@@ -2295,6 +2297,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$endif}
        fProfiler:TPasMPProfiler;
        fWorkerThreadPriority:TThreadPriority;
+       fOnWorkerThreadException:TPasMPOnWorkerThreadException;
        class function GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif}):TPasMPUInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        function GetJobWorkerThread:TPasMPJobWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
        procedure WaitForWakeUp;
@@ -2377,6 +2380,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        property CountJobWorkerThreads:TPasMPInt32 read fCountJobWorkerThreads;
        property Profiler:TPasMPProfiler read fProfiler;
        property SleepingOnIdle:longbool read fSleepingOnIdle write fSleepingOnIdle;
+       property OnWorkerThreadException:TPasMPOnWorkerThreadException read fOnWorkerThreadException write fOnWorkerThreadException;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -2389,7 +2393,7 @@ var GlobalPasMP:TPasMP=nil; // "Optional" singleton-like global PasMP instance
     GlobalPasMPAllWorkerThreadsHaveOwnSystemThreads:boolean=false;
     GlobalPasMPProfiling:boolean=false;
     GlobalPasMPWorkerThreadPriority:TThreadPriority=TThreadPriority.tpNormal;
-    GlobalPasMPOverrideThreadPriorityFunctions:boolean=false;    
+    GlobalPasMPOverrideThreadPriorityFunctions:boolean=false;
 
     GPasMP:TPasMP absolute GlobalPasMP; // A shorter name for lazy peoples
 
@@ -6886,7 +6890,7 @@ end;
 function TPasMPInvertedSemaphore.Acquire(const AcquireCount:TPasMPInt32;out Count:TPasMPInt32):TPasMPInt32;
 begin
  fConditionVariableLock.Acquire;
- try                          
+ try
   if AcquireCount<=0 then begin
    result:=0;
   end else if (fCurrentCount+AcquireCount)<fMaximumCount then begin
@@ -11273,7 +11277,7 @@ var Policy,MinPriority,MaxPriority,ScaledPriority,BestDifference,Difference:TPas
 begin
 
  if GlobalPasMPOverrideThreadPriorityFunctions then begin
- 
+
   // Default to tpNormal
   result:=TThreadPriority.tpNormal;
 
@@ -11328,7 +11332,7 @@ begin
 
   result:=inherited Priority;
 
- end; 
+ end;
 
 end;
 
@@ -11336,32 +11340,32 @@ procedure TPasMPThread.SetPriority(Value:TThreadPriority);
 var Policy,MinPriority,MaxPriority,ScaledPriority:TPasMPInt32;
     Param:Tsched_param;
 begin
- 
+
  if GlobalPasMPOverrideThreadPriorityFunctions then begin
 
   // Initialize Param with zero
   Param.sched_priority:=0;
-  
+
   // Get the current scheduling policy and priority
   if (Handle<>0) and (pthread_getschedparam(Handle,@Policy,@Param)=0) then begin
-  
+
    // Get the minimum and maximum priority levels for the current policy
    MinPriority:=sched_get_priority_min(Policy);
    MaxPriority:=sched_get_priority_max(Policy);
-  
-   // Check if the priority range is valid, because both MinPriority and MaxPriority could be the same value, for example at SCHED_OTHER policy 
+
+   // Check if the priority range is valid, because both MinPriority and MaxPriority could be the same value, for example at SCHED_OTHER policy
    if MinPriority<MaxPriority then begin
 
     // Calculate back-scaled priority from a 10 bit resolution (1024 levels) value (with halfway rounding) and restrict it to the valid range
     ScaledPriority:=Min(Max(MinPriority+(((TPasMPInt64(MaxPriority-MinPriority)*POSIXPriorities[Value])+512) shr 10),MinPriority),MaxPriority);
-   
-    // Check if the priority has changed at all 
+
+    // Check if the priority has changed at all
     if Param.sched_priority<>ScaledPriority then begin
-   
-     // If yes, set the new priority to Param 
+
+     // If yes, set the new priority to Param
      Param.sched_priority:=ScaledPriority;
 
-     // And set the new scheduling policy and priority 
+     // And set the new scheduling policy and priority
      if pthread_setschedparam(Handle,Policy,@Param)=0 then begin
 
       // Success (nothing to do)
@@ -11372,7 +11376,7 @@ begin
 
      end;
 
-    end; 
+    end;
 
    end;
 
@@ -11382,7 +11386,7 @@ begin
 
   inherited Priority:=Value;
 
- end; 
+ end;
 
 end;
 {$ifend}
@@ -12111,24 +12115,36 @@ procedure TPasMPJobWorkerThread.ThreadProc;
 var SpinCount,CountMaxSpinCount:TPasMPInt32;
     Job:PPasMPJob;
 begin
- ThreadInitialization;
- fPasMPInstance.fSystemIsReadyEvent.WaitFor(INFINITE);
- fPasMPInstance.WaitForWakeUp;
- SpinCount:=0;
- CountMaxSpinCount:=128;
- while not fSystemThread.Terminated do begin
-  Job:=GetJob;
-  if assigned(Job) then begin
-   TPasMPInterlocked.Increment(fPasMPInstance.fWorkingJobWorkerThreads);
-   fPasMPInstance.ExecuteJob(Job,self);
-   TPasMPInterlocked.Decrement(fPasMPInstance.fWorkingJobWorkerThreads);
-   SpinCount:=0;
-  end else begin
-   if SpinCount<CountMaxSpinCount then begin
-    inc(SpinCount);
-   end else begin
-    fPasMPInstance.WaitForWakeUp;
+ try
+  ThreadInitialization;
+  fPasMPInstance.fSystemIsReadyEvent.WaitFor(INFINITE);
+  fPasMPInstance.WaitForWakeUp;
+  SpinCount:=0;
+  CountMaxSpinCount:=128;
+  while not fSystemThread.Terminated do begin
+   Job:=GetJob;
+   if assigned(Job) then begin
+    TPasMPInterlocked.Increment(fPasMPInstance.fWorkingJobWorkerThreads);
+    fPasMPInstance.ExecuteJob(Job,self);
+    TPasMPInterlocked.Decrement(fPasMPInstance.fWorkingJobWorkerThreads);
     SpinCount:=0;
+   end else begin
+    if SpinCount<CountMaxSpinCount then begin
+     inc(SpinCount);
+    end else begin
+     fPasMPInstance.WaitForWakeUp;
+     SpinCount:=0;
+    end;
+   end;
+  end;
+ except
+  on e:Exception do begin
+   if assigned(fPasMPInstance.fOnWorkerThreadException) then begin
+    if not fPasMPInstance.fOnWorkerThreadException(e) then begin
+     raise;
+    end;
+   end else begin
+    raise;
    end;
   end;
  end;
@@ -12442,6 +12458,8 @@ begin
 
  fSleepingOnIdle:=SleepingOnIdle;
 
+ fOnWorkerThreadException:=nil;
+
  fAllWorkerThreadsHaveOwnSystemThreads:=AllWorkerThreadsHaveOwnSystemThreads;
 
  fWorkerThreadPriority:=WorkerThreadPriority;
@@ -12725,7 +12743,7 @@ begin
  finally
   CPUProcessorMasks:=nil;
   CPUFirstLogicalCore:=nil;
- end; 
+ end;
 end;
 {$elseif defined(Linux) or defined(Android)}
 var CountCountIDs,CoreID,CPUIndex,Index:Int32;
@@ -12736,18 +12754,18 @@ var CountCountIDs,CoreID,CPUIndex,Index:Int32;
     IsUnique:Boolean;
     CoreIDStr:string;
 begin
- 
+
  result:=0;
- 
+
  CountCountIDs:=0;
  CPUIndex:=0;
- 
+
  CoreIDs:=nil;
  CPUIDs:=nil;
  try
 
   while true do begin
-  
+
    // Construct the file path for each CPU core's core_id file
    CPUPath:='/sys/devices/system/cpu/cpu'+IntToStr(CPUIndex)+'/topology/core_id';
 
@@ -12790,12 +12808,12 @@ begin
     if length(CPUIDs)<=CountCountIDs then begin
      SetLength(CPUIDs,(CountCountIDs+1)*2);
     end;
-    CoreIDs[CountCountIDs]:=CoreID; 
+    CoreIDs[CountCountIDs]:=CoreID;
     CPUIDs[CountCountIDs]:=CPUIndex;
     inc(CountCountIDs);
     inc(result);
    end;
-   
+
    inc(CPUIndex);
 
   end;
@@ -12808,7 +12826,7 @@ begin
  finally
   CoreIDs:=nil;
   CPUIDs:=nil;
- end; 
+ end;
 
 end;
 {$elseif defined(Solaris)}
@@ -12824,7 +12842,7 @@ end;
 const IDs:array[0..3] of RawByteString=
        (
         'machdep.cpu.core_count',
-        'hw.physicalcpu', 
+        'hw.physicalcpu',
         'machdep.cpu.thread_count',
         'hw.logicalcpu',
        );
@@ -12833,7 +12851,7 @@ var status,t,i:cint;
 begin
  result:=1;
  len:=SizeOf(t);
- for i:=Low(IDs) to High(IDs) do begin 
+ for i:=Low(IDs) to High(IDs) do begin
   t:=0;
   status:=fpSysCtlByName(PAnsiChar(IDs[i]),@t,@len,nil,0);
   if (status=0) and (t>=1) then begin
@@ -13084,14 +13102,14 @@ const IDs:array[0..3] of RawByteString=
         'machdep.cpu.thread_count',
         'hw.logicalcpu',
         'machdep.cpu.core_count',
-        'hw.physicalcpu'  
+        'hw.physicalcpu'
        );
 var status,t,i:cint;
     len:size_t;
 begin
  result:=1;
  len:=SizeOf(t);
- for i:=Low(IDs) to High(IDs) do begin 
+ for i:=Low(IDs) to High(IDs) do begin
   t:=0;
   status:=fpSysCtlByName(PAnsiChar(IDs[i]),@t,@len,nil,0);
   if (status=0) and (t>=1) then begin
