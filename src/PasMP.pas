@@ -2305,6 +2305,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure WaitForWakeUp;
        procedure WakeUpAll;
        function CanSpread:boolean;
+       function IsFull:boolean;
        function GlobalAllocateJob:PPasMPJob;
        procedure GlobalFreeJob(const Job:PPasMPJob);
        function AllocateJob(const MethodCode,MethodData,Data:pointer;const ParentJob:PPasMPJob;const Flags,AreaMask:TPasMPUInt32):PPasMPJob; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
@@ -13375,6 +13376,24 @@ begin
  end;
 end;
 
+function TPasMP.IsFull:boolean;
+var CurrentJobWorkerThread,JobWorkerThread:TPasMPJobWorkerThread;
+    ThreadIndex,Index:TPasMPInt32;
+begin
+ result:=false;
+ CurrentJobWorkerThread:=GetJobWorkerThread;
+ if assigned(CurrentJobWorkerThread) and (fWorkerThreadMaxDepth>0) then begin
+  result:=true;
+  for Index:=0 to fCountJobWorkerThreads-1 do begin
+   JobWorkerThread:=fJobWorkerThreads[Index];
+   if (JobWorkerThread<>CurrentJobWorkerThread) and (JobWorkerThread.fDepth<fWorkerThreadMaxDepth) then begin
+    result:=false;
+    exit;
+   end;
+  end;
+ end;
+end;
+
 function TPasMP.GlobalAllocateJob:PPasMPJob;
 begin
  fJobAllocatorCriticalSection.Acquire;
@@ -13547,7 +13566,7 @@ begin
   SpinCount:=0;
   CountMaxSpinCount:=128;
   while Job^.ChildrenJobs>0 do begin
-   if assigned(JobWorkerThread) and ((fWorkerThreadMaxDepth=0) or (JobWorkerThread.fDepth<fWorkerThreadMaxDepth)) then begin
+   if assigned(JobWorkerThread) then begin
     NextJob:=JobWorkerThread.GetJob;
     if assigned(NextJob) then begin
      ExecuteJob(NextJob,JobWorkerThread);
@@ -13702,7 +13721,7 @@ var NextJob:PPasMPJob;
 begin
  result:=false;
  JobWorkerThread:=GetJobWorkerThread;
- if assigned(JobWorkerThread) and ((fWorkerThreadMaxDepth=0) or (JobWorkerThread.fDepth<fWorkerThreadMaxDepth)) then begin
+ if assigned(JobWorkerThread) then begin
   NextJob:=JobWorkerThread.GetJob;
   if assigned(NextJob) then begin
    ExecuteJob(NextJob,JobWorkerThread);
@@ -13721,7 +13740,7 @@ begin
   SpinCount:=0;
   CountMaxSpinCount:=128;
   while (Job^.InternalData and PasMPJobFlagActive)<>0 do begin
-   if assigned(JobWorkerThread) and ((fWorkerThreadMaxDepth=0) or (JobWorkerThread.fDepth<fWorkerThreadMaxDepth)) then begin
+   if assigned(JobWorkerThread) then begin
     NextJob:=JobWorkerThread.GetJob;
     if assigned(NextJob) then begin
      ExecuteJob(NextJob,JobWorkerThread);
@@ -13763,7 +13782,7 @@ begin
    if Done then begin
     break;
    end else begin
-    if assigned(JobWorkerThread) and ((fWorkerThreadMaxDepth=0) or (JobWorkerThread.fDepth<fWorkerThreadMaxDepth)) then begin
+    if assigned(JobWorkerThread) then begin
      NextJob:=JobWorkerThread.GetJob;
      if assigned(NextJob) then begin
       ExecuteJob(NextJob,JobWorkerThread);
