@@ -13910,7 +13910,7 @@ begin
 end;
 
 procedure TPasMP.ParallelForStartJobReferenceProcedureFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
-var NewJobs:array of PPasMPJob;
+var NewJobs:array[0..31] of PPasMPJob;
     JobData:PPasMPParallelForReferenceProcedureStartJobData;
     NewJobData,NewJobDataEx:PPasMPParallelForReferenceProcedureJobData;
     Index,EndIndex,Granularity,Count,CountJobs,PartSize,Rest,Size:TPasMPNativeInt;
@@ -13933,7 +13933,6 @@ begin
     NewJobDataEx^.RemainDepth:=JobData^.Depth;
     ParallelForJobReferenceProcedureProcess(@JobEx,ThreadIndex);
    end else begin
-    NewJobs:=nil;
     if JobData^.CanSpread or not JobData^.RecursiveSplit then begin
      // Only try to spread, when all worker threads (except us) are jobless
      CountJobs:=Count div Granularity;
@@ -13942,34 +13941,30 @@ begin
     end;
     if CountJobs<1 then begin
      CountJobs:=1;
+    end else if CountJobs>length(NewJobs) then begin
+     CountJobs:=length(NewJobs);
     end;
-    NewJobs:=nil;
-    try
-     SetLength(NewJobs,CountJobs);
-     PartSize:=Count div CountJobs;
-     Rest:=Count-(CountJobs*PartSize);
-     for JobIndex:=0 to CountJobs-1 do begin
-      Size:=PartSize;
-      if Rest>JobIndex then begin
-       inc(Size);
-      end;
-      NewJobs[JobIndex]:=Acquire(ParallelForJobReferenceProcedureFunction,nil,nil,Job^.InternalData and PasMPJobTagShiftedMask,Job^.AreaMask);
-      NewJobData:=PPasMPParallelForReferenceProcedureJobData(pointer(@NewJobs[JobIndex]^.Data));
-      NewJobData^.StartJobData:=JobData;
-      NewJobData^.FirstIndex:=Index;
-      NewJobData^.LastIndex:=(Index+Size)-1;
-      if NewJobData^.LastIndex>JobData^.LastIndex then begin
-       NewJobData^.LastIndex:=JobData^.LastIndex;
-      end;
-      NewJobData^.RemainDepth:=JobData^.Depth;
-      Run(NewJobs[JobIndex]);
-      inc(Index,Size);
+    PartSize:=Count div CountJobs;
+    Rest:=Count-(CountJobs*PartSize);
+    for JobIndex:=0 to CountJobs-1 do begin
+     Size:=PartSize;
+     if Rest>JobIndex then begin
+      inc(Size);
      end;
-     for JobIndex:=0 to CountJobs-1 do begin
-      WaitRelease(NewJobs[JobIndex]);
+     NewJobs[JobIndex]:=Acquire(ParallelForJobReferenceProcedureFunction,nil,nil,Job^.InternalData and PasMPJobTagShiftedMask,Job^.AreaMask);
+     NewJobData:=PPasMPParallelForReferenceProcedureJobData(pointer(@NewJobs[JobIndex]^.Data));
+     NewJobData^.StartJobData:=JobData;
+     NewJobData^.FirstIndex:=Index;
+     NewJobData^.LastIndex:=(Index+Size)-1;
+     if NewJobData^.LastIndex>JobData^.LastIndex then begin
+      NewJobData^.LastIndex:=JobData^.LastIndex;
      end;
-    finally
-     NewJobs:=nil;
+     NewJobData^.RemainDepth:=JobData^.Depth;
+     Run(NewJobs[JobIndex]);
+     inc(Index,Size);
+    end;
+    for JobIndex:=0 to CountJobs-1 do begin
+     WaitRelease(NewJobs[JobIndex]);
     end;
    end;
   end;
@@ -14079,7 +14074,7 @@ begin
 end;
 
 procedure TPasMP.ParallelForStartJobFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
-var NewJobs:array of PPasMPJob;
+var NewJobs:array[0..31] of PPasMPJob;
     JobData:PPasMPParallelForStartJobData;
     NewJobData,NewJobDataEx:PPasMPParallelForJobData;
     Index,EndIndex,Granularity,Count,CountJobs,PartSize,Rest,Size:TPasMPNativeInt;
@@ -14109,35 +14104,31 @@ begin
    end;
    if CountJobs<1 then begin
     CountJobs:=1;
+   end else if CountJobs>length(NewJobs) then begin
+    CountJobs:=length(NewJobs);
    end;
-   NewJobs:=nil;
-   try
-    SetLength(NewJobs,CountJobs);
-    PartSize:=Count div CountJobs;
-    Rest:=Count-(CountJobs*PartSize);
-    NewJobs[0]:=nil;
-    for JobIndex:=0 to CountJobs-1 do begin
-     Size:=PartSize;
-     if Rest>JobIndex then begin
-      inc(Size);
-     end;
-     NewJobs[JobIndex]:=Acquire(ParallelForJobFunction,nil,nil,Job^.InternalData and PasMPJobTagShiftedMask,Job^.AreaMask);
-     NewJobData:=PPasMPParallelForJobData(pointer(@NewJobs[JobIndex]^.Data));
-     NewJobData^.StartJobData:=JobData;
-     NewJobData^.FirstIndex:=Index;
-     NewJobData^.LastIndex:=(Index+Size)-1;
-     if NewJobData^.LastIndex>JobData^.LastIndex then begin
-      NewJobData^.LastIndex:=JobData^.LastIndex;
-     end;
-     NewJobData^.RemainDepth:=JobData^.Depth;
-     Run(NewJobs[JobIndex]);
-     inc(Index,Size);
+   PartSize:=Count div CountJobs;
+   Rest:=Count-(CountJobs*PartSize);
+   NewJobs[0]:=nil;
+   for JobIndex:=0 to CountJobs-1 do begin
+    Size:=PartSize;
+    if Rest>JobIndex then begin
+     inc(Size);
     end;
-    for JobIndex:=0 to CountJobs-1 do begin
-     WaitRelease(NewJobs[JobIndex]);
+    NewJobs[JobIndex]:=Acquire(ParallelForJobFunction,nil,nil,Job^.InternalData and PasMPJobTagShiftedMask,Job^.AreaMask);
+    NewJobData:=PPasMPParallelForJobData(pointer(@NewJobs[JobIndex]^.Data));
+    NewJobData^.StartJobData:=JobData;
+    NewJobData^.FirstIndex:=Index;
+    NewJobData^.LastIndex:=(Index+Size)-1;
+    if NewJobData^.LastIndex>JobData^.LastIndex then begin
+     NewJobData^.LastIndex:=JobData^.LastIndex;
     end;
-   finally
-    NewJobs:=nil;
+    NewJobData^.RemainDepth:=JobData^.Depth;
+    Run(NewJobs[JobIndex]);
+    inc(Index,Size);
+   end;
+   for JobIndex:=0 to CountJobs-1 do begin
+    WaitRelease(NewJobs[JobIndex]);
    end;
   end;
  end;
