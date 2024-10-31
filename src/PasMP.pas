@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2024-10-31-13-47-0000                       *
+ *                        Version 2024-10-31-21-45-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2361,6 +2361,8 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure Release(const Jobs:array of PPasMPJob); overload;
        procedure Run(const Job:PPasMPJob); overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure Run(const Jobs:array of PPasMPJob); overload;
+       procedure RunGlobal(const Job:PPasMPJob); overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure RunGlobal(const Jobs:array of PPasMPJob); overload;
        function StealAndExecuteJob:boolean;
        procedure Wait(const Job:PPasMPJob); overload;
        procedure Wait(const Jobs:array of PPasMPJob); overload;
@@ -13746,6 +13748,27 @@ begin
   Job:=Jobs[JobIndex];
   if assigned(Job) then begin
    PushJob(Job,JobWorkerThread);
+  end;
+ end;
+ WakeUpAll;
+end;
+
+procedure TPasMP.RunGlobal(const Job:PPasMPJob); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+begin
+ if assigned(Job) then begin
+  PushJob(Job,nil);
+  WakeUpAll;
+ end;
+end;
+
+procedure TPasMP.RunGlobal(const Jobs:array of PPasMPJob);
+var JobIndex:TPasMPInt32;
+    Job:PPasMPJob;
+begin
+ for JobIndex:=0 to length(Jobs)-1 do begin
+  Job:=Jobs[JobIndex];
+  if assigned(Job) then begin
+   PushJob(Job,nil);
   end;
  end;
  WakeUpAll;
