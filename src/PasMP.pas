@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2024-10-28-18-24-0000                       *
+ *                        Version 2024-10-31-13-47-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -501,6 +501,8 @@ type TPasMPInt8={$if declared(Int8)}Int8{$else}shortint{$ifend};
 {$endif}
 
      PPasMPUInt64=^TPasMPUInt64;
+
+     TPasMPUInt64DynamicArray=array of TPasMPUInt64;
 
      PPasMPPtrUInt=^TPasMPPtrUInt;
      PPasMPPtrInt=^TPasMPPtrInt;
@@ -2148,6 +2150,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$ifndef UseThreadLocalStorage}
        fThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif};
 {$endif}
+       fCPUAffinityMask:TPasMPUInt64; // 64-bit CPU affinity mask for maximum 64 CPU logical cores for now
        fSystemThread:TPasMPWorkerSystemThread;
        fIsReadyEvent:TPasMPEvent;
        fJobAllocator:TPasMPJobAllocator;
@@ -2160,7 +2163,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function HasJobs:boolean; {$ifdef CAN_INLINE}inline;{$endif}
        procedure ThreadProc;
       public
-       constructor Create(const APasMPInstance:TPasMP;const AThreadIndex:TPasMPInt32);
+       constructor Create(const APasMPInstance:TPasMP;const AThreadIndex:TPasMPInt32;const aCPUAffinityMask:TPasMPUInt64=0);
        destructor Destroy; override;
        property Depth:TPasMPUInt32 read fDepth;
        property AreaMask:TPasMPUInt32 read fAreaMask;
@@ -2334,8 +2337,8 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        class function CreateGlobalInstance:TPasMP;
        class procedure DestroyGlobalInstance;
        class function GetGlobalInstance:TPasMP; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       class function GetCountOfPhysicalCores(var AvailableCPUCores:TPasMPAvailableCPUCores):TPasMPInt32; {$ifdef HAS_STATIC}static;{$endif}
-       class function GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):TPasMPInt32; {$ifdef HAS_STATIC}static;{$endif}
+       class function GetCountOfPhysicalCores(out AvailableCPUCores:TPasMPAvailableCPUCores):TPasMPInt32; {$ifdef HAS_STATIC}static;{$endif}
+       class function GetCountOfHardwareThreads(out AvailableCPUCores:TPasMPAvailableCPUCores):TPasMPInt32; {$ifdef HAS_STATIC}static;{$endif}
        class procedure Relax; {$ifdef HAS_STATIC}static;{$endif}{$if defined(CPU386) or defined(CPUx86_64)}{$elseif defined(CAN_INLINE)}inline;{$ifend}
        class procedure Yield; {$ifdef HAS_STATIC}static;{$endif}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        class function Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean; {$ifdef Linux}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
@@ -11748,11 +11751,12 @@ begin
 
 end;
 
-constructor TPasMPJobWorkerThread.Create(const APasMPInstance:TPasMP;const AThreadIndex:TPasMPInt32);
+constructor TPasMPJobWorkerThread.Create(const APasMPInstance:TPasMP;const AThreadIndex:TPasMPInt32;const aCPUAffinityMask:TPasMPUInt64);
 var JobQueueIndex:TPasMPInt32;
 begin
  inherited Create;
  fPasMPInstance:=APasMPInstance;
+ fCPUAffinityMask:=aCPUAffinityMask;
  fJobAllocator:=TPasMPJobAllocator.Create(self);
  for JobQueueIndex:=low(TPasMPJobQueues) to high(TPasMPJobQueues) do begin
   fJobQueues[JobQueueIndex]:=TPasMPJobQueue.Create(fPasMPInstance);
@@ -11808,35 +11812,47 @@ begin
  SetRoundMode(fPasMPInstance.fFPURoundingMode);
 {$endif}
 
- if (length(fPasMPInstance.fAvailableCPUCores)>1) and
-    (fThreadIndex<length(fPasMPInstance.fAvailableCPUCores)) then begin
-{$ifdef Windows}
+ if fCPUAffinityMask<>0 then begin 
+
+  if fPasMPInstance.fDoCPUCorePinning then begin
+{$if defined(Windows)}
+   CurrentThreadHandle:=GetCurrentThread;
+ //SetThreadIdealProcessor(CurrentThreadHandle,fPasMPInstance.fAvailableCPUCores[fThreadIndex]);
+   SetThreadAffinityMask(CurrentThreadHandle,fCPUAffinityMask);
+{$elseif defined(Linux)}
+   CPUSet:=TPasMPInt64(fCPUAffinityMask);
+   sched_setaffinity(GetThreadID,SizeOf(CPUSet),@CPUSet);
+{$ifend}
+  end;
+
+ end else if (length(fPasMPInstance.fAvailableCPUCores)>1) and
+             (fThreadIndex<length(fPasMPInstance.fAvailableCPUCores)) then begin
+
+{$if defined(Windows)}
   CurrentThreadHandle:=GetCurrentThread;
   if fPasMPInstance.fDoCPUCorePinning then begin
  //SetThreadIdealProcessor(CurrentThreadHandle,fPasMPInstance.fAvailableCPUCores[fThreadIndex]);
    SetThreadAffinityMask(CurrentThreadHandle,TPasMPUInt32(1) shl fPasMPInstance.fAvailableCPUCores[fThreadIndex]);
   end;
-{$else}
-{$ifdef Linux}
+{$elseif defined(Linux)}
   if fPasMPInstance.fDoCPUCorePinning then begin
    CPUSet:=TPasMPInt64(1) shl fPasMPInstance.fAvailableCPUCores[fThreadIndex];
    sched_setaffinity(GetThreadID,SizeOf(CPUSet),@CPUSet);
   end;
-{$endif}
-{$endif}
+{$ifend}
+
  end;
 
 {$ifdef UseThreadLocalStorage}
-{$ifdef UseThreadLocalStorageX8632}
- TLSSetValue(CurrentJobWorkerThreadTLSIndex,self);
-{$else}
-{$ifdef UseThreadLocalStorageX8664}
+
+{$if defined(UseThreadLocalStorageX8632) or defined(UseThreadLocalStorageX8664)}
  TLSSetValue(CurrentJobWorkerThreadTLSIndex,self);
 {$else}
  CurrentJobWorkerThread:=self;
-{$endif}
-{$endif}
+{$ifend}
+
 {$else}
+
 {$if (defined(NEXTGEN) or not defined(Windows)) and not defined(FPC)}
  fThreadID:=TThread.CurrentThread.ThreadID;
 {$else}
@@ -12458,7 +12474,8 @@ constructor TPasMP.Create(const MaxThreads:TPasMPInt32;
                           const WorkerThreadPriority:TThreadPriority;
                           const WorkerThreadStackSize:TPasMPSizeUInt;
                           const WorkerThreadMaxDepth:TPasMPUInt32);
-var Index:TPasMPInt32;
+var Index,CPUCoreIndex:TPasMPInt32;
+    CPUAffinityMasks:TPasMPUInt64DynamicArray;
 begin
 
  inherited Create;
@@ -12544,14 +12561,35 @@ begin
  FillChar(fJobWorkerThreadHashTable,SizeOf(TPasMPJobWorkerThreadHashTable),#0);
 {$endif}
 
- for Index:=0 to fCountJobWorkerThreads-1 do begin
-  fJobWorkerThreads[Index]:=TPasMPJobWorkerThread.Create(self,Index);
- end;
- for Index:=0 to fCountJobWorkerThreads-1 do begin
-  fJobWorkerThreads[Index].fIsReadyEvent.WaitFor(INFINITE);
-  FreeAndNil(fJobWorkerThreads[Index].fIsReadyEvent);
- end;
- fSystemIsReadyEvent.SetEvent;
+ CPUAffinityMasks:=nil;
+ try
+
+  // Spread the worker threads over the available CPU cores for better cache locality
+  SetLength(CPUAffinityMasks,fCountJobWorkerThreads);
+  FillChar(CPUAffinityMasks[0],SizeOf(TPasMPUInt64)*fCountJobWorkerThreads,#0);
+  if length(fAvailableCPUCores)>0 then begin
+   CPUCoreIndex:=0;
+   for Index:=0 to fCountJobWorkerThreads-1 do begin
+    CPUAffinityMasks[Index]:=CPUAffinityMasks[Index] or (TPasMPUInt64(1) shl fAvailableCPUCores[CPUCoreIndex]);
+    inc(CPUCoreIndex);
+    if CPUCoreIndex>=length(fAvailableCPUCores) then begin
+     CPUCoreIndex:=0;
+    end;
+   end;
+  end;
+
+  for Index:=0 to fCountJobWorkerThreads-1 do begin
+    fJobWorkerThreads[Index]:=TPasMPJobWorkerThread.Create(self,Index,CPUAffinityMasks[Index]);
+  end;
+  for Index:=0 to fCountJobWorkerThreads-1 do begin
+    fJobWorkerThreads[Index].fIsReadyEvent.WaitFor(INFINITE);
+    FreeAndNil(fJobWorkerThreads[Index].fIsReadyEvent);
+  end;
+  fSystemIsReadyEvent.SetEvent;
+
+ finally
+  CPUAffinityMasks:=nil;
+ end; 
 
 end;
 
@@ -12649,7 +12687,7 @@ begin
  result:=GlobalPasMP;
 end;
 
-class function TPasMP.GetCountOfPhysicalCores(var AvailableCPUCores:TPasMPAvailableCPUCores):TPasMPInt32;
+class function TPasMP.GetCountOfPhysicalCores(out AvailableCPUCores:TPasMPAvailableCPUCores):TPasMPInt32;
 {$if defined(Windows)}
 var PhysicalCores,LogicalCores,i,j:TPasMPInt32;
     sinfo:SYSTEM_INFO;
@@ -12921,7 +12959,7 @@ begin
 end;
 {$ifend}
 
-class function TPasMP.GetCountOfHardwareThreads(var AvailableCPUCores:TPasMPAvailableCPUCores):TPasMPInt32;
+class function TPasMP.GetCountOfHardwareThreads(out AvailableCPUCores:TPasMPAvailableCPUCores):TPasMPInt32;
 {$if defined(Windows)}
 var PhysicalCores,LogicalCores,i,j:TPasMPInt32;
     sinfo:SYSTEM_INFO;
@@ -13253,14 +13291,13 @@ end;
 
 function TPasMP.GetJobWorkerThread:TPasMPJobWorkerThread; {$ifdef UseThreadLocalStorage}{$if defined(UseThreadLocalStorageX8632) or defined(UseThreadLocalStorageX8664)}assembler;{$ifend}{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
 {$ifdef UseThreadLocalStorage}
-{$ifdef UseThreadLocalStorageX8632}
+{$if defined(UseThreadLocalStorageX8632)}
 asm
  mov eax,dword ptr fs:[$00000018]
  mov ecx,dword ptr CurrentJobWorkerThreadTLSOffset
  mov eax,dword ptr [eax+ecx]
 end;
-{$else}
-{$ifdef UseThreadLocalStorageX8664}
+{$elseif defined(UseThreadLocalStorageX8664)}
 asm
  mov rax,qword ptr gs:[$00000058]
  mov ecx,dword ptr CurrentJobWorkerThreadTLSOffset
@@ -13270,8 +13307,7 @@ end;
 begin
  result:=CurrentJobWorkerThread;
 end;
-{$endif}
-{$endif}
+{$ifend}
 {$else}
 var ThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif};
     ThreadIDHash:TPasMPUInt32;
