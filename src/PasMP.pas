@@ -2399,8 +2399,8 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 var GlobalPasMP:TPasMP=nil; // "Optional" singleton-like global PasMP instance
 
     GlobalPasMPCountThreads:TPasMPInt32=-1;
-    GlobalPasMPMinimumThreads:TPasMPInt32=-1;
-    GlobalPasMPMaximalThreads:TPasMPInt32=-1;
+    GlobalPasMPMinimumCountThreads:TPasMPInt32=-1;
+    GlobalPasMPMaximumCountThreads:TPasMPInt32=-1;
     GlobalPasMPThreadHeadRoomForForeignTasks:TPasMPInt32=0;
     GlobalPasMPDoCPUCorePinning:boolean=true;
     GlobalPasMPSleepingOnIdle:boolean=true;
@@ -12674,8 +12674,8 @@ begin
   try
    if not assigned(GlobalPasMP) then begin
     GlobalPasMP:=TPasMP.Create(GlobalPasMPCountThreads,
-                               GlobalPasMPMinimumThreads,
-                               GlobalPasMPMaximalThreads,
+                               GlobalPasMPMinimumCountThreads,
+                               GlobalPasMPMaximumCountThreads,
                                GlobalPasMPThreadHeadRoomForForeignTasks,
                                GlobalPasMPDoCPUCorePinning,
                                GlobalPasMPSleepingOnIdle,
