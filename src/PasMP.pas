@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2024-10-31-21-45-0000                       *
+ *                        Version 2024-11-01-08-53-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2263,6 +2263,8 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 
      TPasMPOnWorkerThreadException=function(const aException:Exception):Boolean of object;
 
+     TPasMPOnCheckJobExecution=function(const aPasMPInstance:TPasMP;const aJob:PPasMPJob;const aJobWorkerThread:TPasMPJobWorkerThread):Boolean of object;
+
 {$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
      TPasMP=class
       private
@@ -2303,6 +2305,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fWorkerThreadStackSize:TPasMPSizeUInt;
        fWorkerThreadMaxDepth:TPasMPUInt32;
        fOnWorkerThreadException:TPasMPOnWorkerThreadException;
+       fOnCheckJobExecution:TPasMPOnCheckJobExecution;
        class function GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif}):TPasMPUInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        function GetJobWorkerThread:TPasMPJobWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
        procedure WaitForWakeUp;
@@ -2314,7 +2317,8 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function AllocateJob(const MethodCode,MethodData,Data:pointer;const ParentJob:PPasMPJob;const Flags,AreaMask:TPasMPUInt32):PPasMPJob; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure WaitOnChildrenJobs(const Job:PPasMPJob);
        procedure ExecuteJobTask(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread;const ThreadIndex:TPasMPInt32); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       procedure ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}{inline;}{$endif}{$endif}
+       function CheckJobExecution(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread):Boolean;
+       procedure ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); //{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure PushJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef HAS_ANONYMOUS_METHODS}
        procedure JobReferenceProcedureJobFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
@@ -2389,6 +2393,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        property Profiler:TPasMPProfiler read fProfiler;
        property SleepingOnIdle:longbool read fSleepingOnIdle write fSleepingOnIdle;
        property OnWorkerThreadException:TPasMPOnWorkerThreadException read fOnWorkerThreadException write fOnWorkerThreadException;
+       property OnCheckJobExecution:TPasMPOnCheckJobExecution read fOnCheckJobExecution write fOnCheckJobExecution;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -4549,7 +4554,7 @@ begin
 end;
 {$ifend}
 
-class procedure TPasMP.Yield; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+class procedure TPasMP.Yield;
 {$if defined(Windows)}
 begin
  SwitchToThread;
@@ -6445,7 +6450,7 @@ begin
  inherited Destroy;
 end;
 
-function TPasMPConditionVariable.Wait(const Lock:TPasMPConditionVariableLock;const dwMilliSeconds:TPasMPUInt32=INFINITE):TWaitResult; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+function TPasMPConditionVariable.Wait(const Lock:TPasMPConditionVariableLock;const dwMilliSeconds:TPasMPUInt32=INFINITE):TWaitResult; 
 {$if defined(Windows)}
 begin
  if SleepConditionVariableCS(@fConditionVariable,@Lock.fCriticalSection,dwMilliSeconds) then begin
@@ -6578,7 +6583,7 @@ begin
 end;
 {$ifend}
 
-procedure TPasMPConditionVariable.Signal; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPConditionVariable.Signal; 
 {$if defined(Windows)}
 begin
  WakeConditionVariable(@fConditionVariable);
@@ -6606,7 +6611,7 @@ begin
 end;
 {$ifend}
 
-procedure TPasMPConditionVariable.Broadcast; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPConditionVariable.Broadcast; 
 {$if defined(Windows)}
 begin
  WakeAllConditionVariable(@fConditionVariable);
@@ -6994,7 +6999,7 @@ begin
  inherited Destroy;
 end;
 
-procedure TPasMPMultipleReaderSingleWriterLock.AcquireRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMultipleReaderSingleWriterLock.AcquireRead; 
 {$if defined(Windows)}
 begin
  AcquireSRWLockShared(@fSRWLock);
@@ -7022,7 +7027,7 @@ begin
 end;
 {$ifend}
 
-function TPasMPMultipleReaderSingleWriterLock.TryAcquireRead:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+function TPasMPMultipleReaderSingleWriterLock.TryAcquireRead:boolean; 
 {$if defined(Windows)}
 begin
  result:=TryAcquireSRWLockShared(@fSRWLock);
@@ -7050,7 +7055,7 @@ begin
 end;
 {$ifend}
 
-procedure TPasMPMultipleReaderSingleWriterLock.ReleaseRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMultipleReaderSingleWriterLock.ReleaseRead; 
 {$if defined(Windows)}
 begin
  ReleaseSRWLockShared(@fSRWLock);
@@ -7077,7 +7082,7 @@ begin
 end;
 {$ifend}
 
-procedure TPasMPMultipleReaderSingleWriterLock.AcquireWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMultipleReaderSingleWriterLock.AcquireWrite; 
 {$if defined(Windows)}
 begin
  AcquireSRWLockExclusive(@fSRWLock);
@@ -7104,7 +7109,7 @@ begin
 end;
 {$ifend}
 
-function TPasMPMultipleReaderSingleWriterLock.TryAcquireWrite:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+function TPasMPMultipleReaderSingleWriterLock.TryAcquireWrite:boolean; 
 {$if defined(Windows)}
 begin
  result:=TryAcquireSRWLockExclusive(@fSRWLock);
@@ -7131,7 +7136,7 @@ begin
 end;
 {$ifend}
 
-procedure TPasMPMultipleReaderSingleWriterLock.ReleaseWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMultipleReaderSingleWriterLock.ReleaseWrite; 
 {$if defined(Windows)}
 begin
  ReleaseSRWLockExclusive(@fSRWLock);
@@ -7158,7 +7163,7 @@ begin
 end;
 {$ifend}
 
-procedure TPasMPMultipleReaderSingleWriterLock.ReadToWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMultipleReaderSingleWriterLock.ReadToWrite; 
 {$if defined(Windows)}
 begin
  ReleaseSRWLockShared(@fSRWLock);
@@ -7189,7 +7194,7 @@ begin
 end;
 {$ifend}
 
-procedure TPasMPMultipleReaderSingleWriterLock.WriteToRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMultipleReaderSingleWriterLock.WriteToRead; 
 {$if defined(Windows)}
 begin
  ReleaseSRWLockExclusive(@fSRWLock);
@@ -7252,7 +7257,7 @@ begin
  inherited Destroy;
 end;
 
-procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead; 
 var State:TPasMPInt32;
 begin
  repeat
@@ -7265,14 +7270,14 @@ begin
  until false;
 end;
 
-function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireRead:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireRead:boolean; 
 var State:TPasMPInt32;
 begin
  State:=fState and TPasMPInt32(TPasMPUInt32($fffffffe));
  result:=TPasMPInterlocked.CompareExchange(fState,State+2,State)=State;
 end;
 
-procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead; 
 begin
  TPasMPInterlocked.Sub(fState,2);
 end;
@@ -7293,19 +7298,19 @@ begin
  end;
 end;
 
-function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireWrite:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireWrite:boolean; 
 var State:TPasMPInt32;
 begin
  State:=fState and TPasMPInt32(TPasMPUInt32($fffffffe));
  result:=TPasMPInterlocked.CompareExchange(fState,1,State)=State;
 end;
 
-procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseWrite; 
 begin
  TPasMPInterlocked.Write(fState,0);
 end;
 
-procedure TPasMPMultipleReaderSingleWriterSpinLock.ReadToWrite; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMultipleReaderSingleWriterSpinLock.ReadToWrite; 
 var State:TPasMPInt32;
 begin
  TPasMPInterlocked.Sub(fState,2);
@@ -7322,7 +7327,7 @@ begin
  end;
 end;
 
-procedure TPasMPMultipleReaderSingleWriterSpinLock.WriteToRead; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPMultipleReaderSingleWriterSpinLock.WriteToRead; 
 begin
  TPasMPInterlocked.Write(fState,2);
 end;
@@ -7348,7 +7353,7 @@ begin
  ReleaseWrite;
 end;
 
-class procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(var LockState:TPasMPInt32); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(var LockState:TPasMPInt32); 
 var State:TPasMPInt32;
 begin
  repeat
@@ -7361,19 +7366,19 @@ begin
  until false;
 end;
 
-class function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireRead(var LockState:TPasMPInt32):boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+class function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireRead(var LockState:TPasMPInt32):boolean; 
 var State:TPasMPInt32;
 begin
  State:=LockState and TPasMPInt32(TPasMPUInt32($fffffffe));
  result:=TPasMPInterlocked.CompareExchange(LockState,State+2,State)=State;
 end;
 
-class procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(var LockState:TPasMPInt32); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(var LockState:TPasMPInt32); 
 begin
  TPasMPInterlocked.Sub(LockState,2);
 end;
 
-class procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireWrite(var LockState:TPasMPInt32); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireWrite(var LockState:TPasMPInt32); 
 var State:TPasMPInt32;
 begin
  repeat
@@ -7389,19 +7394,19 @@ begin
  end;
 end;
 
-class function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireWrite(var LockState:TPasMPInt32):boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+class function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireWrite(var LockState:TPasMPInt32):boolean; 
 var State:TPasMPInt32;
 begin
  State:=LockState and TPasMPInt32(TPasMPUInt32($fffffffe));
  result:=TPasMPInterlocked.CompareExchange(LockState,1,State)=State;
 end;
 
-class procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseWrite(var LockState:TPasMPInt32); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseWrite(var LockState:TPasMPInt32); 
 begin
  TPasMPInterlocked.Write(LockState,0);
 end;
 
-class procedure TPasMPMultipleReaderSingleWriterSpinLock.ReadToWrite(var LockState:TPasMPInt32); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.ReadToWrite(var LockState:TPasMPInt32); 
 var State:TPasMPInt32;
 begin
  TPasMPInterlocked.Sub(LockState,2);
@@ -7418,7 +7423,7 @@ begin
  end;
 end;
 
-class procedure TPasMPMultipleReaderSingleWriterSpinLock.WriteToRead(var LockState:TPasMPInt32); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.WriteToRead(var LockState:TPasMPInt32); 
 begin
  TPasMPInterlocked.Write(LockState,2);
 end;
@@ -7608,7 +7613,7 @@ asm
 @TryDone:
 end;
 {$endif}
-{$else}//{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$else}
 begin
  while TPasMPInterlocked.CompareExchange(fState,-1,0)<>0 do begin
   TPasMP.Yield;
@@ -7650,7 +7655,7 @@ asm
  @Failed:
 end;
 {$endif}
-{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$else}
 begin
  result:=TPasMPInterlocked.CompareExchange(fState,-1,0)=0;
 end;
@@ -7678,7 +7683,7 @@ asm
  mov dword ptr [rdi+TPasMPSpinLock.fState],0
 end;
 {$endif}
-{$else}//{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+{$else}
 begin
  TPasMPInterlocked.Exchange(fState,0);
 end;
@@ -7828,7 +7833,7 @@ begin
  inherited Destroy;
 end;
 
-function TPasMPBarrier.Wait:boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+function TPasMPBarrier.Wait:boolean; 
 {$if defined(PasMPPThreadBarrier)}
 begin
  result:=pthread_barrier_wait(@fBarrier)=PTHREAD_BARRIER_SERIAL_THREAD;
@@ -11472,7 +11477,7 @@ begin
  end;
 end;
 
-function TPasMPJobAllocator.AllocateJob:PPasMPJob; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+function TPasMPJobAllocator.AllocateJob:PPasMPJob; 
 var JobIndex,MemoryPoolBucketIndex:TPasMPInt32;
 begin
  result:=fFreeJobs.Pop;
@@ -11487,7 +11492,7 @@ begin
  end;
 end;
 
-procedure TPasMPJobAllocator.FreeJobs; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMPJobAllocator.FreeJobs; 
 begin
  fCountAllocatedJobs:=0;
  fFreeJobs.Clear;
@@ -12496,6 +12501,8 @@ begin
 
  fOnWorkerThreadException:=nil;
 
+ fOnCheckJobExecution:=nil;
+
  fAllWorkerThreadsHaveOwnSystemThreads:=AllWorkerThreadsHaveOwnSystemThreads;
 
  fWorkerThreadPriority:=WorkerThreadPriority;
@@ -12681,7 +12688,7 @@ begin
  end;
 end;
 
-class function TPasMP.GetGlobalInstance:TPasMP; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+class function TPasMP.GetGlobalInstance:TPasMP; 
 begin
  if not assigned(GlobalPasMP) then begin
   CreateGlobalInstance;
@@ -13219,7 +13226,7 @@ begin
 end;
 {$ifend}
 
-class function TPasMP.Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean; {$ifdef Linux}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
+class function TPasMP.Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean; 
 {$ifdef Linux}
 begin
  result:=pthread_once(@OnceControl,InitRoutine)=0;
@@ -13276,22 +13283,22 @@ begin
  end;
 end;
 
-function TPasMP.CreateScope:TPasMPScope; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+function TPasMP.CreateScope:TPasMPScope; 
 begin
  result:=TPasMPScope.Create(self);
 end;
 
-class function TPasMP.IsJobCompleted(const Job:PPasMPJob):boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+class function TPasMP.IsJobCompleted(const Job:PPasMPJob):boolean; 
 begin
  result:=assigned(Job) and ((Job^.InternalData and PasMPJobFlagActive)=0);
 end;
 
-class function TPasMP.IsJobValid(const Job:PPasMPJob):boolean; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+class function TPasMP.IsJobValid(const Job:PPasMPJob):boolean; 
 begin
  result:=assigned(Job) and ((Job^.InternalData and PasMPJobFlagActive)<>0);
 end;
 
-function TPasMP.GetJobWorkerThread:TPasMPJobWorkerThread; {$ifdef UseThreadLocalStorage}{$if defined(UseThreadLocalStorageX8632) or defined(UseThreadLocalStorageX8664)}assembler;{$ifend}{$else}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
+function TPasMP.GetJobWorkerThread:TPasMPJobWorkerThread; {$ifdef UseThreadLocalStorage}{$if defined(UseThreadLocalStorageX8632) or defined(UseThreadLocalStorageX8664)}assembler;{$ifend}{$endif}
 {$ifdef UseThreadLocalStorage}
 {$if defined(UseThreadLocalStorageX8632)}
 asm
@@ -13452,7 +13459,7 @@ begin
  end;
 end;
 
-function TPasMP.AllocateJob(const MethodCode,MethodData,Data:pointer;const ParentJob:PPasMPJob;const Flags,AreaMask:TPasMPUInt32):PPasMPJob; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+function TPasMP.AllocateJob(const MethodCode,MethodData,Data:pointer;const ParentJob:PPasMPJob;const Flags,AreaMask:TPasMPUInt32):PPasMPJob; 
 var JobWorkerThread:TPasMPJobWorkerThread;
     InternalData:TPasMPUInt32;
 begin
@@ -13532,7 +13539,7 @@ begin
  JobTask.fThreadIndex:=-1;
 end;
 
-procedure TPasMP.Release(const Job:PPasMPJob); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMP.Release(const Job:PPasMPJob); 
 begin
  if assigned(Job) then begin
   if (assigned(Job^.Method.Data) and not assigned(Job^.Method.Code)) and TPasMPJobTask(pointer(Job^.Method.Data)).fFreeOnRelease then begin
@@ -13554,7 +13561,7 @@ begin
  end;
 end;
 
-procedure TPasMP.ExecuteJobTask(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread;const ThreadIndex:TPasMPInt32); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMP.ExecuteJobTask(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread;const ThreadIndex:TPasMPInt32); 
 var JobTask,NewJobTask:TPasMPJobTask;
     NewJob:PPasMPJob;
 begin
@@ -13623,13 +13630,40 @@ begin
  end;
 end;
 
-procedure TPasMP.ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}{inline;}{$endif}{$endif}
+function TPasMP.CheckJobExecution(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread):Boolean;
+begin
+
+ if assigned(fOnCheckJobExecution) and not fOnCheckJobExecution(Self,Job,JobWorkerThread) then begin
+  result:=false;
+  exit;
+ end;
+
+ result:=true;
+
+end;
+
+procedure TPasMP.ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread);
 var LastJobPriority,OldAreaMask:TPasMPUInt32;
     ProfilerHistoryRingBufferItem:PPasMPProfilerHistoryRingBufferItem;
 begin
 
  if JobWorkerThread.HasJobs then begin
   WakeUpAll;
+ end;
+ 
+ // Check if the job is allowed to run now here
+ if not CheckJobExecution(Job,JobWorkerThread) then begin
+
+  // Job is not allowed to run alright now, so re-enqueue it for later
+
+  // Clear the requeue flag, if it was set, so we don't requeue it again and again
+  TPasMPInterlocked.BitwiseAnd(Job^.InternalData,PasMPJobFlagRequeueAndNotMask); 
+
+  // Requeue the job, so it will be executed later, but into the global job queue for better chances to be executed directly without re-enqueueing again
+  RunGlobal(Job);
+
+  exit;
+
  end;
 
  if assigned(fProfiler) then begin
@@ -13679,7 +13713,7 @@ begin
 
   TPasMPInterlocked.BitwiseAnd(Job^.InternalData,PasMPJobFlagRequeueAndNotMask);
 
-  Run(Job);
+  RunGlobal(Job);
 
  end else begin
 
@@ -13697,7 +13731,7 @@ begin
 
 end;
 
-procedure TPasMP.PushJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMP.PushJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); 
 var JobQueueIndex,PriorityJobQueueBitMask:TPasMPUInt32;
 begin
  JobQueueIndex:=PasMPJobQueuePriorityLast-(((Job^.InternalData and PasMPJobPriorityShiftedMask) shr PasMPJobPriorityShift)-(PasMPJobPriorityLow shr PasMPJobPriorityShift));
@@ -13728,7 +13762,7 @@ begin
  end;
 end;
 
-procedure TPasMP.Run(const Job:PPasMPJob); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMP.Run(const Job:PPasMPJob); 
 var JobWorkerThread:TPasMPJobWorkerThread;
 begin
  if assigned(Job) then begin
@@ -13753,7 +13787,7 @@ begin
  WakeUpAll;
 end;
 
-procedure TPasMP.RunGlobal(const Job:PPasMPJob); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMP.RunGlobal(const Job:PPasMPJob); 
 begin
  if assigned(Job) then begin
   PushJob(Job,nil);
@@ -13861,7 +13895,7 @@ begin
  end;
 end;
 
-procedure TPasMP.RunWait(const Job:PPasMPJob); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMP.RunWait(const Job:PPasMPJob); 
 begin
  if assigned(Job) then begin
   Run(Job);
@@ -13875,7 +13909,7 @@ begin
  Wait(Jobs);
 end;
 
-procedure TPasMP.WaitRelease(const Job:PPasMPJob); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMP.WaitRelease(const Job:PPasMPJob); 
 begin
  if assigned(Job) then begin
   Wait(Job);
@@ -13889,7 +13923,7 @@ begin
  Release(Jobs);
 end;
 
-procedure TPasMP.Invoke(const Job:PPasMPJob); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMP.Invoke(const Job:PPasMPJob); 
 begin
  if assigned(Job) then begin
   Run(Job);
@@ -13905,7 +13939,7 @@ begin
  Release(Jobs);
 end;
 
-procedure TPasMP.Invoke(const JobTask:TPasMPJobTask); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+procedure TPasMP.Invoke(const JobTask:TPasMPJobTask); 
 begin
  Invoke(Acquire(JobTask));
 end;
