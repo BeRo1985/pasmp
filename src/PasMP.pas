@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2024-11-01-08-53-0000                       *
+ *                        Version 2024-11-01-09-06-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2363,10 +2363,8 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function Acquire(const JobTask:TPasMPJobTask;const Data:pointer=nil;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0):PPasMPJob; overload;
        procedure Release(const Job:PPasMPJob); overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure Release(const Jobs:array of PPasMPJob); overload;
-       procedure Run(const Job:PPasMPJob); overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       procedure Run(const Jobs:array of PPasMPJob); overload;
-       procedure RunGlobal(const Job:PPasMPJob); overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
-       procedure RunGlobal(const Jobs:array of PPasMPJob); overload;
+       procedure Run(const Job:PPasMPJob;const GlobalQueue:Boolean=false); overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       procedure Run(const Jobs:array of PPasMPJob;const GlobalQueue:Boolean=false); overload;
        function StealAndExecuteJob:boolean;
        procedure Wait(const Job:PPasMPJob); overload;
        procedure Wait(const Jobs:array of PPasMPJob); overload;
@@ -13660,7 +13658,7 @@ begin
   TPasMPInterlocked.BitwiseAnd(Job^.InternalData,PasMPJobFlagRequeueAndNotMask); 
 
   // Requeue the job, so it will be executed later, but into the global job queue for better chances to be executed directly without re-enqueueing again
-  RunGlobal(Job);
+  Run(Job,true);
 
   exit;
 
@@ -13713,7 +13711,7 @@ begin
 
   TPasMPInterlocked.BitwiseAnd(Job^.InternalData,PasMPJobFlagRequeueAndNotMask);
 
-  RunGlobal(Job);
+  Run(Job,true);
 
  end else begin
 
@@ -13762,47 +13760,34 @@ begin
  end;
 end;
 
-procedure TPasMP.Run(const Job:PPasMPJob); 
+procedure TPasMP.Run(const Job:PPasMPJob;const GlobalQueue:Boolean);
 var JobWorkerThread:TPasMPJobWorkerThread;
 begin
  if assigned(Job) then begin
-  JobWorkerThread:=GetJobWorkerThread;
+  if GlobalQueue then begin
+   JobWorkerThread:=nil;
+  end else begin
+   JobWorkerThread:=GetJobWorkerThread;
+  end;
   PushJob(Job,JobWorkerThread);
   WakeUpAll;
  end;
 end;
 
-procedure TPasMP.Run(const Jobs:array of PPasMPJob);
+procedure TPasMP.Run(const Jobs:array of PPasMPJob;const GlobalQueue:Boolean);
 var JobWorkerThread:TPasMPJobWorkerThread;
     JobIndex:TPasMPInt32;
     Job:PPasMPJob;
 begin
- JobWorkerThread:=GetJobWorkerThread;
+ if GlobalQueue then begin
+  JobWorkerThread:=nil;
+ end else begin
+  JobWorkerThread:=GetJobWorkerThread;
+ end;
  for JobIndex:=0 to length(Jobs)-1 do begin
   Job:=Jobs[JobIndex];
   if assigned(Job) then begin
    PushJob(Job,JobWorkerThread);
-  end;
- end;
- WakeUpAll;
-end;
-
-procedure TPasMP.RunGlobal(const Job:PPasMPJob); 
-begin
- if assigned(Job) then begin
-  PushJob(Job,nil);
-  WakeUpAll;
- end;
-end;
-
-procedure TPasMP.RunGlobal(const Jobs:array of PPasMPJob);
-var JobIndex:TPasMPInt32;
-    Job:PPasMPJob;
-begin
- for JobIndex:=0 to length(Jobs)-1 do begin
-  Job:=Jobs[JobIndex];
-  if assigned(Job) then begin
-   PushJob(Job,nil);
   end;
  end;
  WakeUpAll;
