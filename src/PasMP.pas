@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2024-11-01-09-06-0000                       *
+ *                        Version 2024-11-01-11-01-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2289,6 +2289,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$else}
        fWakeUpEvent:TPasMPEvent;
 {$endif}
+       fCountCPUThreads:TPasMPInt32;
        fCriticalSection:TPasMPCriticalSection;
        fJobAllocatorCriticalSection:TPasMPCriticalSection;
        fJobAllocator:TPasMPJobAllocator;
@@ -2336,7 +2337,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure ParallelIndirectMergeSortJobFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
        procedure ParallelIndirectMergeSortRootJobFunction(const Job:PPasMPJob;const ThreadIndex:TPasMPInt32);
       public
-       constructor Create(const MaxThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const AllWorkerThreadsHaveOwnSystemThreads:boolean=false;const Profiling:boolean=false;const WorkerThreadPriority:TThreadPriority=TThreadPriority.tpNormal;const WorkerThreadStackSize:TPasMPSizeUInt=0;const WorkerThreadMaxDepth:TPasMPUInt32=0);
+       constructor Create(const CountThreads:TPasMPInt32=-1;const MinimumCountThreads:TPasMPInt32=-1;const MaximumCountThreads:TPasMPInt32=-1;const ThreadHeadRoomForForeignTasks:TPasMPInt32=0;const DoCPUCorePinning:boolean=true;const SleepingOnIdle:boolean=true;const AllWorkerThreadsHaveOwnSystemThreads:boolean=false;const Profiling:boolean=false;const WorkerThreadPriority:TThreadPriority=TThreadPriority.tpNormal;const WorkerThreadStackSize:TPasMPSizeUInt=0;const WorkerThreadMaxDepth:TPasMPUInt32=0);
        destructor Destroy; override;
        class function CreateGlobalInstance:TPasMP;
        class procedure DestroyGlobalInstance;
@@ -2397,6 +2398,8 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 
 var GlobalPasMP:TPasMP=nil; // "Optional" singleton-like global PasMP instance
 
+    GlobalPasMPCountThreads:TPasMPInt32=-1;
+    GlobalPasMPMinimumThreads:TPasMPInt32=-1;
     GlobalPasMPMaximalThreads:TPasMPInt32=-1;
     GlobalPasMPThreadHeadRoomForForeignTasks:TPasMPInt32=0;
     GlobalPasMPDoCPUCorePinning:boolean=true;
@@ -12470,7 +12473,9 @@ begin
  result:=@fHistory[TPasMPUInt32(TPasMPInterlocked.Increment(TPasMPInt32(fCount))-1) and PasMPProfilerHistoryRingBufferSizeMask];
 end;
 
-constructor TPasMP.Create(const MaxThreads:TPasMPInt32;
+constructor TPasMP.Create(const CountThreads:TPasMPInt32;
+                          const MinimumCountThreads:TPasMPInt32;
+                          const MaximumCountThreads:TPasMPInt32;
                           const ThreadHeadRoomForForeignTasks:TPasMPInt32;
                           const DoCPUCorePinning:boolean;
                           const SleepingOnIdle:boolean;
@@ -12516,16 +12521,26 @@ begin
  end;
 
 {$ifdef PasMPUseGlobalPasMPCountOfHardwareThreads}
- fCountJobWorkerThreads:=GlobalPasMPCountOfHardwareThreads-ThreadHeadRoomForForeignTasks;
+ fCountCPUThreads:=GlobalPasMPCountOfHardwareThreads;
  fAvailableCPUCores:=GlobalPasMPAvailableCPUCores;
 {$else}
- fCountJobWorkerThreads:=TPasMP.GetCountOfHardwareThreads(fAvailableCPUCores)-ThreadHeadRoomForForeignTasks;
+ fCountCPUThreads:=TPasMP.GetCountOfHardwareThreads(fAvailableCPUCores);
 {$endif}
+
+ if CountThreads>0 then begin
+  fCountJobWorkerThreads:=CountThreads;
+ end else begin
+  fCountJobWorkerThreads:=fCountCPUThreads-ThreadHeadRoomForForeignTasks;
+ end;
+
  if fCountJobWorkerThreads<1 then begin
   fCountJobWorkerThreads:=1;
  end;
- if (MaxThreads>0) and (fCountJobWorkerThreads>MaxThreads) then begin
-  fCountJobWorkerThreads:=MaxThreads;
+ if (MinimumCountThreads>0) and (fCountJobWorkerThreads<MinimumCountThreads) then begin
+  fCountJobWorkerThreads:=MinimumCountThreads;
+ end;
+ if (MaximumCountThreads>0) and (fCountJobWorkerThreads>MaximumCountThreads) then begin
+  fCountJobWorkerThreads:=MaximumCountThreads;
  end;
  if fCountJobWorkerThreads>=TPasMPInt32(PasMPJobThreadIndexSize) then begin
   fCountJobWorkerThreads:=TPasMPInt32(PasMPJobThreadIndexSize-1);
@@ -12658,7 +12673,9 @@ begin
   GlobalPasMPCriticalSection.Acquire;
   try
    if not assigned(GlobalPasMP) then begin
-    GlobalPasMP:=TPasMP.Create(GlobalPasMPMaximalThreads,
+    GlobalPasMP:=TPasMP.Create(GlobalPasMPCountThreads,
+                               GlobalPasMPMinimumThreads,
+                               GlobalPasMPMaximalThreads,
                                GlobalPasMPThreadHeadRoomForForeignTasks,
                                GlobalPasMPDoCPUCorePinning,
                                GlobalPasMPSleepingOnIdle,
