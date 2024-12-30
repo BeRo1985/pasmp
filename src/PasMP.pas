@@ -10766,7 +10766,7 @@ var OldHead,SlotTurn,DesiredTurn:TPasMPSizeUIntEx;
 begin
 
  // Atomically increment fHead by 1 (fetch-and-add).
- OldHead:=TPasMPInterlocked.Increment(fHead);
+ OldHead:=TPasMPInterlocked.Increment({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(fHead));
  Slot:=@fSlots[Idx(OldHead)];
 
  // Wait for the consumer to finish the previous round if needed
@@ -10777,7 +10777,7 @@ begin
 {$else}
   TPasMPMemoryBarrier.Read;
 {$ifend}
-  SlotTurn:=Slot^.fTurn; // SlotTurn:=TPasMPInterlocked.Read(Slot^.fTurn);
+  SlotTurn:=Slot^.fTurn; // SlotTurn:=TPasMPInterlocked.Read({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(Slot^.fTurn));
  until SlotTurn=DesiredTurn;
 
  // Construct the item
@@ -10813,16 +10813,16 @@ begin
 {$else}
   TPasMPMemoryBarrier.Read;
 {$ifend}
-  SlotTurn:=Slot^.fTurn; // SlotTurn:=TPasMPInterlocked.Read(Slot^.fTurn);
+  SlotTurn:=Slot^.fTurn; // SlotTurn:=TPasMPInterlocked.Read({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(Slot^.fTurn));
 
   // If the slot is indeed ready to store
   if SlotTurn=DesiredTurn then begin
    // Attempt to claim by CAS the head
-   if TPasMPInterlocked.CompareExchange(fHead,HeadSnapshot+1,HeadSnapshot)=HeadSnapshot then begin
+   if TPasMPInterlocked.CompareExchange({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(fHead),{$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(HeadSnapshot+1),{$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(HeadSnapshot))={$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(HeadSnapshot) then begin
     // We succeeded, now place the item
     Slot^.fData:=aValue;
     TPasMPMemoryBarrier.Write;
-    Slot^.fTurn:=DesiredTurn+1; // TPasMPInterlocked.Write(Slot^.fTurn,DesiredTurn+1);
+    Slot^.fTurn:=DesiredTurn+1; // TPasMPInterlocked.Write({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(Slot^.fTurn),{$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(DesiredTurn+1));
     result:=true;
    end else begin
     // If CAS failed, someone else advanced head, so re-read and try again
@@ -10831,7 +10831,7 @@ begin
 {$else}
     TPasMPMemoryBarrier.Read;
 {$ifend}
-    HeadSnapshot:=FHead; // HeadSnapshot:=TPasMPInterlocked.Read(FHead);
+    HeadSnapshot:=fHead; // HeadSnapshot:=TPasMPInterlocked.Read({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(fHead));
    end;
   end else begin
    // The slot is not ready -> queue is full or behind. Re-read head to see if it changed; if not, just fail
@@ -10841,7 +10841,7 @@ begin
 {$else}
    TPasMPMemoryBarrier.Read;
 {$ifend}
-   HeadSnapshot:=fHead; // HeadSnapshot:=TPasMPInterlocked.Read(FHead);
+   HeadSnapshot:=fHead; // HeadSnapshot:=TPasMPInterlocked.Read({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(fHead));
    if HeadSnapshot=PreviousHeadSnapshot then begin
     result:=false;
     exit;
@@ -10858,7 +10858,7 @@ var OldTail,SlotTurn,DesiredTurn:TPasMPSizeUIntEx;
 begin
 
 // Atomically increment FTail
- OldTail:=TPasMPInterlocked.Increment(fTail);
+ OldTail:=TPasMPInterlocked.Increment({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(fTail));
  Slot:=@fSlots[Idx(OldTail)];
 
  // We expect the slot turn to be: turn(OldTail)*2 + 1
@@ -10870,7 +10870,7 @@ begin
 {$else}
   TPasMPMemoryBarrier.Read;
 {$ifend}
-  SlotTurn:=Slot^.fTurn; // SlotTurn:=TPasMPInterlocked.Read(Slot^.Turn);
+  SlotTurn:=Slot^.fTurn; // SlotTurn:=TPasMPInterlocked.Read({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(Slot^.fTurn));
  until SlotTurn=DesiredTurn;
 
  // Acquire barrier
@@ -10879,7 +10879,7 @@ begin
  Finalize(Slot^.fData);
 
  // Mark slot free => DesiredTurn + 1
-//TPasMPInterlocked.Write(Slot^.Turn,DesiredTurn+1);
+//TPasMPInterlocked.Write({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(Slot^.fTurn),{$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(DesiredTurn+1));
  TPasMPMemoryBarrier.Write;
  Slot^.fTurn:=DesiredTurn+1;
 
@@ -10898,7 +10898,7 @@ begin
 {$else}
  TPasMPMemoryBarrier.Read;
 {$ifend}
- TailSnapshot:=fTail; //TailSnapshot:=TPasMPInterlocked.Read(fTail);
+ TailSnapshot:=fTail; //TailSnapshot:=TPasMPInterlocked.Read({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(fTail));
  TPasMPMemoryBarrier.ReadDependency;
 
  while true do begin
@@ -10915,11 +10915,11 @@ begin
 
   if SlotTurn=DesiredTurn then begin
    // Attempt to claim the slot by CAS
-   if TPasMPInterlocked.CompareExchange(fTail,TailSnapshot+1,TailSnapshot)=TailSnapshot then begin
+   if TPasMPInterlocked.CompareExchange({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(fTail),{$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(TailSnapshot+1),{$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(TailSnapshot))={$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(TailSnapshot) then begin
     TPasMPMemoryBarrier.Read;
     aValue:=Slot^.fData;
     Finalize(Slot^.fData);
-    Slot^.fTurn:=DesiredTurn+1; //TPasMPInterlocked.Write(Slot^.fTurn,DesiredTurn+1);
+    Slot^.fTurn:=DesiredTurn+1; //TPasMPInterlocked.Write({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(Slot^.fTurn),{$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(DesiredTurn+1));
 {$if not (defined(CPU386) or defined(CPUx86_64))}
     TPasMPMemoryBarrier.Write;
 {$ifend}
@@ -10943,8 +10943,8 @@ begin
 {$else}
    TPasMPMemoryBarrier.Read;
 {$ifend}
-   TailSnapshot:=fTail; // TPasMPInterlocked.Read(fTail);
-   if TailSnapshot=PreviousTailSnapshot {TPasMPInterlocked.Read(fTail)=TailSnapshot} then begin
+   TailSnapshot:=fTail; // TailSnapshot:=TPasMPInterlocked.Read({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(fTail));
+   if TailSnapshot=PreviousTailSnapshot then begin
     result:=false;
     exit;
    end else begin
