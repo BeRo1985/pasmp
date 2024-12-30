@@ -4,7 +4,7 @@
  *                        Version 2024-12-30-13-54-0000                       *
  ******************************************************************************
  *                                zlib license                                *
- *============================================================================* 
+ *============================================================================*
  *                                                                            *
  * Copyright (C) 2016-2024, Benjamin Rosseaux (benjamin@rosseaux.de)          *
  *                                                                            *
@@ -10734,10 +10734,9 @@ begin
  fSlots:=nil;
  SetLength(fSlots,fCapacity+1);
 
- for Index:=0 to fCapacity-1 do begin
-  fSlots[Index].fTurn:=Index;
+ for Index:=0 to fCapacity do begin
+  fSlots[Index].fTurn:=0;
  end;
- fSlots[fCapacity].fTurn:=0;
 
  fHead:=0;
  fTail:=0;
@@ -10766,7 +10765,7 @@ var OldHead,SlotTurn,DesiredTurn:TPasMPSizeUIntEx;
 begin
 
  // Atomically increment fHead by 1 (fetch-and-add).
- OldHead:=TPasMPInterlocked.Increment({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(fHead));
+ OldHead:=TPasMPInterlocked.Add({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(fHead),{$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(1));
  Slot:=@fSlots[Idx(OldHead)];
 
  // Wait for the consumer to finish the previous round if needed
@@ -10858,7 +10857,7 @@ var OldTail,SlotTurn,DesiredTurn:TPasMPSizeUIntEx;
 begin
 
 // Atomically increment FTail
- OldTail:=TPasMPInterlocked.Increment({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(fTail));
+ OldTail:=TPasMPInterlocked.Add({$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(fTail),{$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif}(1));
  Slot:=@fSlots[Idx(OldTail)];
 
  // We expect the slot turn to be: turn(OldTail)*2 + 1
@@ -10936,7 +10935,7 @@ begin
     TPasMPMemoryBarrier.ReadDependency;
    end;
   end else begin
-   // Slot doesn't hold a valid item; if FTail hasn't changed, queue is empty
+   // Slot doesn't hold a valid item; if fTail hasn't changed, queue is empty
    PreviousTailSnapshot:=TailSnapshot;
 {$if defined(CPU386) or defined(CPUx86_64)}
    TPasMPMemoryBarrier.ReadDependency;
