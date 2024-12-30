@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2024-12-30-13-54-0000                       *
+ *                        Version 2024-12-30-14-59-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -1871,7 +1871,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        destructor Destroy; override;
        procedure Enqueue(const aValue:T);
        function TryEnqueue(const aValue:T):Boolean;
-       function Dequeue(out AValue:T):Boolean;
+       procedure Dequeue(out AValue:T);
        function TryDequeue(out AValue:T):Boolean;
        function Size:TPasMPSizeUIntEx;
        function Empty:Boolean; inline;
@@ -10786,12 +10786,14 @@ begin
  // memory_order_release -> we do a memory barrier or store
  TPasMPMemoryBarrier.Write;  // or TPasMPMemoryBarrier.ReadWrite;
  Slot^.fTurn:=DesiredTurn+1; //TPasMPInterlocked.Write(Slot^.fTurn,DesiredTurn+1);
+
 end;
 
 function TPasMPMultipleProducerMultipleConsumerQueue<T>.TryEnqueue(const aValue:T):Boolean;
 var HeadSnapshot,SlotTurn,DesiredTurn,PreviousHeadSnapshot:TPasMPSizeUIntEx;
     Slot:PSlot;
 begin
+
  result:=false;
 
  // Read the local head
@@ -10849,9 +10851,10 @@ begin
    end;
   end;
  end;
+
 end;
 
-function TPasMPMultipleProducerMultipleConsumerQueue<T>.Dequeue(out aValue:T):Boolean;
+procedure TPasMPMultipleProducerMultipleConsumerQueue<T>.Dequeue(out aValue:T);
 var OldTail,SlotTurn,DesiredTurn:TPasMPSizeUIntEx;
     Slot:PSlot;
 begin
@@ -10882,7 +10885,6 @@ begin
  TPasMPMemoryBarrier.Write;
  Slot^.fTurn:=DesiredTurn+1;
 
- result:=True;
 end;
 
 function TPasMPMultipleProducerMultipleConsumerQueue<T>.TryDequeue(out AValue:T):Boolean;
@@ -10951,6 +10953,7 @@ begin
    end;
   end;
  end;
+
 end;
 
 function TPasMPMultipleProducerMultipleConsumerQueue<T>.Size:TPasMPSizeUIntEx;
