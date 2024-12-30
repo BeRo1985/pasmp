@@ -1,10 +1,10 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2024-11-01-11-01-0000                       *
+ *                        Version 2024-12-30-13-36-0000                       *
  ******************************************************************************
  *                                zlib license                                *
- *============================================================================*
+ *============================================================================* 
  *                                                                            *
  * Copyright (C) 2016-2024, Benjamin Rosseaux (benjamin@rosseaux.de)          *
  *                                                                            *
@@ -1835,6 +1835,40 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        destructor Destroy; override;
        procedure Enqueue(const Item:T); reintroduce;
        function Dequeue(out Item:T):boolean; reintroduce;
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+{$endif}
+
+{$ifdef HAS_GENERICS}
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPMultipleProducerMultipleConsumerQueue<T>=class
+      public
+       type TSlot=record
+             public
+              fTurn:TPasMPSizeUInt;
+              fPadding1:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSizeUInt))-1] of TPasMPUInt8;
+              fData:T;
+            end;
+            PSlot=^TSlot;
+            TSlotDynamicArray=array of TSlot;
+      private
+       fCapacity:TPasMPSizeUInt;
+       fSlots:TSlotDynamicArray;
+       fHead:TPasMPSizeUInt;
+       fPaddingHead:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSizeUInt))-1] of TPasMPUInt8;
+       fTail:TPasMPSizeInt;
+       fPaddingTail:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSizeUInt))-1] of TPasMPUInt8;
+       function Idx(const aX:TPasMPSizeUInt):TPasMPSizeUInt; inline;
+       function TurnOf(const aX:TPasMPSizeUInt):TPasMPSizeUInt; inline;
+      public
+       constructor Create(const aCapacity:TPasMPSizeInt);
+       destructor Destroy; override;
+       procedure Enqueue(const aValue:T);
+       function TryEnqueue(const aValue:T):Boolean;
+       function Dequeue(out AValue:T):Boolean;
+       function TryDequeue(out AValue:T):Boolean;
+       function Size:TPasMPSizeUInt;
+       function Empty:Boolean; inline;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 {$endif}
@@ -6451,7 +6485,7 @@ begin
  inherited Destroy;
 end;
 
-function TPasMPConditionVariable.Wait(const Lock:TPasMPConditionVariableLock;const dwMilliSeconds:TPasMPUInt32=INFINITE):TWaitResult; 
+function TPasMPConditionVariable.Wait(const Lock:TPasMPConditionVariableLock;const dwMilliSeconds:TPasMPUInt32=INFINITE):TWaitResult;
 {$if defined(Windows)}
 begin
  if SleepConditionVariableCS(@fConditionVariable,@Lock.fCriticalSection,dwMilliSeconds) then begin
@@ -6584,7 +6618,7 @@ begin
 end;
 {$ifend}
 
-procedure TPasMPConditionVariable.Signal; 
+procedure TPasMPConditionVariable.Signal;
 {$if defined(Windows)}
 begin
  WakeConditionVariable(@fConditionVariable);
@@ -6612,7 +6646,7 @@ begin
 end;
 {$ifend}
 
-procedure TPasMPConditionVariable.Broadcast; 
+procedure TPasMPConditionVariable.Broadcast;
 {$if defined(Windows)}
 begin
  WakeAllConditionVariable(@fConditionVariable);
@@ -7000,7 +7034,7 @@ begin
  inherited Destroy;
 end;
 
-procedure TPasMPMultipleReaderSingleWriterLock.AcquireRead; 
+procedure TPasMPMultipleReaderSingleWriterLock.AcquireRead;
 {$if defined(Windows)}
 begin
  AcquireSRWLockShared(@fSRWLock);
@@ -7028,7 +7062,7 @@ begin
 end;
 {$ifend}
 
-function TPasMPMultipleReaderSingleWriterLock.TryAcquireRead:boolean; 
+function TPasMPMultipleReaderSingleWriterLock.TryAcquireRead:boolean;
 {$if defined(Windows)}
 begin
  result:=TryAcquireSRWLockShared(@fSRWLock);
@@ -7056,7 +7090,7 @@ begin
 end;
 {$ifend}
 
-procedure TPasMPMultipleReaderSingleWriterLock.ReleaseRead; 
+procedure TPasMPMultipleReaderSingleWriterLock.ReleaseRead;
 {$if defined(Windows)}
 begin
  ReleaseSRWLockShared(@fSRWLock);
@@ -7083,7 +7117,7 @@ begin
 end;
 {$ifend}
 
-procedure TPasMPMultipleReaderSingleWriterLock.AcquireWrite; 
+procedure TPasMPMultipleReaderSingleWriterLock.AcquireWrite;
 {$if defined(Windows)}
 begin
  AcquireSRWLockExclusive(@fSRWLock);
@@ -7110,7 +7144,7 @@ begin
 end;
 {$ifend}
 
-function TPasMPMultipleReaderSingleWriterLock.TryAcquireWrite:boolean; 
+function TPasMPMultipleReaderSingleWriterLock.TryAcquireWrite:boolean;
 {$if defined(Windows)}
 begin
  result:=TryAcquireSRWLockExclusive(@fSRWLock);
@@ -7137,7 +7171,7 @@ begin
 end;
 {$ifend}
 
-procedure TPasMPMultipleReaderSingleWriterLock.ReleaseWrite; 
+procedure TPasMPMultipleReaderSingleWriterLock.ReleaseWrite;
 {$if defined(Windows)}
 begin
  ReleaseSRWLockExclusive(@fSRWLock);
@@ -7164,7 +7198,7 @@ begin
 end;
 {$ifend}
 
-procedure TPasMPMultipleReaderSingleWriterLock.ReadToWrite; 
+procedure TPasMPMultipleReaderSingleWriterLock.ReadToWrite;
 {$if defined(Windows)}
 begin
  ReleaseSRWLockShared(@fSRWLock);
@@ -7195,7 +7229,7 @@ begin
 end;
 {$ifend}
 
-procedure TPasMPMultipleReaderSingleWriterLock.WriteToRead; 
+procedure TPasMPMultipleReaderSingleWriterLock.WriteToRead;
 {$if defined(Windows)}
 begin
  ReleaseSRWLockExclusive(@fSRWLock);
@@ -7258,7 +7292,7 @@ begin
  inherited Destroy;
 end;
 
-procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead; 
+procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead;
 var State:TPasMPInt32;
 begin
  repeat
@@ -7271,14 +7305,14 @@ begin
  until false;
 end;
 
-function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireRead:boolean; 
+function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireRead:boolean;
 var State:TPasMPInt32;
 begin
  State:=fState and TPasMPInt32(TPasMPUInt32($fffffffe));
  result:=TPasMPInterlocked.CompareExchange(fState,State+2,State)=State;
 end;
 
-procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead; 
+procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead;
 begin
  TPasMPInterlocked.Sub(fState,2);
 end;
@@ -7299,19 +7333,19 @@ begin
  end;
 end;
 
-function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireWrite:boolean; 
+function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireWrite:boolean;
 var State:TPasMPInt32;
 begin
  State:=fState and TPasMPInt32(TPasMPUInt32($fffffffe));
  result:=TPasMPInterlocked.CompareExchange(fState,1,State)=State;
 end;
 
-procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseWrite; 
+procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseWrite;
 begin
  TPasMPInterlocked.Write(fState,0);
 end;
 
-procedure TPasMPMultipleReaderSingleWriterSpinLock.ReadToWrite; 
+procedure TPasMPMultipleReaderSingleWriterSpinLock.ReadToWrite;
 var State:TPasMPInt32;
 begin
  TPasMPInterlocked.Sub(fState,2);
@@ -7328,7 +7362,7 @@ begin
  end;
 end;
 
-procedure TPasMPMultipleReaderSingleWriterSpinLock.WriteToRead; 
+procedure TPasMPMultipleReaderSingleWriterSpinLock.WriteToRead;
 begin
  TPasMPInterlocked.Write(fState,2);
 end;
@@ -7354,7 +7388,7 @@ begin
  ReleaseWrite;
 end;
 
-class procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(var LockState:TPasMPInt32); 
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireRead(var LockState:TPasMPInt32);
 var State:TPasMPInt32;
 begin
  repeat
@@ -7367,19 +7401,19 @@ begin
  until false;
 end;
 
-class function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireRead(var LockState:TPasMPInt32):boolean; 
+class function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireRead(var LockState:TPasMPInt32):boolean;
 var State:TPasMPInt32;
 begin
  State:=LockState and TPasMPInt32(TPasMPUInt32($fffffffe));
  result:=TPasMPInterlocked.CompareExchange(LockState,State+2,State)=State;
 end;
 
-class procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(var LockState:TPasMPInt32); 
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseRead(var LockState:TPasMPInt32);
 begin
  TPasMPInterlocked.Sub(LockState,2);
 end;
 
-class procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireWrite(var LockState:TPasMPInt32); 
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.AcquireWrite(var LockState:TPasMPInt32);
 var State:TPasMPInt32;
 begin
  repeat
@@ -7395,19 +7429,19 @@ begin
  end;
 end;
 
-class function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireWrite(var LockState:TPasMPInt32):boolean; 
+class function TPasMPMultipleReaderSingleWriterSpinLock.TryAcquireWrite(var LockState:TPasMPInt32):boolean;
 var State:TPasMPInt32;
 begin
  State:=LockState and TPasMPInt32(TPasMPUInt32($fffffffe));
  result:=TPasMPInterlocked.CompareExchange(LockState,1,State)=State;
 end;
 
-class procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseWrite(var LockState:TPasMPInt32); 
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.ReleaseWrite(var LockState:TPasMPInt32);
 begin
  TPasMPInterlocked.Write(LockState,0);
 end;
 
-class procedure TPasMPMultipleReaderSingleWriterSpinLock.ReadToWrite(var LockState:TPasMPInt32); 
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.ReadToWrite(var LockState:TPasMPInt32);
 var State:TPasMPInt32;
 begin
  TPasMPInterlocked.Sub(LockState,2);
@@ -7424,7 +7458,7 @@ begin
  end;
 end;
 
-class procedure TPasMPMultipleReaderSingleWriterSpinLock.WriteToRead(var LockState:TPasMPInt32); 
+class procedure TPasMPMultipleReaderSingleWriterSpinLock.WriteToRead(var LockState:TPasMPInt32);
 begin
  TPasMPInterlocked.Write(LockState,2);
 end;
@@ -7834,7 +7868,7 @@ begin
  inherited Destroy;
 end;
 
-function TPasMPBarrier.Wait:boolean; 
+function TPasMPBarrier.Wait:boolean;
 {$if defined(PasMPPThreadBarrier)}
 begin
  result:=pthread_barrier_wait(@fBarrier)=PTHREAD_BARRIER_SERIAL_THREAD;
@@ -10678,6 +10712,262 @@ begin
 end;
 {$endif}
 
+{$ifdef HAS_GENERICS}
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+constructor TPasMPMultipleProducerMultipleConsumerQueue<T>.Create(const aCapacity:TPasMPSizeInt);
+var Index:TPasMPSizeInt;
+begin
+ inherited Create;
+
+ if aCapacity<1 then begin
+  raise Exception.Create('Capacity < 1 is invalid');
+ end;
+
+ fCapacity:=aCapacity;
+
+ fSlots:=nil;
+ SetLength(fSlots,fCapacity+1);
+
+ for Index:=0 to fCapacity-1 do begin
+  fSlots[Index].fTurn:=Index;
+ end;
+ fSlots[fCapacity].fTurn:=0;
+
+ fHead:=0;
+ fTail:=0;
+
+end;
+
+destructor TPasMPMultipleProducerMultipleConsumerQueue<T>.Destroy;
+begin
+ fSlots:=nil;
+ inherited Destroy;
+end;
+
+function TPasMPMultipleProducerMultipleConsumerQueue<T>.Idx(const aX:TPasMPSizeUInt):TPasMPSizeUInt;
+begin
+ result:=aX mod fCapacity;
+end;
+
+function TPasMPMultipleProducerMultipleConsumerQueue<T>.TurnOf(const aX:TPasMPSizeUInt):TPasMPSizeUInt;
+begin
+ result:=aX div fCapacity;
+end;
+
+procedure TPasMPMultipleProducerMultipleConsumerQueue<T>.Enqueue(const aValue:T);
+var OldHead,SlotTurn,DesiredTurn:TPasMPSizeUInt;
+    Slot:PSlot;
+begin
+
+ // Atomically increment fHead by 1 (fetch-and-add).
+ OldHead:=TPasMPInterlocked.Increment(FHead);
+ Slot:=@fSlots[Idx(OldHead)];
+
+ // Wait for the consumer to finish the previous round if needed
+ DesiredTurn:=TurnOf(OldHead) shl 1;
+ repeat
+{$if defined(CPU386) or defined(CPUx86_64)}
+  TPasMPMemoryBarrier.ReadDependency;
+{$else}
+  TPasMPMemoryBarrier.Read;
+{$ifend}
+  SlotTurn:=Slot^.fTurn; // SlotTurn:=TPasMPInterlocked.Read(Slot^.fTurn);
+ until SlotTurn=DesiredTurn;
+
+ // Construct the item
+ Slot^.fData:=aValue;
+
+ // Release: indicate that the slot now holds a valid item (turn+1).
+ // memory_order_release -> we do a memory barrier or store
+ TPasMPMemoryBarrier.Write;  // or TPasMPMemoryBarrier.ReadWrite;
+ Slot^.fTurn:=DesiredTurn+1; //TPasMPInterlocked.Write(Slot^.fTurn,DesiredTurn+1);
+end;
+
+function TPasMPMultipleProducerMultipleConsumerQueue<T>.TryEnqueue(const aValue:T):Boolean;
+var HeadSnapshot,SlotTurn,DesiredTurn,PreviousHeadSnapshot:TPasMPSizeUInt;
+    Slot:PSlot;
+begin
+ result:=false;
+
+ // Read the local head
+{$if defined(CPU386) or defined(CPUx86_64)}
+ TPasMPMemoryBarrier.ReadDependency;
+{$else}
+ TPasMPMemoryBarrier.Read;
+{$ifend}
+ HeadSnapshot:=fHead; // HeadSnapshot:=TPasMPInterlocked.Read(fHead);
+
+ // The loop
+ while true do begin
+
+  Slot:=@fSlots[Idx(HeadSnapshot)];
+  DesiredTurn:=TurnOf(HeadSnapshot) shl 1;
+{$if defined(CPU386) or defined(CPUx86_64)}
+  TPasMPMemoryBarrier.ReadDependency;
+{$else}
+  TPasMPMemoryBarrier.Read;
+{$ifend}
+  SlotTurn:=Slot^.fTurn; // SlotTurn:=TPasMPInterlocked.Read(Slot^.fTurn);
+
+  // If the slot is indeed ready to store
+  if SlotTurn=DesiredTurn then begin
+   // Attempt to claim by CAS the head
+   if TPasMPInterlocked.CompareExchange(fHead,HeadSnapshot+1,HeadSnapshot)=HeadSnapshot then begin
+    // We succeeded, now place the item
+    Slot^.fData:=aValue;
+    TPasMPMemoryBarrier.Write;
+    Slot^.fTurn:=DesiredTurn+1; // TPasMPInterlocked.Write(Slot^.fTurn,DesiredTurn+1);
+    result:=true;
+   end else begin
+    // If CAS failed, someone else advanced head, so re-read and try again
+{$if defined(CPU386) or defined(CPUx86_64)}
+    TPasMPMemoryBarrier.ReadDependency;
+{$else}
+    TPasMPMemoryBarrier.Read;
+{$ifend}
+    HeadSnapshot:=FHead; // HeadSnapshot:=TPasMPInterlocked.Read(FHead);
+   end;
+  end else begin
+   // The slot is not ready -> queue is full or behind. Re-read head to see if it changed; if not, just fail
+   PreviousHeadSnapshot:=HeadSnapshot;
+{$if defined(CPU386) or defined(CPUx86_64)}
+   TPasMPMemoryBarrier.ReadDependency;
+{$else}
+   TPasMPMemoryBarrier.Read;
+{$ifend}
+   HeadSnapshot:=fHead; // HeadSnapshot:=TPasMPInterlocked.Read(FHead);
+   if HeadSnapshot=PreviousHeadSnapshot then begin
+    result:=false;
+    exit;
+   end else begin
+    // try again
+   end;
+  end;
+ end;
+end;
+
+function TPasMPMultipleProducerMultipleConsumerQueue<T>.Dequeue(out aValue:T):Boolean;
+var OldTail,SlotTurn,DesiredTurn:TPasMPSizeUInt;
+    Slot:PSlot;
+begin
+
+// Atomically increment FTail
+ OldTail:=TPasMPInterlocked.Increment(fTail);
+ Slot:=@fSlots[Idx(OldTail)];
+
+ // We expect the slot turn to be: turn(OldTail)*2 + 1
+ DesiredTurn:=(TurnOf(OldTail) shl 1) or 1;
+
+ repeat
+{$if defined(CPU386) or defined(CPUx86_64)}
+  TPasMPMemoryBarrier.ReadDependency;
+{$else}
+  TPasMPMemoryBarrier.Read;
+{$ifend}
+  SlotTurn:=Slot^.fTurn; // SlotTurn:=TPasMPInterlocked.Read(Slot^.Turn);
+ until SlotTurn=DesiredTurn;
+
+ // Acquire barrier
+ TPasMPMemoryBarrier.Read;
+ aValue:=Slot^.fData;
+ Finalize(Slot^.fData);
+
+ // Mark slot free => DesiredTurn + 1
+//TPasMPInterlocked.Write(Slot^.Turn,DesiredTurn+1);
+ TPasMPMemoryBarrier.Write;
+ Slot^.fTurn:=DesiredTurn+1;
+
+ result:=True;
+end;
+
+function TPasMPMultipleProducerMultipleConsumerQueue<T>.TryDequeue(out AValue:T):Boolean;
+var TailSnapshot,SlotTurn,DesiredTurn,PreviousTailSnapshot:TPasMPSizeUInt;
+    Slot:PSlot;
+begin
+
+ result:=false;
+
+{$if defined(CPU386) or defined(CPUx86_64)}
+ TPasMPMemoryBarrier.ReadDependency;
+{$else}
+ TPasMPMemoryBarrier.Read;
+{$ifend}
+ TailSnapshot:=fTail; //TailSnapshot:=TPasMPInterlocked.Read(fTail);
+ TPasMPMemoryBarrier.ReadDependency;
+
+ while true do begin
+
+  Slot:=@fSlots[Idx(TailSnapshot)];
+  DesiredTurn:=(TurnOf(TailSnapshot) shl 1) or 1;
+{$if defined(CPU386) or defined(CPUx86_64)}
+  TPasMPMemoryBarrier.ReadDependency;
+{$else}
+  TPasMPMemoryBarrier.Read;
+{$ifend}
+  SlotTurn:=Slot^.fTurn; //SlotTurn:=TPasMPInterlocked.Read(Slot^.fTurn);
+  TPasMPMemoryBarrier.ReadDependency;
+
+  if SlotTurn=DesiredTurn then begin
+   // Attempt to claim the slot by CAS
+   if TPasMPInterlocked.CompareExchange(fTail,TailSnapshot+1,TailSnapshot)=TailSnapshot then begin
+    TPasMPMemoryBarrier.Read;
+    aValue:=Slot^.fData;
+    Finalize(Slot^.fData);
+    Slot^.fTurn:=DesiredTurn+1; //TPasMPInterlocked.Write(Slot^.fTurn,DesiredTurn+1);
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+    TPasMPMemoryBarrier.Write;
+{$ifend}
+    result:=true;
+    exit;
+   end else begin
+    // Another consumer got it first
+{$if defined(CPU386) or defined(CPUx86_64)}
+    TPasMPMemoryBarrier.ReadDependency;
+{$else}
+    TPasMPMemoryBarrier.Read;
+{$ifend}
+    TailSnapshot:=fTail; // TailSnapshot:=TPasMPInterlocked.Read(fTail);
+    TPasMPMemoryBarrier.ReadDependency;
+   end;
+  end else begin
+   // Slot doesn't hold a valid item; if FTail hasn't changed, queue is empty
+   PreviousTailSnapshot:=TailSnapshot;
+{$if defined(CPU386) or defined(CPUx86_64)}
+   TPasMPMemoryBarrier.ReadDependency;
+{$else}
+   TPasMPMemoryBarrier.Read;
+{$ifend}
+   TailSnapshot:=fTail; // TPasMPInterlocked.Read(fTail);
+   if TailSnapshot=PreviousTailSnapshot {TPasMPInterlocked.Read(fTail)=TailSnapshot} then begin
+    result:=false;
+    exit;
+   end else begin
+    // Try again
+   end;
+  end;
+ end;
+end;
+
+function TPasMPMultipleProducerMultipleConsumerQueue<T>.Size:TPasMPSizeUInt;
+var LocalHead,LocalTail:TPasMPSizeInt;
+begin
+ LocalHead:=fHead;
+{$if defined(CPU386) or defined(CPUx86_64)}
+ TPasMPMemoryBarrier.ReadDependency;
+{$else}
+ TPasMPMemoryBarrier.Read;
+{$ifend}
+ LocalTail:=fTail;
+ result:=LocalHead-LocalTail;
+end;
+
+function TPasMPMultipleProducerMultipleConsumerQueue<T>.Empty:Boolean;
+begin
+ result:=Size<=0;
+end;
+
+{$endif}
+
 constructor TPasMPHashTable.Create(const KeySize,ValueSize:TPasMPInt32;const AddCPUCacheLinePaddingToInternalItemDataStructure:boolean=true);
 begin
  fKeySize:=KeySize;
@@ -11478,7 +11768,7 @@ begin
  end;
 end;
 
-function TPasMPJobAllocator.AllocateJob:PPasMPJob; 
+function TPasMPJobAllocator.AllocateJob:PPasMPJob;
 var JobIndex,MemoryPoolBucketIndex:TPasMPInt32;
 begin
  result:=fFreeJobs.Pop;
@@ -11493,7 +11783,7 @@ begin
  end;
 end;
 
-procedure TPasMPJobAllocator.FreeJobs; 
+procedure TPasMPJobAllocator.FreeJobs;
 begin
  fCountAllocatedJobs:=0;
  fFreeJobs.Clear;
@@ -11820,7 +12110,7 @@ begin
  SetRoundMode(fPasMPInstance.fFPURoundingMode);
 {$endif}
 
- if fCPUAffinityMask<>0 then begin 
+ if fCPUAffinityMask<>0 then begin
 
   if fPasMPInstance.fDoCPUCorePinning then begin
 {$if defined(Windows)}
@@ -12611,7 +12901,7 @@ begin
 
  finally
   CPUAffinityMasks:=nil;
- end; 
+ end;
 
 end;
 
@@ -12703,7 +12993,7 @@ begin
  end;
 end;
 
-class function TPasMP.GetGlobalInstance:TPasMP; 
+class function TPasMP.GetGlobalInstance:TPasMP;
 begin
  if not assigned(GlobalPasMP) then begin
   CreateGlobalInstance;
@@ -13241,7 +13531,7 @@ begin
 end;
 {$ifend}
 
-class function TPasMP.Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean; 
+class function TPasMP.Once(var OnceControl:TPasMPOnce;const InitRoutine:TPasMPOnceInitRoutine):boolean;
 {$ifdef Linux}
 begin
  result:=pthread_once(@OnceControl,InitRoutine)=0;
@@ -13298,17 +13588,17 @@ begin
  end;
 end;
 
-function TPasMP.CreateScope:TPasMPScope; 
+function TPasMP.CreateScope:TPasMPScope;
 begin
  result:=TPasMPScope.Create(self);
 end;
 
-class function TPasMP.IsJobCompleted(const Job:PPasMPJob):boolean; 
+class function TPasMP.IsJobCompleted(const Job:PPasMPJob):boolean;
 begin
  result:=assigned(Job) and ((Job^.InternalData and PasMPJobFlagActive)=0);
 end;
 
-class function TPasMP.IsJobValid(const Job:PPasMPJob):boolean; 
+class function TPasMP.IsJobValid(const Job:PPasMPJob):boolean;
 begin
  result:=assigned(Job) and ((Job^.InternalData and PasMPJobFlagActive)<>0);
 end;
@@ -13474,7 +13764,7 @@ begin
  end;
 end;
 
-function TPasMP.AllocateJob(const MethodCode,MethodData,Data:pointer;const ParentJob:PPasMPJob;const Flags,AreaMask:TPasMPUInt32):PPasMPJob; 
+function TPasMP.AllocateJob(const MethodCode,MethodData,Data:pointer;const ParentJob:PPasMPJob;const Flags,AreaMask:TPasMPUInt32):PPasMPJob;
 var JobWorkerThread:TPasMPJobWorkerThread;
     InternalData:TPasMPUInt32;
 begin
@@ -13554,7 +13844,7 @@ begin
  JobTask.fThreadIndex:=-1;
 end;
 
-procedure TPasMP.Release(const Job:PPasMPJob); 
+procedure TPasMP.Release(const Job:PPasMPJob);
 begin
  if assigned(Job) then begin
   if (assigned(Job^.Method.Data) and not assigned(Job^.Method.Code)) and TPasMPJobTask(pointer(Job^.Method.Data)).fFreeOnRelease then begin
@@ -13576,7 +13866,7 @@ begin
  end;
 end;
 
-procedure TPasMP.ExecuteJobTask(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread;const ThreadIndex:TPasMPInt32); 
+procedure TPasMP.ExecuteJobTask(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread;const ThreadIndex:TPasMPInt32);
 var JobTask,NewJobTask:TPasMPJobTask;
     NewJob:PPasMPJob;
 begin
@@ -13665,14 +13955,14 @@ begin
  if JobWorkerThread.HasJobs then begin
   WakeUpAll;
  end;
- 
+
  // Check if the job is allowed to run now here
  if not CheckJobExecution(Job,JobWorkerThread) then begin
 
   // Job is not allowed to run alright now, so re-enqueue it for later
 
   // Clear the requeue flag, if it was set, so we don't requeue it again and again
-  TPasMPInterlocked.BitwiseAnd(Job^.InternalData,PasMPJobFlagRequeueAndNotMask); 
+  TPasMPInterlocked.BitwiseAnd(Job^.InternalData,PasMPJobFlagRequeueAndNotMask);
 
   // Requeue the job, so it will be executed later, but into the global job queue for better chances to be executed directly without re-enqueueing again
   Run(Job,true);
@@ -13746,7 +14036,7 @@ begin
 
 end;
 
-procedure TPasMP.PushJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); 
+procedure TPasMP.PushJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread);
 var JobQueueIndex,PriorityJobQueueBitMask:TPasMPUInt32;
 begin
  JobQueueIndex:=PasMPJobQueuePriorityLast-(((Job^.InternalData and PasMPJobPriorityShiftedMask) shr PasMPJobPriorityShift)-(PasMPJobPriorityLow shr PasMPJobPriorityShift));
@@ -13897,7 +14187,7 @@ begin
  end;
 end;
 
-procedure TPasMP.RunWait(const Job:PPasMPJob); 
+procedure TPasMP.RunWait(const Job:PPasMPJob);
 begin
  if assigned(Job) then begin
   Run(Job);
@@ -13911,7 +14201,7 @@ begin
  Wait(Jobs);
 end;
 
-procedure TPasMP.WaitRelease(const Job:PPasMPJob); 
+procedure TPasMP.WaitRelease(const Job:PPasMPJob);
 begin
  if assigned(Job) then begin
   Wait(Job);
@@ -13925,7 +14215,7 @@ begin
  Release(Jobs);
 end;
 
-procedure TPasMP.Invoke(const Job:PPasMPJob); 
+procedure TPasMP.Invoke(const Job:PPasMPJob);
 begin
  if assigned(Job) then begin
   Run(Job);
@@ -13941,7 +14231,7 @@ begin
  Release(Jobs);
 end;
 
-procedure TPasMP.Invoke(const JobTask:TPasMPJobTask); 
+procedure TPasMP.Invoke(const JobTask:TPasMPJobTask);
 begin
  Invoke(Acquire(JobTask));
 end;
