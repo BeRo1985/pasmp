@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2024-12-30-13-36-0000                       *
+ *                        Version 2024-12-30-13-54-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================* 
@@ -518,6 +518,12 @@ type TPasMPInt8={$if declared(Int8)}Int8{$else}shortint{$ifend};
 
      TPasMPSizeInt=TPasMPPtrInt;
      PPasMPSizeInt=^TPasMPSizeInt;
+
+     TPasMPSizeIntEx={$ifdef cpu64}TPasMPInt64{$else}TPasMPInt32{$endif};
+     PPasMPSizeIntEx=^TPasMPSizeIntEx;
+
+     TPasMPSizeUIntEx={$ifdef cpu64}TPasMPUInt64{$else}TPasMPUInt32{$endif};
+     PPasMPSizeUIntEx=^TPasMPSizeUIntEx;
 
      TPasMPBoolean=boolean;
      PPasMPBoolean=^TPasMPBoolean;
@@ -1845,21 +1851,21 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
       public
        type TSlot=record
              public
-              fTurn:TPasMPSizeUInt;
-              fPadding1:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSizeUInt))-1] of TPasMPUInt8;
+              fTurn:TPasMPSizeUIntEx;
+              fPadding1:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSizeUIntEx))-1] of TPasMPUInt8;
               fData:T;
             end;
             PSlot=^TSlot;
             TSlotDynamicArray=array of TSlot;
       private
-       fCapacity:TPasMPSizeUInt;
+       fCapacity:TPasMPSizeUIntEx;
        fSlots:TSlotDynamicArray;
-       fHead:TPasMPSizeUInt;
-       fPaddingHead:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSizeUInt))-1] of TPasMPUInt8;
+       fHead:TPasMPSizeUIntEx;
+       fPaddingHead:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSizeUIntEx))-1] of TPasMPUInt8;
        fTail:TPasMPSizeInt;
-       fPaddingTail:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSizeUInt))-1] of TPasMPUInt8;
-       function Idx(const aX:TPasMPSizeUInt):TPasMPSizeUInt; inline;
-       function TurnOf(const aX:TPasMPSizeUInt):TPasMPSizeUInt; inline;
+       fPaddingTail:array[0..(PasMPCPUCacheLineSize-SizeOf(TPasMPSizeUIntEx))-1] of TPasMPUInt8;
+       function Idx(const aX:TPasMPSizeUIntEx):TPasMPSizeUIntEx; inline;
+       function TurnOf(const aX:TPasMPSizeUIntEx):TPasMPSizeUIntEx; inline;
       public
        constructor Create(const aCapacity:TPasMPSizeInt);
        destructor Destroy; override;
@@ -1867,7 +1873,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function TryEnqueue(const aValue:T):Boolean;
        function Dequeue(out AValue:T):Boolean;
        function TryDequeue(out AValue:T):Boolean;
-       function Size:TPasMPSizeUInt;
+       function Size:TPasMPSizeUIntEx;
        function Empty:Boolean; inline;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
@@ -10744,23 +10750,23 @@ begin
  inherited Destroy;
 end;
 
-function TPasMPMultipleProducerMultipleConsumerQueue<T>.Idx(const aX:TPasMPSizeUInt):TPasMPSizeUInt;
+function TPasMPMultipleProducerMultipleConsumerQueue<T>.Idx(const aX:TPasMPSizeUIntEx):TPasMPSizeUIntEx;
 begin
  result:=aX mod fCapacity;
 end;
 
-function TPasMPMultipleProducerMultipleConsumerQueue<T>.TurnOf(const aX:TPasMPSizeUInt):TPasMPSizeUInt;
+function TPasMPMultipleProducerMultipleConsumerQueue<T>.TurnOf(const aX:TPasMPSizeUIntEx):TPasMPSizeUIntEx;
 begin
  result:=aX div fCapacity;
 end;
 
 procedure TPasMPMultipleProducerMultipleConsumerQueue<T>.Enqueue(const aValue:T);
-var OldHead,SlotTurn,DesiredTurn:TPasMPSizeUInt;
+var OldHead,SlotTurn,DesiredTurn:TPasMPSizeUIntEx;
     Slot:PSlot;
 begin
 
  // Atomically increment fHead by 1 (fetch-and-add).
- OldHead:=TPasMPInterlocked.Increment(FHead);
+ OldHead:=TPasMPInterlocked.Increment(fHead);
  Slot:=@fSlots[Idx(OldHead)];
 
  // Wait for the consumer to finish the previous round if needed
@@ -10784,7 +10790,7 @@ begin
 end;
 
 function TPasMPMultipleProducerMultipleConsumerQueue<T>.TryEnqueue(const aValue:T):Boolean;
-var HeadSnapshot,SlotTurn,DesiredTurn,PreviousHeadSnapshot:TPasMPSizeUInt;
+var HeadSnapshot,SlotTurn,DesiredTurn,PreviousHeadSnapshot:TPasMPSizeUIntEx;
     Slot:PSlot;
 begin
  result:=false;
@@ -10847,7 +10853,7 @@ begin
 end;
 
 function TPasMPMultipleProducerMultipleConsumerQueue<T>.Dequeue(out aValue:T):Boolean;
-var OldTail,SlotTurn,DesiredTurn:TPasMPSizeUInt;
+var OldTail,SlotTurn,DesiredTurn:TPasMPSizeUIntEx;
     Slot:PSlot;
 begin
 
@@ -10881,7 +10887,7 @@ begin
 end;
 
 function TPasMPMultipleProducerMultipleConsumerQueue<T>.TryDequeue(out AValue:T):Boolean;
-var TailSnapshot,SlotTurn,DesiredTurn,PreviousTailSnapshot:TPasMPSizeUInt;
+var TailSnapshot,SlotTurn,DesiredTurn,PreviousTailSnapshot:TPasMPSizeUIntEx;
     Slot:PSlot;
 begin
 
@@ -10948,7 +10954,7 @@ begin
  end;
 end;
 
-function TPasMPMultipleProducerMultipleConsumerQueue<T>.Size:TPasMPSizeUInt;
+function TPasMPMultipleProducerMultipleConsumerQueue<T>.Size:TPasMPSizeUIntEx;
 var LocalHead,LocalTail:TPasMPSizeInt;
 begin
  LocalHead:=fHead;
