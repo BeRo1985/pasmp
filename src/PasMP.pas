@@ -1,12 +1,12 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2024-12-30-14-59-0000                       *
+ *                        Version 2025-01-11-22-47-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
  *                                                                            *
- * Copyright (C) 2016-2024, Benjamin Rosseaux (benjamin@rosseaux.de)          *
+ * Copyright (C) 2016-2025, Benjamin Rosseaux (benjamin@rosseaux.de)          *
  *                                                                            *
  * This software is provided 'as-is', without any express or implied          *
  * warranty. In no event will the authors be held liable for any damages      *
@@ -4706,7 +4706,7 @@ end;
 class function TPasMPInterlocked.Add(var Destination:TPasMPInt32;const Value:TPasMPInt32):TPasMPInt32;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicIncrement(Destination,Value);
+ result:=AtomicIncrement(Destination,Value)-Value;
 {$else}
  result:=InterlockedExchangeAdd(Destination,Value);
 {$endif}
@@ -4715,7 +4715,7 @@ end;
 class function TPasMPInterlocked.Add(var Destination:TPasMPUInt32;const Value:TPasMPUInt32):TPasMPUInt32;
 begin
 {$ifdef HAS_ATOMICS}
- result:=TPasMPUInt32(TPasMPInt32(AtomicIncrement(TPasMPInt32(Destination),TPasMPInt32(Value))));
+ result:=TPasMPUInt32(TPasMPInt32(AtomicIncrement(TPasMPInt32(Destination),TPasMPInt32(Value))-TPasMPInt32(Value)));
 {$else}
  result:=TPasMPUInt32(TPasMPInt32(InterlockedExchangeAdd(TPasMPInt32(Destination),TPasMPInt32(Value))));
 {$endif}
@@ -4725,7 +4725,7 @@ end;
 class function TPasMPInterlocked.Add(var Destination:TPasMPInt64;const Value:TPasMPInt64):TPasMPInt64;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicIncrement(Destination,Value);
+ result:=AtomicIncrement(Destination,Value)-Value;
 {$else}
  result:=InterlockedExchangeAdd64(Destination,Value);
 {$endif}
@@ -4734,7 +4734,7 @@ end;
 class function TPasMPInterlocked.Add(var Destination:TPasMPUInt64;const Value:TPasMPUInt64):TPasMPUInt64;
 begin
 {$ifdef HAS_ATOMICS}
- result:=TPasMPUInt64(TPasMPInt64(AtomicIncrement(TPasMPInt64(Destination),TPasMPInt64(Value))));
+ result:=TPasMPUInt64(TPasMPInt64(AtomicIncrement(TPasMPInt64(Destination),TPasMPInt64(Value))-TPasMPInt64(Value)));
 {$else}
  result:=TPasMPUInt64(TPasMPInt64(InterlockedExchangeAdd64(TPasMPInt64(Destination),TPasMPInt64(Value))));
 {$endif}
@@ -4744,7 +4744,7 @@ end;
 class function TPasMPInterlocked.Sub(var Destination:TPasMPInt32;const Value:TPasMPInt32):TPasMPInt32;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicIncrement(Destination,-Value);
+ result:=AtomicIncrement(Destination,-Value)+Value;
 {$else}
  result:=InterlockedExchangeAdd(Destination,-Value);
 {$endif}
@@ -4753,7 +4753,7 @@ end;
 class function TPasMPInterlocked.Sub(var Destination:TPasMPUInt32;const Value:TPasMPUInt32):TPasMPUInt32;
 begin
 {$ifdef HAS_ATOMICS}
- result:=TPasMPUInt32(TPasMPInt32(AtomicIncrement(TPasMPInt32(Destination),-TPasMPInt32(Value))));
+ result:=TPasMPUInt32(TPasMPInt32(AtomicIncrement(TPasMPInt32(Destination),-TPasMPInt32(Value))+TPasMPInt32(Value)));
 {$else}
  result:=TPasMPUInt32(TPasMPInt32(InterlockedExchangeAdd(TPasMPInt32(Destination),-TPasMPInt32(Value))));
 {$endif}
@@ -4763,7 +4763,7 @@ end;
 class function TPasMPInterlocked.Sub(var Destination:TPasMPInt64;const Value:TPasMPInt64):TPasMPInt64;
 begin
 {$ifdef HAS_ATOMICS}
- result:=AtomicIncrement(Destination,-Value);
+ result:=AtomicIncrement(Destination,-Value)+Value;
 {$else}
  result:=InterlockedExchangeAdd64(Destination,-Value);
 {$endif}
@@ -4772,7 +4772,7 @@ end;
 class function TPasMPInterlocked.Sub(var Destination:TPasMPUInt64;const Value:TPasMPUInt64):TPasMPUInt64;
 begin
 {$ifdef HAS_ATOMICS}
- result:=TPasMPUInt64(TPasMPInt64(AtomicIncrement(TPasMPInt64(Destination),-TPasMPInt64(Value))));
+ result:=TPasMPUInt64(TPasMPInt64(AtomicIncrement(TPasMPInt64(Destination),-TPasMPInt64(Value))+TPasMPInt64(Value)));
 {$else}
  result:=TPasMPUInt64(TPasMPInt64(InterlockedExchangeAdd64(TPasMPInt64(Destination),-TPasMPInt64(Value))));
 {$endif}
