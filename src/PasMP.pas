@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2025-01-11-22-47-0000                       *
+ *                        Version 2025-01-17-01-10-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -804,6 +804,12 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
 {$ifdef CPU64}
        class function ExchangeBitwiseOr(var Destination:TPasMPInt64;const Value:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function ExchangeBitwiseOr(var Destination:TPasMPUInt64;const Value:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$endif}
+       class function ExchangeBitwiseAndOr(var Destination:TPasMPInt32;const AndValue,OrValue:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function ExchangeBitwiseAndOr(var Destination:TPasMPUInt32;const AndValue,OrValue:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+{$ifdef CPU64}
+       class function ExchangeBitwiseAndOr(var Destination:TPasMPInt64;const AndValue,OrValue:TPasMPInt64):TPasMPInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
+       class function ExchangeBitwiseAndOr(var Destination:TPasMPUInt64;const AndValue,OrValue:TPasMPUInt64):TPasMPUInt64; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
 {$endif}
        class function ExchangeBitwiseXor(var Destination:TPasMPInt32;const Value:TPasMPInt32):TPasMPInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
        class function ExchangeBitwiseXor(var Destination:TPasMPUInt32;const Value:TPasMPUInt32):TPasMPUInt32; overload; {$ifdef HAS_STATIC}static;{$endif}{$if defined(HAS_ATOMICS) or defined(fpc)}inline;{$ifend}
@@ -5396,6 +5402,64 @@ begin
  repeat
   OldValue:=Destination;
   NewValue:=OldValue or Value;
+{$ifdef HAS_ATOMICS}
+  result:=TPasMPUInt64(TPasMPInt64(AtomicCmpExchange(TPasMPInt64(Destination),TPasMPInt64(NewValue),TPasMPInt64(OldValue))));
+{$else}
+  result:=TPasMPUInt64(TPasMPInt64(InterlockedCompareExchange64(TPasMPInt64(Destination),TPasMPInt64(NewValue),TPasMPInt64(OldValue))));
+{$endif}
+ until result=OldValue;
+end;
+{$endif}
+
+class function TPasMPInterlocked.ExchangeBitwiseAndOr(var Destination:TPasMPInt32;const AndValue,OrValue:TPasMPInt32):TPasMPInt32;
+var OldValue,NewValue:TPasMPInt32;
+begin
+ repeat
+  OldValue:=Destination;
+  NewValue:=(OldValue and AndValue) or OrValue;
+{$ifdef HAS_ATOMICS}
+  result:=AtomicCmpExchange(Destination,NewValue,OldValue);
+{$else}
+  result:=InterlockedCompareExchange(Destination,NewValue,OldValue);
+{$endif}
+ until result=OldValue;
+end;
+
+class function TPasMPInterlocked.ExchangeBitwiseAndOr(var Destination:TPasMPUInt32;const AndValue,OrValue:TPasMPUInt32):TPasMPUInt32;
+var OldValue,NewValue:TPasMPUInt32;
+begin
+ repeat
+  OldValue:=Destination;
+  NewValue:=(OldValue and AndValue) or OrValue;
+{$ifdef HAS_ATOMICS}
+  result:=TPasMPUInt32(TPasMPInt32(AtomicCmpExchange(TPasMPInt32(Destination),TPasMPInt32(NewValue),TPasMPInt32(OldValue))));
+{$else}
+  result:=TPasMPUInt32(TPasMPInt32(InterlockedCompareExchange(TPasMPInt32(Destination),TPasMPInt32(NewValue),TPasMPInt32(OldValue))));
+{$endif}
+ until result=OldValue;
+end;
+
+{$ifdef CPU64}
+class function TPasMPInterlocked.ExchangeBitwiseAndOr(var Destination:TPasMPInt64;const AndValue,OrValue:TPasMPInt64):TPasMPInt64;
+var OldValue,NewValue:TPasMPInt64;
+begin
+ repeat
+  OldValue:=Destination;
+  NewValue:=(OldValue and AndValue) or OrValue;
+{$ifdef HAS_ATOMICS}
+  result:=AtomicCmpExchange(Destination,NewValue,OldValue);
+{$else}
+  result:=InterlockedCompareExchange64(Destination,NewValue,OldValue);
+{$endif}
+ until result=OldValue;
+end;
+
+class function TPasMPInterlocked.ExchangeBitwiseAndOr(var Destination:TPasMPUInt64;const AndValue,OrValue:TPasMPUInt64):TPasMPUInt64;
+var OldValue,NewValue:TPasMPUInt64;
+begin
+ repeat
+  OldValue:=Destination;
+  NewValue:=(OldValue and AndValue) or OrValue;
 {$ifdef HAS_ATOMICS}
   result:=TPasMPUInt64(TPasMPInt64(AtomicCmpExchange(TPasMPInt64(Destination),TPasMPInt64(NewValue),TPasMPInt64(OldValue))));
 {$else}
