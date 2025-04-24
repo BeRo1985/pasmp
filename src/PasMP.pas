@@ -2213,7 +2213,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        constructor Create(const APasMPInstance:TPasMP;const AThreadIndex:TPasMPInt32;const aCPUAffinityMask:TPasMPUInt64=0);
        destructor Destroy; override;
        property Depth:TPasMPUInt32 read fDepth;
-       property AreaMask:TPasMPUInt32 read fAreaMask;
+       property AreaMask:TPasMPUInt32 read fAreaMask write fAreaMask;
        property ThreadIndex:TPasMPInt32 read fThreadIndex;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
