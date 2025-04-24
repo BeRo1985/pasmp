@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2025-04-24-15-36-0000                       *
+ *                        Version 2025-04-24-18-11-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2354,6 +2354,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fWorkerThreadMaxDepth:TPasMPUInt32;
        fOnWorkerThreadException:TPasMPOnWorkerThreadException;
        fOnCheckJobExecution:TPasMPOnCheckJobExecution;
+       fRespectJobAvoidAreaMasks:TPasMPBool32;
        class function GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif}):TPasMPUInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        function GetJobWorkerThread:TPasMPJobWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
        procedure WaitForWakeUp;
@@ -2440,6 +2441,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        property SleepingOnIdle:longbool read fSleepingOnIdle write fSleepingOnIdle;
        property OnWorkerThreadException:TPasMPOnWorkerThreadException read fOnWorkerThreadException write fOnWorkerThreadException;
        property OnCheckJobExecution:TPasMPOnCheckJobExecution read fOnCheckJobExecution write fOnCheckJobExecution;
+       property RespectJobAvoidAreaMasks:TPasMPBool32 read fRespectJobAvoidAreaMasks write fRespectJobAvoidAreaMasks;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -12869,6 +12871,8 @@ begin
 
  fOnCheckJobExecution:=nil;
 
+ fRespectJobAvoidAreaMasks:=false;
+
  fAllWorkerThreadsHaveOwnSystemThreads:=AllWorkerThreadsHaveOwnSystemThreads;
 
  fWorkerThreadPriority:=WorkerThreadPriority;
@@ -14031,7 +14035,7 @@ begin
  end;
 
  // Check if the job is allowed to run now here
- if ((JobWorkerThread.fAreaMask and Job^.AvoidAreaMask)<>0) or not CheckJobExecution(Job,JobWorkerThread) then begin
+ if (fRespectJobAvoidAreaMasks and ((JobWorkerThread.fAreaMask and Job^.AvoidAreaMask)<>0)) or not CheckJobExecution(Job,JobWorkerThread) then begin
 
   // Job is not allowed to run alright now, so re-enqueue it for later
 
