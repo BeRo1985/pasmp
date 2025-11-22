@@ -2219,7 +2219,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure ThreadInitialization;
        function HasJobs:boolean; {$ifdef CAN_INLINE}inline;{$endif}
        function CanExecuteJobNow(const aJob:PPasMPJob):boolean; {$ifdef CAN_INLINE}inline;{$endif}
-       function CanPushJob(const aJob:PPasMPJob):boolean; {$ifdef CAN_INLINE}inline;{$endif}
+       function IsJobAffinityCompatible(const aJob:PPasMPJob):boolean; {$ifdef CAN_INLINE}inline;{$endif}
        function GetJob:PPasMPJob;
        procedure ThreadProc;
       public
@@ -12176,21 +12176,7 @@ begin
     TPasMPMemoryBarrier.Read;
 {$ifend}
     result:=fQueueJobs[QueueTop and fQueueMask];
-    if (not fPasMPInstance.fRespectAffinityMasks) or 
-       ( // Static affinity mask respect, only if enabled
-        ( // Static job => worker allowed affinity: either no restriction or intersection > 0
-         (result^.AllowedAffinityMask=PasMPAffinityMaskAll) or
-         ((result^.AllowedAffinityMask and aJobWorkerThread.fAllowedAffinityMask)<>0)
-        ) and
-        ( // Static worker => job avoid affinity: either no worker avoid mask or no intersection
-         (aJobWorkerThread.fAvoidAffinityMask=0) or
-         ((aJobWorkerThread.fAvoidAffinityMask and result^.AllowedAffinityMask)=0)
-        ) and
-        ( // Static job => worker avoid affinity: either no avoid mask or no intersection
-         (result^.AvoidAffinityMask=0) or
-         ((result^.AvoidAffinityMask and aJobWorkerThread.fAllowedAffinityMask)=0)
-        )
-       ) then begin
+    if aJobWorkerThread.IsJobAffinityCompatible(result) then begin
      // Affinity check passed 
      if (TPasMPInterlocked.CompareExchange(fQueueTop,QueueTop+1,QueueTop)<>QueueTop) then begin
       // Failed race against steal operation
@@ -12392,7 +12378,7 @@ begin
 
 end;
 
-function TPasMPJobWorkerThread.CanPushJob(const aJob:PPasMPJob):boolean;
+function TPasMPJobWorkerThread.IsJobAffinityCompatible(const aJob:PPasMPJob):boolean;
 var WorkerThreadAllowedAffinityMask,WorkerThreadAvoidAffinityMask,
     JobAllowedAffinityMask,JobAvoidAffinityMask:TPasMPAffinityMask;
 begin
@@ -14250,7 +14236,7 @@ begin
   TPasMPInterlocked.BitwiseAnd(Job^.InternalData,PasMPJobFlagRequeueAndNotMask);
 
   // Push back
-  if (not fRespectAffinityMasks) or (assigned(JobWorkerThread) and JobWorkerThread.CanPushJob(Job)) then begin
+  if (not fRespectAffinityMasks) or (assigned(JobWorkerThread) and JobWorkerThread.IsJobAffinityCompatible(Job)) then begin
    // Push into the same worker thread queue (or global queue if no worker thread given)
    PushJob(Job,JobWorkerThread);
   end else begin
@@ -14365,7 +14351,7 @@ var JobQueueIndex,PriorityJobQueueBitMask:TPasMPUInt32;
 begin
  JobQueueIndex:=PasMPJobQueuePriorityLast-(((Job^.InternalData and PasMPJobPriorityShiftedMask) shr PasMPJobPriorityShift)-(PasMPJobPriorityLow shr PasMPJobPriorityShift));
  PriorityJobQueueBitMask:=TPasMPUInt32(1) shl TPasMPUInt32(JobQueueIndex);
- if assigned(JobWorkerThread) and JobWorkerThread.CanPushJob(Job) then begin
+ if assigned(JobWorkerThread) and JobWorkerThread.IsJobAffinityCompatible(Job) then begin
   // Push into the worker thread queue when affinity masks allow it if enabled
   JobWorkerThread.fJobQueues[JobQueueIndex].PushJob(Job);
   if (JobWorkerThread.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)=0 then begin
