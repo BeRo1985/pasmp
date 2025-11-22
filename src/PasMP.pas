@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2025-11-22-03-23-0000                       *
+ *                        Version 2025-11-22-03-27-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -12290,16 +12290,14 @@ begin
            ( // Static avoid affinity: either no avoid mask or no intersection
             (AvoidAffinityMask=0) or
             ((AvoidAffinityMask and CurrentAffinityMask)=0)
-           ) and
+           )
           )
          ) and
-         (
-          ( // Dynamic context-based area avoidance, only if enabled and the job actually avoids something
-           (not fPasMPInstance.fRespectJobAvoidAreaMasks) or
-           (
-            (aJob^.AvoidAreaMask=0) or
-            ((fAreaMask and aJob^.AvoidAreaMask)=0)
-           )
+         ( // Dynamic context-based area avoidance, only if enabled and the job actually avoids something
+          (not fPasMPInstance.fRespectJobAvoidAreaMasks) or
+          (
+           (aJob^.AvoidAreaMask=0) or
+           ((fAreaMask and aJob^.AvoidAreaMask)=0)
           )
          );
 
