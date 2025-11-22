@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2025-11-22-06-03-0000                       *
+ *                        Version 2025-11-22-11-17-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -14552,7 +14552,16 @@ begin
  JobData^.Data:=Data;
  JobData^.FirstIndex:=FirstIndex;
  JobData^.LastIndex:=LastIndex;
- JobData^.Granularity:=Granularity;
+ if Granularity>0 then begin 
+  JobData^.Granularity:=Granularity;
+ end else if Granularity=0 then begin 
+  JobData^.Granularity:=1;
+ end else begin
+  JobData^.Granularity:=((LastIndex-FirstIndex)+1) div (fCountJobWorkerThreads*(-Granularity));
+  if JobData^.Granularity<1 then begin
+   JobData^.Granularity:=1;
+  end;
+ end;
  JobData^.Depth:=Depth;
  JobData^.CanSpread:=CanSpread;
  JobData^.RecursiveSplit:=RecursiveSplit;
@@ -14713,10 +14722,15 @@ begin
  JobData^.Data:=Data;
  JobData^.FirstIndex:=FirstIndex;
  JobData^.LastIndex:=LastIndex;
- if Granularity<1 then begin
+ if Granularity>0 then begin 
+  JobData^.Granularity:=Granularity;
+ end else if Granularity=0 then begin 
   JobData^.Granularity:=1;
  end else begin
-  JobData^.Granularity:=Granularity;
+  JobData^.Granularity:=((LastIndex-FirstIndex)+1) div (fCountJobWorkerThreads*(-Granularity));
+  if JobData^.Granularity<1 then begin
+   JobData^.Granularity:=1;
+  end;
  end;
  JobData^.Depth:=Depth;
  JobData^.CanSpread:=CanSpread;
@@ -14732,10 +14746,15 @@ begin
  JobData^.Data:=Data;
  JobData^.FirstIndex:=FirstIndex;
  JobData^.LastIndex:=LastIndex;
- if Granularity<1 then begin
+ if Granularity>0 then begin 
+  JobData^.Granularity:=Granularity;
+ end else if Granularity=0 then begin 
   JobData^.Granularity:=1;
  end else begin
-  JobData^.Granularity:=Granularity;
+  JobData^.Granularity:=((LastIndex-FirstIndex)+1) div (fCountJobWorkerThreads*(-Granularity));
+  if JobData^.Granularity<1 then begin
+   JobData^.Granularity:=1;
+  end;
  end;
  JobData^.Depth:=Depth;
  JobData^.CanSpread:=CanSpread;
