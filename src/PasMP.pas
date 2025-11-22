@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2025-11-22-18-44-0000                       *
+ *                        Version 2025-11-22-19-00-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2431,6 +2431,8 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure Run(const Job:PPasMPJob;const GlobalQueue:Boolean=false); overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure Run(const Jobs:array of PPasMPJob;const GlobalQueue:Boolean=false); overload;
        function StealAndExecuteJob:boolean;
+       procedure Cancel(const Job:PPasMPJob); overload;
+       procedure Cancel(const Jobs:array of PPasMPJob); overload;
        procedure Wait(const Job:PPasMPJob); overload;
        procedure Wait(const Jobs:array of PPasMPJob); overload;
        procedure RunWait(const Job:PPasMPJob); overload; {$ifdef CAN_INLINE}inline;{$endif}
@@ -14215,53 +14217,57 @@ begin
 
  end;
 
- if assigned(fProfiler) then begin
-  ProfilerHistoryRingBufferItem:=fProfiler.Acquire;
-  ProfilerHistoryRingBufferItem^.JobTag:=TPasMP.DecodeJobTagFromJobFlags(Job^.InternalData);
-  ProfilerHistoryRingBufferItem^.ThreadIndexStackDepth:=TPasMPUInt32(JobWorkerThread.fThreadIndex and $ffff) or (JobWorkerThread.fDepth shl 16);
-  ProfilerHistoryRingBufferItem^.StartTime:=fProfiler.fHighResolutionTimer.GetTime+fProfiler.fOffsetTime;
- end else begin
-  ProfilerHistoryRingBufferItem:=nil;
- end;
+ if (Job^.InternalData and PasMPJobFlagActive)<>0 then begin
 
- inc(JobWorkerThread.fDepth);
-
- OldAreaMask:=JobWorkerThread.fAreaMask;
- JobWorkerThread.fAreaMask:=OldAreaMask or Job^.AreaMask;
-
-{OldAvoidAreaMask:=JobWorkerThread.fAvoidAreaMask;
- JobWorkerThread.fAvoidAreaMask:=OldAreaMask or Job^.AvoidAreaMask;}
-
- LastJobPriority:=JobWorkerThread.fCurrentJobPriority;
- JobWorkerThread.fCurrentJobPriority:=Job^.InternalData and PasMPJobPriorityShiftedMask;
-
- if assigned(Job^.Method.Data) then begin
-  if assigned(Job^.Method.Code) then begin
-   TPasMPJobMethod(Job^.Method)(Job,JobWorkerThread.ThreadIndex);
+  if assigned(fProfiler) then begin
+   ProfilerHistoryRingBufferItem:=fProfiler.Acquire;
+   ProfilerHistoryRingBufferItem^.JobTag:=TPasMP.DecodeJobTagFromJobFlags(Job^.InternalData);
+   ProfilerHistoryRingBufferItem^.ThreadIndexStackDepth:=TPasMPUInt32(JobWorkerThread.fThreadIndex and $ffff) or (JobWorkerThread.fDepth shl 16);
+   ProfilerHistoryRingBufferItem^.StartTime:=fProfiler.fHighResolutionTimer.GetTime+fProfiler.fOffsetTime;
   end else begin
-   ExecuteJobTask(Job,JobWorkerThread,JobWorkerThread.ThreadIndex);
+   ProfilerHistoryRingBufferItem:=nil;
   end;
- end else begin
-  if assigned(Job^.Method.Code) then begin
-   TPasMPJobProcedure(pointer(Job^.Method.Code))(Job,JobWorkerThread.ThreadIndex);
+
+  inc(JobWorkerThread.fDepth);
+
+  OldAreaMask:=JobWorkerThread.fAreaMask;
+  JobWorkerThread.fAreaMask:=OldAreaMask or Job^.AreaMask;
+
+ {OldAvoidAreaMask:=JobWorkerThread.fAvoidAreaMask;
+  JobWorkerThread.fAvoidAreaMask:=OldAreaMask or Job^.AvoidAreaMask;}
+
+  LastJobPriority:=JobWorkerThread.fCurrentJobPriority;
+  JobWorkerThread.fCurrentJobPriority:=Job^.InternalData and PasMPJobPriorityShiftedMask;
+
+  if assigned(Job^.Method.Data) then begin
+   if assigned(Job^.Method.Code) then begin
+    TPasMPJobMethod(Job^.Method)(Job,JobWorkerThread.ThreadIndex);
+   end else begin
+    ExecuteJobTask(Job,JobWorkerThread,JobWorkerThread.ThreadIndex);
+   end;
+  end else begin
+   if assigned(Job^.Method.Code) then begin
+    TPasMPJobProcedure(pointer(Job^.Method.Code))(Job,JobWorkerThread.ThreadIndex);
+   end;
   end;
+
+  JobWorkerThread.fCurrentJobPriority:=LastJobPriority;
+
+  if ((Job^.InternalData and PasMPJobFlagRequeue)=0) and (Job^.ChildrenJobs>0) then begin
+   WaitOnChildrenJobs(Job);
+  end;
+
+  if assigned(ProfilerHistoryRingBufferItem) then begin
+   ProfilerHistoryRingBufferItem^.EndTime:=fProfiler.fHighResolutionTimer.GetTime+fProfiler.fOffsetTime;
+  end;
+
+  JobWorkerThread.fAreaMask:=OldAreaMask;
+
+ //JobWorkerThread.fAvoidAreaMask:=OldAvoidAreaMask;
+
+  dec(JobWorkerThread.fDepth);
+
  end;
-
- JobWorkerThread.fCurrentJobPriority:=LastJobPriority;
-
- if ((Job^.InternalData and PasMPJobFlagRequeue)=0) and (Job^.ChildrenJobs>0) then begin
-  WaitOnChildrenJobs(Job);
- end;
-
- if assigned(ProfilerHistoryRingBufferItem) then begin
-  ProfilerHistoryRingBufferItem^.EndTime:=fProfiler.fHighResolutionTimer.GetTime+fProfiler.fOffsetTime;
- end;
-
- JobWorkerThread.fAreaMask:=OldAreaMask;
-
-//JobWorkerThread.fAvoidAreaMask:=OldAvoidAreaMask;
-
- dec(JobWorkerThread.fDepth);
 
  if (Job^.InternalData and PasMPJobFlagRequeue)<>0 then begin
 
@@ -14362,6 +14368,28 @@ begin
   if assigned(NextJob) then begin
    ExecuteJob(NextJob,JobWorkerThread);
    result:=true;
+  end;
+ end;
+end;
+
+procedure TPasMP.Cancel(const Job:PPasMPJob);
+begin
+ if assigned(Job) then begin
+  TPasMPInterlocked.BitwiseAnd(Job^.InternalData,PasMPJobFlagActiveAndNotMask);
+ end;
+end;
+
+procedure TPasMP.Cancel(const Jobs:array of PPasMPJob);
+var JobIndex,CountJobs:TPasMPInt32;
+    Job:PPasMPJob;
+begin
+ CountJobs:=length(Jobs);
+ if CountJobs>0 then begin
+  for JobIndex:=0 to CountJobs-1 do begin
+   Job:=Jobs[JobIndex];
+   if assigned(Job) then begin
+    TPasMPInterlocked.BitwiseAnd(Job^.InternalData,PasMPJobFlagActiveAndNotMask);
+   end;
   end;
  end;
 end;
