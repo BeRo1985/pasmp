@@ -12176,26 +12176,29 @@ begin
     TPasMPMemoryBarrier.Read;
 {$ifend}
     result:=fQueueJobs[QueueTop and fQueueMask];
-    if (
-        (not fPasMPInstance.fRespectAffinityMasks) or 
-        ( // Static affinity mask respect, only if enabled
-         ( // Static job => worker allowed affinity: either no restriction or intersection > 0
-          (result^.AllowedAffinityMask=PasMPAffinityMaskAll) or
-          ((result^.AllowedAffinityMask and aJobWorkerThread.fAllowedAffinityMask)<>0)
-         ) and
-         ( // Static worker => job avoid affinity: either no worker avoid mask or no intersection
-          (aJobWorkerThread.fAvoidAffinityMask=0) or
-          ((aJobWorkerThread.fAvoidAffinityMask and result^.AllowedAffinityMask)=0)
-         ) and
-         ( // Static job => worker avoid affinity: either no avoid mask or no intersection
-          (result^.AvoidAffinityMask=0) or
-          ((result^.AvoidAffinityMask and aJobWorkerThread.fAllowedAffinityMask)=0)
-         )
-        ) 
-       ) and
-       (TPasMPInterlocked.CompareExchange(fQueueTop,QueueTop+1,QueueTop)<>QueueTop) then begin
-     // Failed race against steal operation or affinity check failed
-     result:=nil;
+    if (not fPasMPInstance.fRespectAffinityMasks) or 
+       ( // Static affinity mask respect, only if enabled
+        ( // Static job => worker allowed affinity: either no restriction or intersection > 0
+         (result^.AllowedAffinityMask=PasMPAffinityMaskAll) or
+         ((result^.AllowedAffinityMask and aJobWorkerThread.fAllowedAffinityMask)<>0)
+        ) and
+        ( // Static worker => job avoid affinity: either no worker avoid mask or no intersection
+         (aJobWorkerThread.fAvoidAffinityMask=0) or
+         ((aJobWorkerThread.fAvoidAffinityMask and result^.AllowedAffinityMask)=0)
+        ) and
+        ( // Static job => worker avoid affinity: either no avoid mask or no intersection
+         (result^.AvoidAffinityMask=0) or
+         ((result^.AvoidAffinityMask and aJobWorkerThread.fAllowedAffinityMask)=0)
+        )
+       ) then begin
+     // Affinity check passed 
+     if (TPasMPInterlocked.CompareExchange(fQueueTop,QueueTop+1,QueueTop)<>QueueTop) then begin
+      // Failed race against steal operation
+      result:=nil;
+     end;
+    end else begin
+     // Affinity check failed
+     result:=nil; 
     end;
    end;
   end;
