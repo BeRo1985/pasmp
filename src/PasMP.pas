@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2025-11-22-03-27-0000                       *
+ *                        Version 2025-11-22-06-03-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2379,6 +2379,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure WaitOnChildrenJobs(const Job:PPasMPJob);
        procedure ExecuteJobTask(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread;const ThreadIndex:TPasMPInt32); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        function CheckJobExecution(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread):Boolean;
+       procedure ReenqueueJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); //{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure PushJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread); {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
 {$ifdef HAS_ANONYMOUS_METHODS}
@@ -12321,15 +12322,9 @@ begin
   // Our local bitmap claim we have a job with highest priority!
   result:=fJobQueues[PasMPJobQueuePriorityHigh].PopJob;
   if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
-   if CanExecuteJobNow(result) then begin
-    // Found a local job to execute with highest priority
-    fMaxPriorityJobQueueIndex:=PasMPJobQueuePriorityHigh;
-    exit;
-   end else begin
-    // Job cannot be executed now, so reinsert it back to the global queue, for avoid livelocks
-    fPasMPInstance.fJobQueues[PasMPJobQueuePriorityHigh].PushJob(result);
-    result:=nil;
-   end;
+   // Found a local job to execute with highest priority
+   fMaxPriorityJobQueueIndex:=PasMPJobQueuePriorityHigh;
+   exit;
   end else begin
    fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap and not TPasMPUInt32(TPasMPUInt32(1) shl PasMPJobQueuePriorityHigh);
   end;
@@ -12348,20 +12343,14 @@ begin
    // Our local bitmap claim we have a job with higher priority!
    result:=fJobQueues[JobQueuePriorityIndex].PopJob;
    if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
-    if CanExecuteJobNow(result) then begin
-     // Found a local job to execute with higher priority
-     if fJobQueues[JobQueuePriorityIndex].HasJobs then begin
-      TPasMPInterlocked.BitwiseOr(fPasMPInstance.fGlobalJobQueuesUsedBitmap,PriorityJobQueueBitMask);
-      fMaxPriorityJobQueueIndex:=PasMPJobQueuePriorityHigh;
-     end else begin
-      fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
-     end;
-     exit;
+    // Found a local job to execute with higher priority
+    if fJobQueues[JobQueuePriorityIndex].HasJobs then begin
+     TPasMPInterlocked.BitwiseOr(fPasMPInstance.fGlobalJobQueuesUsedBitmap,PriorityJobQueueBitMask);
+     fMaxPriorityJobQueueIndex:=PasMPJobQueuePriorityHigh;
     end else begin
-     // Job cannot be executed now, so reinsert it back to the global queue, for avoid livelocks
-     fPasMPInstance.fJobQueues[JobQueuePriorityIndex].PushJob(result);
-     result:=nil;
-    end; 
+     fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
+    end;
+    exit;
    end else begin
     fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
    end;
@@ -12378,16 +12367,11 @@ begin
    // Our local bitmap claim we have a job
    result:=fJobQueues[JobQueuePriorityIndex].PopJob;
    if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
-    if CanExecuteJobNow(result) then begin 
-     // Found a local job to execute
-     fMaxPriorityJobQueueIndex:=JobQueuePriorityIndex;
-     exit;
-    end else begin
-     // Job cannot be executed now, so reinsert it back to the global queue, for avoid livelocks
-     fPasMPInstance.fJobQueues[JobQueuePriorityIndex].PushJob(result);
-     result:=nil;
-    end;
+    // Found a local job to execute
+    fMaxPriorityJobQueueIndex:=JobQueuePriorityIndex;
+    exit;
    end;
+  end;
 
   // When it is not a valid job or our own queue is empty, so try stealing from some other queue
   // Find victim index and try to steal from there
@@ -12404,15 +12388,8 @@ begin
     // The victim bitmap claim we have a job
     result:=OtherJobWorkerThread.fJobQueues[JobQueuePriorityIndex].StealJob;
     if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
-     if CanExecuteJobNow(result) then begin
-      // Found a stolen job to execute
-      exit;
-     end else begin
-      // Job cannot be executed now, so reinsert it back to the same queue of the victim thread,
-      // no danger of livelocks here
-      OtherJobWorkerThread.fJobQueues[JobQueuePriorityIndex].PushJob(result);
-      result:=nil;
-     end;
+     // Found a stolen job to execute
+     exit;
     end;
    end;
    inc(OtherJobWorkerThreadIndex);
@@ -12434,14 +12411,8 @@ begin
      // The global bitmap claim we have a job
      result:=fPasMPInstance.fJobQueues[JobQueuePriorityIndex].StealJob;
      if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
-      if CanExecuteJobNow(result) then begin
-       // Found a stolen global job to execute
-       exit;
-      end else begin
-       // Job cannot be executed now, so reinsert it back to the global queue,
-       fPasMPInstance.fJobQueues[JobQueuePriorityIndex].PushJob(result);
-       result:=nil;
-      end;
+      // Found a stolen global job to execute
+      exit;
      end else begin
       fPasMPInstance.fJobQueuesUsedBitmap:=fPasMPInstance.fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
       TPasMPMemoryBarrier.ReadWrite;
@@ -12504,14 +12475,8 @@ begin
    if (fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
     result:=fJobQueues[JobQueuePriorityIndex].PopJob;
     if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
-     if CanExecuteJobNow(result) then begin
-      // Yay, we've found a job to execute!  
-      exit;
-     end else begin
-      // Push to global queue instead to give other threads a chance to execute it, for avoid livelocks
-      fPasMPInstance.fJobQueues[JobQueuePriorityIndex].PushJob(result);
-      result:=nil;
-     end; 
+     // Yay, we've found a job to execute!
+     exit;
     end else begin
      fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
     end;
@@ -12530,14 +12495,8 @@ begin
        ((OtherJobWorkerThread.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0) then begin
      result:=OtherJobWorkerThread.fJobQueues[JobQueuePriorityIndex].StealJob;
      if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
-      if CanExecuteJobNow(result) then begin
-       // Yay, we've stolen a job!
-       exit;
-      end else begin
-       // Not allowed here, give it back to the victim's queue, no danger for livelocks 
-       OtherJobWorkerThread.fJobQueues[JobQueuePriorityIndex].PushJob(result);
-       result:=nil; 
-      end;
+      // Yay, we've stolen a job!
+      exit;
      end;
     end;
     inc(OtherJobWorkerThreadIndex);
@@ -12558,14 +12517,8 @@ begin
      if (fPasMPInstance.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
       result:=fPasMPInstance.fJobQueues[JobQueuePriorityIndex].StealJob;
       if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
-       if CanExecuteJobNow(result) then begin
-        // Yay, we've stolen a job!
-        exit;
-       end else begin
-        // Not allowed here, give it back to the global queue, no danger for livelocks 
-        fPasMPInstance.fJobQueues[JobQueuePriorityIndex].PushJob(result);
-        result:=nil; 
-       end;
+       // Yay, we've stolen a job!
+       exit;
       end else begin
        fPasMPInstance.fJobQueuesUsedBitmap:=fPasMPInstance.fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
        TPasMPMemoryBarrier.ReadWrite;
@@ -14119,6 +14072,22 @@ begin
  result:=(not assigned(fOnCheckJobExecution)) or fOnCheckJobExecution(self,Job,JobWorkerThread);
 end;
 
+procedure TPasMP.ReenqueueJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread);
+begin
+ if assigned(Job) then begin
+
+  // Clear the requeue flag, if it was set, so we don't requeue it again and again
+  TPasMPInterlocked.BitwiseAnd(Job^.InternalData,PasMPJobFlagRequeueAndNotMask);
+
+  // Push back
+  PushJob(Job,JobWorkerThread);
+
+  // Wake up
+  WakeUpAll;
+
+ end;
+end;
+
 procedure TPasMP.ExecuteJob(const Job:PPasMPJob;const JobWorkerThread:TPasMPJobWorkerThread);
 var LastJobPriority,OldAreaMask:TPasMPUInt32;
     ProfilerHistoryRingBufferItem:PPasMPProfilerHistoryRingBufferItem;
@@ -14129,15 +14098,12 @@ begin
  end;
 
  // Check if the job is allowed to run now here
- if not CheckJobExecution(Job,JobWorkerThread) then begin
+ if not (JobWorkerThread.CanExecuteJobNow(Job) and CheckJobExecution(Job,JobWorkerThread)) then begin
 
-  // Job is not allowed to run alright now, so re-enqueue it for later
+  // Job is not allowed to run alright now, so re-enqueue it for later, but into the global job queue
+  // for better chances to be executed directly without re-enqueueing again
 
-  // Clear the requeue flag, if it was set, so we don't requeue it again and again
-  TPasMPInterlocked.BitwiseAnd(Job^.InternalData,PasMPJobFlagRequeueAndNotMask);
-
-  // Requeue the job, so it will be executed later, but into the global job queue for better chances to be executed directly without re-enqueueing again
-  Run(Job,true);
+  ReenqueueJob(Job,nil);
 
   exit;
 
