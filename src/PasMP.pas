@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2025-11-21-22-24-0000                       *
+ *                        Version 2025-11-22-03-23-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -604,8 +604,8 @@ const PasMPAllocatorPoolBucketBits=12;
       PasMPVersionMinor=1000;
       PasMPVersionRelease=1;
 
-      PasMPAffinityAll=TPasMPAffinityMask($ffffffff);
-      PasMPAffinityNone=TPasMPAffinityMask(0);      
+      PasMPAffinityMaskAll=TPasMPAffinityMask($ffffffff);
+      PasMPAffinityMaskNone=TPasMPAffinityMask(0);
 
 {$ifndef FPC}
       // Delphi evaluates every $IF-directive even if it is disabled by a surrounding, so it's then a error in Delphi, and for to avoid it, we define dummys here.
@@ -2366,6 +2366,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fOnWorkerThreadException:TPasMPOnWorkerThreadException;
        fOnCheckJobExecution:TPasMPOnCheckJobExecution;
        fRespectJobAvoidAreaMasks:TPasMPBool32;
+       fRespectAffinityMasks:TPasMPBool32;
        class function GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif}):TPasMPUInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        function GetJobWorkerThread:TPasMPJobWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
        procedure WaitForWakeUp;
@@ -2416,11 +2417,11 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function CreateScope:TPasMPScope; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        function GetJobWorkerThreadIndex:TPasMPInt32;
 {$ifdef HAS_ANONYMOUS_METHODS}
-       function Acquire(const JobReferenceProcedure:TPasMPJobReferenceProcedure;const Data:pointer=nil;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityNone):PPasMPJob; overload;
+       function Acquire(const JobReferenceProcedure:TPasMPJobReferenceProcedure;const Data:pointer=nil;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskNone):PPasMPJob; overload;
 {$endif}
-       function Acquire(const JobProcedure:TPasMPJobProcedure;const Data:pointer=nil;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityNone):PPasMPJob; overload;
-       function Acquire(const JobMethod:TPasMPJobMethod;const Data:pointer=nil;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityNone):PPasMPJob; overload;
-       function Acquire(const JobTask:TPasMPJobTask;const Data:pointer=nil;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityNone):PPasMPJob; overload;
+       function Acquire(const JobProcedure:TPasMPJobProcedure;const Data:pointer=nil;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskNone):PPasMPJob; overload;
+       function Acquire(const JobMethod:TPasMPJobMethod;const Data:pointer=nil;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskNone):PPasMPJob; overload;
+       function Acquire(const JobTask:TPasMPJobTask;const Data:pointer=nil;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskNone):PPasMPJob; overload;
        procedure Release(const Job:PPasMPJob); overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure Release(const Jobs:array of PPasMPJob); overload;
        procedure Run(const Job:PPasMPJob;const GlobalQueue:Boolean=false); overload; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
@@ -2437,14 +2438,14 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure Invoke(const JobTask:TPasMPJobTask); overload; {$ifdef CAN_INLINE}inline;{$endif}
        procedure Invoke(const JobTasks:array of TPasMPJobTask); overload;
 {$ifdef HAS_ANONYMOUS_METHODS}
-       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForReferenceProcedure:TPasMPParallelForReferenceProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const RecursiveSplit:Boolean=true;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityNone):PPasMPJob; overload;
+       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForReferenceProcedure:TPasMPParallelForReferenceProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const RecursiveSplit:Boolean=true;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskNone):PPasMPJob; overload;
 {$endif}
-       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForProcedure:TPasMPParallelForProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const RecursiveSplit:Boolean=true;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityNone):PPasMPJob; overload;
-       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForMethod:TPasMPParallelForMethod;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const RecursiveSplit:Boolean=true;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityNone):PPasMPJob; overload;
-       function ParallelDirectIntroSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityNone):PPasMPJob;
-       function ParallelIndirectIntroSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityNone):PPasMPJob;
-       function ParallelDirectMergeSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityNone):PPasMPJob;
-       function ParallelIndirectMergeSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityNone):PPasMPJob;
+       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForProcedure:TPasMPParallelForProcedure;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const RecursiveSplit:Boolean=true;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskNone):PPasMPJob; overload;
+       function ParallelFor(const Data:pointer;const FirstIndex,LastIndex:TPasMPNativeInt;const ParallelForMethod:TPasMPParallelForMethod;const Granularity:TPasMPInt32=1;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const RecursiveSplit:Boolean=true;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskNone):PPasMPJob; overload;
+       function ParallelDirectIntroSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskNone):PPasMPJob;
+       function ParallelIndirectIntroSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskNone):PPasMPJob;
+       function ParallelDirectMergeSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const ElementSize:TPasMPInt32;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskNone):PPasMPJob;
+       function ParallelIndirectMergeSort(const Items:pointer;const Left,Right:TPasMPNativeInt;const CompareFunc:TPasMPParallelSortCompareFunction;const Granularity:TPasMPInt32=16;const Depth:TPasMPInt32=PasMPDefaultDepth;const ParentJob:PPasMPJob=nil;const Flags:TPasMPUInt32=0;const AreaMask:TPasMPUInt32=0;const AvoidAreaMask:TPasMPUInt32=0;const AllowedAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskAll;const AvoidAffinityMask:TPasMPAffinityMask=PasMPAffinityMaskNone):PPasMPJob;
        property JobWorkerThread:TPasMPJobWorkerThread read GetJobWorkerThread;
        property JobWorkerThreads:TPasMPJobWorkerThreads read fJobWorkerThreads;
        property CountJobWorkerThreads:TPasMPInt32 read fCountJobWorkerThreads;
@@ -2453,6 +2454,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        property OnWorkerThreadException:TPasMPOnWorkerThreadException read fOnWorkerThreadException write fOnWorkerThreadException;
        property OnCheckJobExecution:TPasMPOnCheckJobExecution read fOnCheckJobExecution write fOnCheckJobExecution;
        property RespectJobAvoidAreaMasks:TPasMPBool32 read fRespectJobAvoidAreaMasks write fRespectJobAvoidAreaMasks;
+       property RespectAffinityMasks:TPasMPBool32 read fRespectAffinityMasks write fRespectAffinityMasks;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -12152,7 +12154,7 @@ begin
  fCurrentJobPriority:=PasMPJobPriorityNormal;
  fDepth:=0;
  fAreaMask:=0;
- fAffinityMask:=PasMPAffinityAll;
+ fAffinityMask:=PasMPAffinityMaskAll;
  fXorShift32:=(TPasMPUInt32(aThreadIndex+1)*83492791) or 1;
  if (fThreadIndex>0) or fPasMPInstance.fAllWorkerThreadsHaveOwnSystemThreads then begin
   fSystemThread:=TPasMPWorkerSystemThread.Create(self);
@@ -12278,20 +12280,22 @@ begin
  AllowedAffinityMask:=aJob^.AllowedAffinityMask;
  AvoidAffinityMask:=aJob^.AvoidAffinityMask; 
  
- result:=( // Static allowed affinity: either no restriction or intersection > 0 
-          (AllowedAffinityMask=PasMPAffinityAll) or 
-          ((AllowedAffinityMask and CurrentAffinityMask)<>0)
+ result:=( // Static affinity mask respect, only if enabled
+          (not fPasMPInstance.fRespectAffinityMasks) or
+          (
+           ( // Static allowed affinity: either no restriction or intersection > 0
+            (AllowedAffinityMask=PasMPAffinityMaskAll) or
+            ((AllowedAffinityMask and CurrentAffinityMask)<>0)
+           ) and
+           ( // Static avoid affinity: either no avoid mask or no intersection
+            (AvoidAffinityMask=0) or
+            ((AvoidAffinityMask and CurrentAffinityMask)=0)
+           ) and
+          )
          ) and
-
-         ( 
-
-          ( // Static avoid affinity: either no avoid mask or no intersection
-           (AvoidAffinityMask=0) or 
-           ((AvoidAffinityMask and CurrentAffinityMask)=0)
-          ) and
-
+         (
           ( // Dynamic context-based area avoidance, only if enabled and the job actually avoids something
-           (not fPasMPInstance.fRespectJobAvoidAreaMasks) or   
+           (not fPasMPInstance.fRespectJobAvoidAreaMasks) or
            (
             (aJob^.AvoidAreaMask=0) or
             ((fAreaMask and aJob^.AvoidAreaMask)=0)
@@ -12967,6 +12971,8 @@ begin
  fOnCheckJobExecution:=nil;
 
  fRespectJobAvoidAreaMasks:=false;
+
+ fRespectAffinityMasks:=false;
 
  fAllWorkerThreadsHaveOwnSystemThreads:=AllWorkerThreadsHaveOwnSystemThreads;
 
