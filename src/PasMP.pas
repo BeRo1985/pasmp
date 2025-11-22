@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2025-11-22-19-00-0000                       *
+ *                        Version 2025-11-22-20-17-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2184,6 +2184,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure PushJob(const pJob:PPasMPJob);
        function PopJob:PPasMPJob;
        function StealJob:PPasMPJob;
+       function StealJobWithCheck(const aJobWorkerThread:TPasMPJobWorkerThread):PPasMPJob;
       public
        constructor Create(const aPasMPInstance:TPasMP);
        destructor Destroy; override;
@@ -12143,6 +12144,71 @@ begin
 
 end;
 
+function TPasMPJobQueue.StealJobWithCheck(const aJobWorkerThread:TPasMPJobWorkerThread):PPasMPJob;
+var QueueTop,QueueBottom,QueueLockState:TPasMPInt32;
+begin
+ result:=nil;
+
+ // Try to acquire multiple-reader-side of lock
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+ TPasMPMemoryBarrier.Read;
+{$ifend}
+
+ QueueLockState:=fQueueLockState and TPasMPInt32(TPasMPUInt32($fffffffe));
+ if TPasMPInterlocked.CompareExchange(fQueueLockState,QueueLockState+2,QueueLockState)=QueueLockState then begin
+
+  begin
+{$if not (defined(CPU386) or defined(CPUx86_64))}
+   TPasMPMemoryBarrier.Read;
+{$ifend}
+   QueueTop:=fQueueTop;
+{$if defined(CPU386) or defined(CPUx86_64)}
+   TPasMPMemoryBarrier.ReadDependency;
+{$else}
+   TPasMPMemoryBarrier.Read;
+{$ifend}
+   QueueBottom:=fQueueBottom;
+   if QueueTop<QueueBottom then begin
+    // Non-empty queue.
+{$if defined(CPU386) or defined(CPUx86_64)}
+    TPasMPMemoryBarrier.ReadDependency;
+{$else}
+    TPasMPMemoryBarrier.Read;
+{$ifend}
+    result:=fQueueJobs[QueueTop and fQueueMask];
+    if (
+        (not fPasMPInstance.fRespectAffinityMasks) or 
+        ( // Static affinity mask respect, only if enabled
+         ( // Static job => worker allowed affinity: either no restriction or intersection > 0
+          (result^.AllowedAffinityMask=PasMPAffinityMaskAll) or
+          ((result^.AllowedAffinityMask and aJobWorkerThread.fAllowedAffinityMask)<>0)
+         ) and
+         ( // Static worker => job avoid affinity: either no worker avoid mask or no intersection
+          (aJobWorkerThread.fAvoidAffinityMask=0) or
+          ((aJobWorkerThread.fAvoidAffinityMask and result^.AllowedAffinityMask)=0)
+         ) and
+         ( // Static job => worker avoid affinity: either no avoid mask or no intersection
+          (result^.AvoidAffinityMask=0) or
+          ((result^.AvoidAffinityMask and aJobWorkerThread.fAllowedAffinityMask)=0)
+         )
+        ) 
+       ) and
+       (TPasMPInterlocked.CompareExchange(fQueueTop,QueueTop+1,QueueTop)<>QueueTop) then begin
+     // Failed race against steal operation or affinity check failed
+     result:=nil;
+    end;
+   end;
+  end;
+
+  begin
+   // Release multiple-reader-side of lock
+   TPasMPInterlocked.Add(fQueueLockState,-2);
+  end;
+
+ end;
+
+end;
+
 constructor TPasMPJobWorkerThread.Create(const aPasMPInstance:TPasMP;const aThreadIndex:TPasMPInt32;const aCPUAffinityMask:TPasMPUInt64);
 var JobQueueIndex:TPasMPInt32;
 begin
@@ -12481,7 +12547,7 @@ begin
 {$ifend}
     if (fPasMPInstance.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
      // The global bitmap claim we have a job
-     result:=fPasMPInstance.fJobQueues[JobQueuePriorityIndex].StealJob;
+     result:=fPasMPInstance.fJobQueues[JobQueuePriorityIndex].StealJobWithCheck(self);
      if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
       // Found a stolen global job to execute
      end else begin
@@ -12609,7 +12675,7 @@ begin
      TPasMPMemoryBarrier.Read;
 {$ifend}
      if (fPasMPInstance.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
-      result:=fPasMPInstance.fJobQueues[JobQueuePriorityIndex].StealJob;
+      result:=fPasMPInstance.fJobQueues[JobQueuePriorityIndex].StealJobWithCheck(self);
       if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
        // Yay, we've stolen a job!       
       end else begin
