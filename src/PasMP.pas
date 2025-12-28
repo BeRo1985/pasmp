@@ -3407,9 +3407,9 @@ end;
 function CLZDWord(Value:TPasMPUInt32):TPasMPUInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  if Value=0 then begin
-  result:=0;
+  result:=32;
  end else begin
-  result:=31-BSRDWord(Value);
+  result:=31 xor BSRDWord(Value);
  end;
 end;
 
@@ -3425,9 +3425,9 @@ end;
 function CLZQWord(Value:TPasMPUInt64):TPasMPUInt32; {$ifdef CAN_INLINE}inline;{$endif}
 begin
  if Value=0 then begin
-  result:=0;
+  result:=64;
  end else begin
-  result:=63-BSRQWord(Value);
+  result:=63 xor BSRQWord(Value);
  end;
 end;
 {$endif}
