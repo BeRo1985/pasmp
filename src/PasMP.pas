@@ -8688,7 +8688,6 @@ begin
 {$if defined(Linux) and defined(fpc)}
  // Native futex, no fallback needed
 {$elseif defined(Windows)}
- PasMPFutexWindowsInit;
  fFallbackLock:=TPasMPConditionVariableLock.Create;
  fFallbackCondVar:=TPasMPConditionVariable.Create;
 {$else}
@@ -17994,6 +17993,7 @@ initialization
  end;
 {$endif}
 {$ifdef Windows}
+ PasMPFutexWindowsInit;
  timeBeginPeriod(1);
 {$endif}
 finalization
