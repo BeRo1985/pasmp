@@ -410,7 +410,7 @@ uses {$ifdef Windows}
         {$ifdef usecthreads}
          cthreads,
         {$endif}
-        BaseUnix,Unix,UnixType,{$ifndef AndroidOld}PThreads,{$endif}
+        BaseUnix,Unix,UnixType,SysCall,{$ifndef AndroidOld}PThreads,{$endif}
         {$if defined(Linux) or defined(Android)}
          Linux,
         {$else}
@@ -1130,6 +1130,43 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        procedure Signal; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        procedure Broadcast; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
        function Wait(const Lock:TPasMPConditionVariableLock;const dwMilliSeconds:TPasMPUInt32=INFINITE):TWaitResult; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+     end;
+{$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
+
+{$if defined(fpc) and (fpc_version>=3)}{$push}{$optimization noorderfields}{$ifend}
+     TPasMPFutexEvent=class
+{$if defined(Linux) and defined(fpc)}
+      private
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fFlag:TPasMPUInt32;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fWaiters:TPasMPUInt32;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-(SizeOf(TPasMPUInt32)*2))-1] of TPasMPUInt8;
+{$elseif defined(Windows)}
+      private
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fFlag:TPasMPUInt32;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fWaiters:TPasMPUInt32;
+       fFallbackLock:TPasMPConditionVariableLock;
+       fFallbackCondVar:TPasMPConditionVariable;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(TPasMPUInt32)*2)+(SizeOf(Pointer)*2)))-1] of TPasMPUInt8;
+{$else}
+      private
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fFlag:TPasMPUInt32;
+       {$ifdef HAS_VOLATILE}[volatile]{$endif}fWaiters:TPasMPUInt32;
+       fFallbackLock:TPasMPConditionVariableLock;
+       fFallbackCondVar:TPasMPConditionVariable;
+      protected
+       fCacheLineFillUp:array[0..(PasMPCPUCacheLineSize-((SizeOf(TPasMPUInt32)*2)+(SizeOf(Pointer)*2)))-1] of TPasMPUInt8;
+{$ifend}
+      public
+       constructor Create;
+       destructor Destroy; override;
+       procedure Reset; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       function Wait(const aTimeoutNS:TPasMPUInt64=TPasMPUInt64($ffffffffffffffff)):boolean;
+       function Wake:boolean;
+       function WakeAll:boolean;
+       function GetWaiters:TPasMPUInt32; {$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}
+       property Waiters:TPasMPUInt32 read GetWaiters;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -8586,6 +8623,297 @@ begin
  end;
 end;
 {$ifend}
+
+{$if defined(Linux) and defined(fpc)}
+const PasMPFutexWait_=0;
+      PasMPFutexWake_=1;
+      PasMPFutexPrivateFlag_=128;
+
+function PasMPLinuxFutexWait(addr:PPasMPUInt32;expected:TPasMPUInt32;aTimeoutNS:TPasMPUInt64):TPasMPInt32;
+var ts:timespec;
+begin
+ if aTimeoutNS=TPasMPUInt64($ffffffffffffffff) then begin
+  result:=do_SysCall(syscall_nr_futex,TSysParam(addr),TSysParam(PasMPFutexWait_ or PasMPFutexPrivateFlag_),TSysParam(expected),TSysParam(0),TSysParam(0),TSysParam(0));
+ end else begin
+  ts.tv_sec:=aTimeoutNS div 1000000000;
+  ts.tv_nsec:=aTimeoutNS mod 1000000000;
+  result:=do_SysCall(syscall_nr_futex,TSysParam(addr),TSysParam(PasMPFutexWait_ or PasMPFutexPrivateFlag_),TSysParam(expected),TSysParam(@ts),TSysParam(0),TSysParam(0));
+ end;
+end;
+
+function PasMPLinuxFutexWake(addr:PPasMPUInt32;count:TPasMPUInt32):TPasMPInt32;
+begin
+ result:=do_SysCall(syscall_nr_futex,TSysParam(addr),TSysParam(PasMPFutexWake_ or PasMPFutexPrivateFlag_),TSysParam(count),TSysParam(0),TSysParam(0),TSysParam(0));
+end;
+{$ifend}
+
+{$if defined(Windows)}
+type TPasMPWaitOnAddressFunc=function(Address:Pointer;CompareAddress:Pointer;AddressSize:TPasMPPtrUInt;dwMilliseconds:TPasMPUInt32):LongBool; stdcall;
+     TPasMPWakeByAddressSingleFunc=procedure(Address:Pointer); stdcall;
+     TPasMPWakeByAddressAllFunc=procedure(Address:Pointer); stdcall;
+
+var PasMPFutexWaitOnAddress:TPasMPWaitOnAddressFunc=nil;
+    PasMPFutexWakeByAddressSingle:TPasMPWakeByAddressSingleFunc=nil;
+    PasMPFutexWakeByAddressAll:TPasMPWakeByAddressAllFunc=nil;
+    PasMPFutexWindowsInitialized:TPasMPBool32=false;
+
+procedure PasMPFutexWindowsInit;
+var h:THandle;
+begin
+ if not PasMPFutexWindowsInitialized then begin
+  h:=GetModuleHandle('api-ms-win-core-synch-l1-2-0.dll');
+  if h=0 then begin
+   h:=GetModuleHandle('kernel32.dll');
+  end;
+  if h<>0 then begin
+   PasMPFutexWaitOnAddress:=TPasMPWaitOnAddressFunc(GetProcAddress(h,'WaitOnAddress'));
+   PasMPFutexWakeByAddressSingle:=TPasMPWakeByAddressSingleFunc(GetProcAddress(h,'WakeByAddressSingle'));
+   PasMPFutexWakeByAddressAll:=TPasMPWakeByAddressAllFunc(GetProcAddress(h,'WakeByAddressAll'));
+  end;
+  if not (assigned(PasMPFutexWaitOnAddress) and assigned(PasMPFutexWakeByAddressSingle)) then begin
+   PasMPFutexWaitOnAddress:=nil;
+   PasMPFutexWakeByAddressSingle:=nil;
+   PasMPFutexWakeByAddressAll:=nil;
+  end;
+  PasMPFutexWindowsInitialized:=true;
+ end;
+end;
+{$ifend}
+
+constructor TPasMPFutexEvent.Create;
+begin
+ inherited Create;
+ fFlag:=0;
+ fWaiters:=0;
+{$if defined(Linux) and defined(fpc)}
+ // Native futex, no fallback needed
+{$elseif defined(Windows)}
+ PasMPFutexWindowsInit;
+ fFallbackLock:=TPasMPConditionVariableLock.Create;
+ fFallbackCondVar:=TPasMPConditionVariable.Create;
+{$else}
+ fFallbackLock:=TPasMPConditionVariableLock.Create;
+ fFallbackCondVar:=TPasMPConditionVariable.Create;
+{$ifend}
+end;
+
+destructor TPasMPFutexEvent.Destroy;
+begin
+{$if defined(Linux) and defined(fpc)}
+ // Nothing to free
+{$else}
+ FreeAndNil(fFallbackCondVar);
+ FreeAndNil(fFallbackLock);
+{$ifend}
+ inherited Destroy;
+end;
+
+procedure TPasMPFutexEvent.Reset;
+begin
+ TPasMPInterlocked.Write(fFlag,0);
+end;
+
+function TPasMPFutexEvent.Wait(const aTimeoutNS:TPasMPUInt64=TPasMPUInt64($ffffffffffffffff)):boolean;
+{$if defined(Linux) and defined(fpc)}
+begin
+ // Fast path: already signaled
+ if TPasMPInterlocked.Exchange(fFlag,0)<>0 then begin
+  result:=true;
+  exit;
+ end;
+ // Poll only
+ if aTimeoutNS=0 then begin
+  result:=false;
+  exit;
+ end;
+ // Register as waiter
+ TPasMPInterlocked.Increment(fWaiters);
+ // Re-check flag to avoid lost-wake race
+ if TPasMPInterlocked.Read(fFlag)=0 then begin
+  PasMPLinuxFutexWait(@fFlag,0,aTimeoutNS);
+ end;
+ TPasMPInterlocked.Decrement(fWaiters);
+ // Try to consume signal
+ result:=TPasMPInterlocked.Exchange(fFlag,0)<>0;
+end;
+{$elseif defined(Windows)}
+var dwMS:TPasMPUInt32;
+    Expected:TPasMPUInt32;
+begin
+ // Fast path
+ if TPasMPInterlocked.Exchange(fFlag,0)<>0 then begin
+  result:=true;
+  exit;
+ end;
+ if aTimeoutNS=0 then begin
+  result:=false;
+  exit;
+ end;
+ if assigned(PasMPFutexWaitOnAddress) then begin
+  // Native WaitOnAddress (Win8+)
+  TPasMPInterlocked.Increment(fWaiters);
+  if TPasMPInterlocked.Read(fFlag)=0 then begin
+   Expected:=0;
+   if aTimeoutNS=TPasMPUInt64($ffffffffffffffff) then begin
+    dwMS:=INFINITE;
+   end else begin
+    dwMS:=TPasMPUInt32((aTimeoutNS+999999) div 1000000);
+    if dwMS=0 then begin
+     dwMS:=1;
+    end;
+   end;
+   PasMPFutexWaitOnAddress(@fFlag,@Expected,SizeOf(TPasMPUInt32),dwMS);
+  end;
+  TPasMPInterlocked.Decrement(fWaiters);
+  result:=TPasMPInterlocked.Exchange(fFlag,0)<>0;
+ end else begin
+  // Fallback for older Windows
+  TPasMPInterlocked.Increment(fWaiters);
+  try
+   fFallbackLock.Acquire;
+   try
+    while TPasMPInterlocked.Read(fFlag)=0 do begin
+     if aTimeoutNS=TPasMPUInt64($ffffffffffffffff) then begin
+      fFallbackCondVar.Wait(fFallbackLock);
+     end else begin
+      dwMS:=TPasMPUInt32((aTimeoutNS+999999) div 1000000);
+      if dwMS=0 then begin
+       dwMS:=1;
+      end;
+      if fFallbackCondVar.Wait(fFallbackLock,dwMS)<>wrSignaled then begin
+       break;
+      end;
+     end;
+    end;
+    result:=TPasMPInterlocked.Exchange(fFlag,0)<>0;
+   finally
+    fFallbackLock.Release;
+   end;
+  finally
+   TPasMPInterlocked.Decrement(fWaiters);
+  end;
+ end;
+end;
+{$else}
+var dwMS:TPasMPUInt32;
+begin
+ // Fast path
+ if TPasMPInterlocked.Exchange(fFlag,0)<>0 then begin
+  result:=true;
+  exit;
+ end;
+ if aTimeoutNS=0 then begin
+  result:=false;
+  exit;
+ end;
+ // Fallback: condvar
+ TPasMPInterlocked.Increment(fWaiters);
+ try
+  fFallbackLock.Acquire;
+  try
+   while TPasMPInterlocked.Read(fFlag)=0 do begin
+    if aTimeoutNS=TPasMPUInt64($ffffffffffffffff) then begin
+     fFallbackCondVar.Wait(fFallbackLock);
+    end else begin
+     dwMS:=TPasMPUInt32((aTimeoutNS+999999) div 1000000);
+     if dwMS=0 then begin
+      dwMS:=1;
+     end;
+     if fFallbackCondVar.Wait(fFallbackLock,dwMS)<>wrSignaled then begin
+      break;
+     end;
+    end;
+   end;
+   result:=TPasMPInterlocked.Exchange(fFlag,0)<>0;
+  finally
+   fFallbackLock.Release;
+  end;
+ finally
+  TPasMPInterlocked.Decrement(fWaiters);
+ end;
+end;
+{$ifend}
+
+function TPasMPFutexEvent.Wake:boolean;
+{$if defined(Linux) and defined(fpc)}
+begin
+ result:=TPasMPInterlocked.Exchange(fFlag,1)=0;
+ if TPasMPInterlocked.Read(fWaiters)>0 then begin
+  PasMPLinuxFutexWake(@fFlag,1);
+ end;
+end;
+{$elseif defined(Windows)}
+begin
+ result:=TPasMPInterlocked.Exchange(fFlag,1)=0;
+ if TPasMPInterlocked.Read(fWaiters)>0 then begin
+  if assigned(PasMPFutexWakeByAddressSingle) then begin
+   PasMPFutexWakeByAddressSingle(@fFlag);
+  end else begin
+   fFallbackLock.Acquire;
+   try
+    fFallbackCondVar.Signal;
+   finally
+    fFallbackLock.Release;
+   end;
+  end;
+ end;
+end;
+{$else}
+begin
+ result:=TPasMPInterlocked.Exchange(fFlag,1)=0;
+ if TPasMPInterlocked.Read(fWaiters)>0 then begin
+  fFallbackLock.Acquire;
+  try
+   fFallbackCondVar.Signal;
+  finally
+   fFallbackLock.Release;
+  end;
+ end;
+end;
+{$ifend}
+
+function TPasMPFutexEvent.WakeAll:boolean;
+{$if defined(Linux) and defined(fpc)}
+begin
+ result:=TPasMPInterlocked.Exchange(fFlag,1)=0;
+ if TPasMPInterlocked.Read(fWaiters)>0 then begin
+  PasMPLinuxFutexWake(@fFlag,TPasMPUInt32($7fffffff));
+ end;
+end;
+{$elseif defined(Windows)}
+begin
+ result:=TPasMPInterlocked.Exchange(fFlag,1)=0;
+ if TPasMPInterlocked.Read(fWaiters)>0 then begin
+  if assigned(PasMPFutexWakeByAddressAll) then begin
+   PasMPFutexWakeByAddressAll(@fFlag);
+  end else begin
+   fFallbackLock.Acquire;
+   try
+    fFallbackCondVar.Broadcast;
+   finally
+    fFallbackLock.Release;
+   end;
+  end;
+ end;
+end;
+{$else}
+begin
+ result:=TPasMPInterlocked.Exchange(fFlag,1)=0;
+ if TPasMPInterlocked.Read(fWaiters)>0 then begin
+  fFallbackLock.Acquire;
+  try
+   fFallbackCondVar.Broadcast;
+  finally
+   fFallbackLock.Release;
+  end;
+ end;
+end;
+{$ifend}
+
+function TPasMPFutexEvent.GetWaiters:TPasMPUInt32;
+begin
+ result:=TPasMPInterlocked.Read(fWaiters);
+end;
 
 constructor TPasMPSemaphore.Create(const InitialCount,MaximumCount:TPasMPInt32);
 begin
