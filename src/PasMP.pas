@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2026-02-13-14-22-0000                       *
+ *                        Version 2026-04-20-23-04-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2159,6 +2159,15 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        pmjpHigh
       );
 
+     PPasMPGetJobVariant=^TPasMPGetJobVariant;
+     TPasMPGetJobVariant=
+      (
+       pmgjvAdaptivePriority,        // Imam-Sarkar paper: fMaxPriorityJobQueueIndex + re-read global bitmap per priority failure
+       pmgjvRefinedAdaptivePriority, // Same algorithm as AdaptivePriority, cleaner implementation
+       pmgjvSnapshotScan,            // Static bitmap snapshot + two-pass FirstTry fallback
+       pmgjvRefinedSnapshotScan      // SnapshotScan + re-read global bitmap after each priority failure
+      );
+
      PPasMPJob=^TPasMPJob;
 
 {$ifdef HAS_ANONYMOUS_METHODS}
@@ -2317,6 +2326,10 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        function HasJobs:boolean; {$ifdef CAN_INLINE}inline;{$endif}
        function CanExecuteJobNow(const aJob:PPasMPJob):boolean; {$ifdef CAN_INLINE}inline;{$endif}
        function IsJobAffinityCompatible(const aJob:PPasMPJob):boolean; {$ifdef CAN_INLINE}inline;{$endif}
+       function GetJobAdaptivePriority:PPasMPJob;
+       function GetJobRefinedAdaptivePriority:PPasMPJob;
+       function GetJobSnapshotScan:PPasMPJob;
+       function GetJobRefinedSnapshotScan:PPasMPJob;
        function GetJob:PPasMPJob;
        procedure ThreadProc;
       public
@@ -2468,10 +2481,12 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fOnCheckJobExecution:TPasMPOnCheckJobExecution;
        fRespectJobAvoidAreaMasks:TPasMPBool32;
        fRespectAffinityMasks:TPasMPBool32;
+       fGetJobVariant:TPasMPGetJobVariant;
        class function GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif}):TPasMPUInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        function GetJobWorkerThread:TPasMPJobWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
        procedure WaitForWakeUp;
        procedure WakeUpAll;
+       procedure WakeUpOne;
        function CanSpread:boolean;
        function IsFull:boolean;
        function GlobalAllocateJob:PPasMPJob;
@@ -2559,6 +2574,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        property OnCheckJobExecution:TPasMPOnCheckJobExecution read fOnCheckJobExecution write fOnCheckJobExecution;
        property RespectJobAvoidAreaMasks:TPasMPBool32 read fRespectJobAvoidAreaMasks write fRespectJobAvoidAreaMasks;
        property RespectAffinityMasks:TPasMPBool32 read fRespectAffinityMasks write fRespectAffinityMasks;
+       property GetJobVariant:TPasMPGetJobVariant read fGetJobVariant write fGetJobVariant;
      end;
 {$if defined(fpc) and (fpc_version>=3)}{$pop}{$ifend}
 
@@ -14585,14 +14601,12 @@ begin
 
 end;
 
-{//$define AlternativeGetJobVariant}
-{$ifdef AlternativeGetJobVariant}
 // A prioritized GetJob implementation variant, which is based on the paper "Load Balancing Prioritized Tasks via Work-Stealing"
 // by Shams Imam and Vivek Sarkar
 // Optimized here by me (Benjamin Rosseaux) by replacing the boolean-arrays with uint32-variables for more effective atomic
 // operations and better faster bit scan possibilities for to find the next active priority index, for example with the BSF and
 // BSR machine instructions on the x86 CPU architecture
-function TPasMPJobWorkerThread.GetJob:PPasMPJob;
+function TPasMPJobWorkerThread.GetJobAdaptivePriority:PPasMPJob;
 var FoundPriorityIndex,JobQueuePriorityIndex,OtherJobWorkerThreadIndex,OtherJobWorkerThreadCounter:TPasMPInt32;
     XorShiftTemp,PriorityJobQueueBitMask,CurrentBitmap:TPasMPUInt32;
     OtherJobWorkerThread:TPasMPJobWorkerThread;
@@ -14672,11 +14686,11 @@ begin
        ( // Check if we can execute jobs from the victim thread based on affinity masks
         (
          (OtherJobWorkerThread.fAllowedAffinityMask=PasMPAffinityMaskAll) or
-         ((OtherJobWorkerThread.fAllowedAffinityMask and fAffinityMask)<>0)
+         ((OtherJobWorkerThread.fAllowedAffinityMask and fAllowedAffinityMask)<>0)
         ) and
         (
          (OtherJobWorkerThread.fAvoidAffinityMask=0) or
-         ((OtherJobWorkerThread.fAvoidAffinityMask and fAffinityMask)=0)
+         ((OtherJobWorkerThread.fAvoidAffinityMask and fAllowedAffinityMask)=0)
         )
        ) then begin
      // We are allowed to steal from this victim thread
@@ -14715,7 +14729,7 @@ begin
       result:=nil;
      end;
     end else begin
-     result:=nil; 
+     result:=nil;
     end;
    finally
     fPasMPInstance.fJobQueuesLock.Release;
@@ -14740,11 +14754,158 @@ begin
  end;
 
  result:=nil;
+
 end;
+
+// A prioritized GetJob implementation variant, which is a refined and cleaner reimplementation of the AdaptivePriority variant,
+// based on the same paper "Load Balancing Prioritized Tasks via Work-Stealing" by Shams Imam and Vivek Sarkar.
+function TPasMPJobWorkerThread.GetJobRefinedAdaptivePriority:PPasMPJob;
+var FoundPriorityIndex,JobQueuePriorityIndex,OtherJobWorkerThreadIndex,OtherJobWorkerThreadCounter:TPasMPInt32;
+    XorShiftTemp,PriorityJobQueueBitMask,CurrentBitmap:TPasMPUInt32;
+    OtherJobWorkerThread:TPasMPJobWorkerThread;
+    JobAffinityCheckFailed:boolean;
+begin
+
+ // First search for highest priority job in own local queue
+ if (fJobQueuesUsedBitmap and TPasMPUInt32(TPasMPUInt32(1) shl PasMPJobQueuePriorityHigh))<>0 then begin
+  result:=fJobQueues[PasMPJobQueuePriorityHigh].PopJob;
+  if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
+   fMaxPriorityJobQueueIndex:=PasMPJobQueuePriorityHigh;
+   exit;
+  end else begin
+   fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap and not TPasMPUInt32(TPasMPUInt32(1) shl PasMPJobQueuePriorityHigh);
+  end;
+ end;
+
+ // Determine the globally best available priority
+ CurrentBitmap:=fPasMPInstance.fGlobalJobQueuesUsedBitmap;
+ if CurrentBitmap=0 then begin
+  FoundPriorityIndex:=0;
+ end else begin
+  FoundPriorityIndex:=TPasMPMath.BitScanForward32(CurrentBitmap);
+ end;
+
+ // Check own local queues of priorities better than the global hint (ensures we don't miss local work)
+ for JobQueuePriorityIndex:=fMaxPriorityJobQueueIndex to FoundPriorityIndex-1 do begin
+  PriorityJobQueueBitMask:=TPasMPUInt32(1) shl TPasMPUInt32(JobQueuePriorityIndex);
+  if (fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
+   result:=fJobQueues[JobQueuePriorityIndex].PopJob;
+   if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
+    if fJobQueues[JobQueuePriorityIndex].HasJobs then begin
+     TPasMPInterlocked.BitwiseOr(fPasMPInstance.fGlobalJobQueuesUsedBitmap,PriorityJobQueueBitMask);
+     fMaxPriorityJobQueueIndex:=PasMPJobQueuePriorityHigh;
+    end else begin
+     fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
+    end;
+    exit;
+   end else begin
+    fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
+   end;
+  end;
+ end;
+
+ // Exhaustively search local and global pools at each priority, attempting steals
+ JobQueuePriorityIndex:=FoundPriorityIndex;
+ while JobQueuePriorityIndex<=PasMPJobQueuePriorityLast do begin
+
+  PriorityJobQueueBitMask:=TPasMPUInt32(1) shl TPasMPUInt32(JobQueuePriorityIndex);
+
+  // Try getting a job from own queue first
+  if (fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
+   result:=fJobQueues[JobQueuePriorityIndex].PopJob;
+   if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
+    fMaxPriorityJobQueueIndex:=JobQueuePriorityIndex;
+    exit;
+   end;
+  end;
+
+  // When it is not a valid job or our own queue is empty, try stealing from some other queue
+  XorShiftTemp:=fXorShift32;
+  XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 13);
+  XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shr 17);
+  XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 5);
+  fXorShift32:=XorShiftTemp;
+  OtherJobWorkerThreadIndex:=((XorShiftTemp shr 16)*TPasMPUInt32(fPasMPInstance.fCountJobWorkerThreads)) shr 16;
+  for OtherJobWorkerThreadCounter:=0 to fPasMPInstance.fCountJobWorkerThreads-1 do begin
+   OtherJobWorkerThread:=fPasMPInstance.fJobWorkerThreads[OtherJobWorkerThreadIndex];
+   if (OtherJobWorkerThread<>self) and
+      ((OtherJobWorkerThread.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0) then begin
+    if (not fPasMPInstance.fRespectAffinityMasks) or
+       ( // Check if we can execute jobs from the victim thread based on affinity masks
+        (
+         (OtherJobWorkerThread.fAllowedAffinityMask=PasMPAffinityMaskAll) or
+         ((OtherJobWorkerThread.fAllowedAffinityMask and fAllowedAffinityMask)<>0)
+        ) and
+        (
+         (OtherJobWorkerThread.fAvoidAffinityMask=0) or
+         ((OtherJobWorkerThread.fAvoidAffinityMask and fAllowedAffinityMask)=0)
+        )
+       ) then begin
+     result:=OtherJobWorkerThread.fJobQueues[JobQueuePriorityIndex].StealJob;
+     if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
+      // Found a stolen job to execute
+      exit;
+     end;
+    end else begin
+     // Not allowed to steal from this victim thread due to affinity mask restrictions
+    end;
+   end;
+   inc(OtherJobWorkerThreadIndex);
+   if OtherJobWorkerThreadIndex>=fPasMPInstance.fCountJobWorkerThreads then begin
+    OtherJobWorkerThreadIndex:=0;
+   end;
+  end;
+
+  // Otherwise try stealing from the global queue
+  if (fPasMPInstance.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
+   fPasMPInstance.fJobQueuesLock.Acquire;
+   try
+{$if defined(cpu386) or defined(cpux86_64)}
+    TPasMPMemoryBarrier.ReadDependency;
 {$else}
+    TPasMPMemoryBarrier.Read;
+{$ifend}
+    if (fPasMPInstance.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
+     result:=fPasMPInstance.fJobQueues[JobQueuePriorityIndex].StealJobWithCheck(self,JobAffinityCheckFailed);
+     if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
+      // Found a stolen global job to execute
+     end else if not JobAffinityCheckFailed then begin
+      fPasMPInstance.fJobQueuesUsedBitmap:=fPasMPInstance.fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
+      TPasMPMemoryBarrier.ReadWrite;
+      result:=nil;
+     end;
+    end else begin
+     result:=nil;
+    end;
+   finally
+    fPasMPInstance.fJobQueuesLock.Release;
+   end;
+   if assigned(result) then begin
+    // Safe to exit here, after try/finally block
+    exit;
+   end;
+  end;
+
+  // No job with specified priority found, attempt to update global state
+  TPasMPInterlocked.BitWiseAnd(fPasMPInstance.fGlobalJobQueuesUsedBitmap,not PriorityJobQueueBitMask);
+
+  // Re-read global bitmap to find next available priority (catches newly pushed jobs)
+  CurrentBitmap:=fPasMPInstance.fGlobalJobQueuesUsedBitmap and not ((PriorityJobQueueBitMask shl 1)-1);
+  if CurrentBitmap=0 then begin
+   inc(JobQueuePriorityIndex);
+  end else begin
+   JobQueuePriorityIndex:=TPasMPMath.BitScanForward32(CurrentBitmap);
+  end;
+
+ end;
+
+ result:=nil;
+
+end;
+
 // A prioritized GetJob implementation variant, which is based completety on my own ideas, which is better structured,
 // easier to understand and more pretty than the implementation above, in my opinion.
-function TPasMPJobWorkerThread.GetJob:PPasMPJob;
+function TPasMPJobWorkerThread.GetJobSnapshotScan:PPasMPJob;
 var JobQueuePriorityIndex,OtherJobWorkerThreadIndex,OtherJobWorkerThreadCounter:TPasMPInt32;
     XorShiftTemp,PriorityJobQueueBitMask,CurrentBitmap:TPasMPUInt32;
     OtherJobWorkerThread:TPasMPJobWorkerThread;
@@ -14836,7 +14997,7 @@ begin
      if (fPasMPInstance.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
       result:=fPasMPInstance.fJobQueues[JobQueuePriorityIndex].StealJobWithCheck(self,JobAffinityCheckFailed);
       if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
-       // Yay, we've stolen a job!       
+       // Yay, we've stolen a job!
       end else if not JobAffinityCheckFailed then begin
        fPasMPInstance.fJobQueuesUsedBitmap:=fPasMPInstance.fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
        TPasMPMemoryBarrier.ReadWrite;
@@ -14882,7 +15043,158 @@ begin
  result:=nil;
 
 end;
-{$endif}
+
+// RefinedSnapshotScan: SnapshotScan structure with re-read of global bitmap after each priority failure
+// instead of simply masking out the lowest bit of the local snapshot, catching newly pushed jobs mid-scan.
+function TPasMPJobWorkerThread.GetJobRefinedSnapshotScan:PPasMPJob;
+var JobQueuePriorityIndex,OtherJobWorkerThreadIndex,OtherJobWorkerThreadCounter:TPasMPInt32;
+    XorShiftTemp,PriorityJobQueueBitMask,CurrentBitmap:TPasMPUInt32;
+    OtherJobWorkerThread:TPasMPJobWorkerThread;
+    FirstTry,JobAffinityCheckFailed:boolean;
+begin
+
+{$if not (defined(cpu386) or defined(cpux86_64))}
+ TPasMPMemoryBarrier.ReadWrite;
+{$ifend}
+ CurrentBitmap:=fPasMPInstance.fGlobalJobQueuesUsedBitmap;
+{$if not (defined(cpu386) or defined(cpux86_64))}
+ TPasMPMemoryBarrier.Read;
+{$ifend}
+
+ FirstTry:=true;
+
+ repeat
+
+  // Ensure that the local bitmap content is inside the global bitmap content
+  if (CurrentBitmap and fJobQueuesUsedBitmap)<>fJobQueuesUsedBitmap then begin
+   CurrentBitmap:=TPasMPInterlocked.ExchangeBitWiseOr(fPasMPInstance.fGlobalJobQueuesUsedBitmap,fJobQueuesUsedBitmap) or fJobQueuesUsedBitmap;
+  end;
+
+  while CurrentBitmap<>0 do begin
+
+   JobQueuePriorityIndex:=TPasMPMath.BitScanForward32(CurrentBitmap);
+
+   PriorityJobQueueBitMask:=TPasMPUInt32(1) shl TPasMPUInt32(JobQueuePriorityIndex);
+
+   // Try getting a job from our own queue first
+   if (fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
+    result:=fJobQueues[JobQueuePriorityIndex].PopJob;
+    if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
+     exit;
+    end else begin
+     fJobQueuesUsedBitmap:=fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
+    end;
+   end;
+
+   // When it is not a valid job or our own queue is empty, try stealing from some other queue
+   XorShiftTemp:=fXorShift32;
+   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 13);
+   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shr 17);
+   XorShiftTemp:=XorShiftTemp xor (XorShiftTemp shl 5);
+   fXorShift32:=XorShiftTemp;
+   OtherJobWorkerThreadIndex:=((XorShiftTemp shr 16)*TPasMPUInt32(fPasMPInstance.fCountJobWorkerThreads)) shr 16;
+   for OtherJobWorkerThreadCounter:=0 to fPasMPInstance.fCountJobWorkerThreads-1 do begin
+    OtherJobWorkerThread:=fPasMPInstance.fJobWorkerThreads[OtherJobWorkerThreadIndex];
+    if (OtherJobWorkerThread<>self) and
+       ((OtherJobWorkerThread.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0) then begin
+     if (not fPasMPInstance.fRespectAffinityMasks) or
+        (
+         (
+          (OtherJobWorkerThread.fAllowedAffinityMask=PasMPAffinityMaskAll) or
+          ((OtherJobWorkerThread.fAllowedAffinityMask and fAllowedAffinityMask)<>0)
+         ) and
+         (
+          (OtherJobWorkerThread.fAvoidAffinityMask=0) or
+          ((OtherJobWorkerThread.fAvoidAffinityMask and fAllowedAffinityMask)=0)
+         )
+        ) then begin
+      result:=OtherJobWorkerThread.fJobQueues[JobQueuePriorityIndex].StealJob;
+      if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
+       exit;
+      end;
+     end else begin
+      // Not allowed to steal from this victim thread due to affinity mask restrictions
+     end;
+    end;
+    inc(OtherJobWorkerThreadIndex);
+    if OtherJobWorkerThreadIndex>=fPasMPInstance.fCountJobWorkerThreads then begin
+     OtherJobWorkerThreadIndex:=0;
+    end;
+   end;
+
+   // Otherwise try stealing from the global queue
+   if (fPasMPInstance.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
+    fPasMPInstance.fJobQueuesLock.Acquire;
+    try
+{$if defined(cpu386) or defined(cpux86_64)}
+     TPasMPMemoryBarrier.ReadDependency;
+{$else}
+     TPasMPMemoryBarrier.Read;
+{$ifend}
+     if (fPasMPInstance.fJobQueuesUsedBitmap and PriorityJobQueueBitMask)<>0 then begin
+      result:=fPasMPInstance.fJobQueues[JobQueuePriorityIndex].StealJobWithCheck(self,JobAffinityCheckFailed);
+      if assigned(result) and ((result^.InternalData and PasMPJobFlagActive)<>0) then begin
+       // Found a stolen global job to execute
+      end else if not JobAffinityCheckFailed then begin
+       fPasMPInstance.fJobQueuesUsedBitmap:=fPasMPInstance.fJobQueuesUsedBitmap and not PriorityJobQueueBitMask;
+       TPasMPMemoryBarrier.ReadWrite;
+       result:=nil;
+      end;
+     end else begin
+      result:=nil;
+     end;
+    finally
+     fPasMPInstance.fJobQueuesLock.Release;
+    end;
+    if assigned(result) then begin
+     exit;
+    end;
+   end;
+
+   // Update the global used priority queue bit mask to signal no jobs of the specified priority were available
+   TPasMPInterlocked.BitWiseAnd(fPasMPInstance.fGlobalJobQueuesUsedBitmap,not PriorityJobQueueBitMask);
+
+   // Re-read global bitmap to find next available priority (catches newly pushed jobs)
+   CurrentBitmap:=fPasMPInstance.fGlobalJobQueuesUsedBitmap and not ((PriorityJobQueueBitMask shl 1)-1);
+
+  end;
+
+  // We now realize that the global used priority queue bit mask is out of sync as none of the victims including ourself could provide a job,
+  // so we should update the global used priority queue bit mask with our local used priority queue bit mask and so on
+  if FirstTry then begin
+   FirstTry:=false;
+   CurrentBitmap:=fJobQueuesUsedBitmap or fPasMPInstance.fJobQueuesUsedBitmap;
+   CurrentBitmap:=TPasMPInterlocked.ExchangeBitWiseOr(fPasMPInstance.fGlobalJobQueuesUsedBitmap,CurrentBitmap) or CurrentBitmap;
+   if CurrentBitmap<>0 then begin
+    continue;
+   end;
+  end;
+
+  break;
+
+ until false;
+
+ result:=nil;
+
+end;
+
+function TPasMPJobWorkerThread.GetJob:PPasMPJob;
+begin
+ case fPasMPInstance.fGetJobVariant of
+  pmgjvAdaptivePriority:begin
+   result:=GetJobAdaptivePriority;
+  end;
+  pmgjvRefinedAdaptivePriority:begin
+   result:=GetJobRefinedAdaptivePriority;
+  end;
+  pmgjvSnapshotScan:begin
+   result:=GetJobSnapshotScan;
+  end;
+  else {pmgjvRefinedSnapshotScan:}begin
+   result:=GetJobRefinedSnapshotScan;
+  end;
+ end;
+end;
 
 procedure TPasMPJobWorkerThread.ThreadProc;
 var SpinCount,CountMaxSpinCount:TPasMPInt32;
@@ -15249,6 +15561,8 @@ begin
  fRespectJobAvoidAreaMasks:=false;
 
  fRespectAffinityMasks:=false;
+
+ fGetJobVariant:=pmgjvAdaptivePriority;
 
  fAllWorkerThreadsHaveOwnSystemThreads:=AllWorkerThreadsHaveOwnSystemThreads;
 
@@ -16158,6 +16472,27 @@ begin
 end;
 {$endif}
 
+procedure TPasMP.WakeUpOne;
+{$ifdef PasMPUseWakeUpConditionVariable}
+begin
+ if fSleepingJobWorkerThreads>0 then begin
+  fWakeUpConditionVariableLock.Acquire;
+  try
+   inc(fWakeUpCounter);
+   fWakeUpConditionVariable.Signal;
+  finally
+   fWakeUpConditionVariableLock.Release;
+  end;
+ end;
+end;
+{$else}
+begin
+ if fSleepingJobWorkerThreads>0 then begin
+  fWakeUpEvent.SetEvent;
+ end;
+end;
+{$endif}
+
 function TPasMP.CanSpread:boolean;
 var CurrentJobWorkerThread,JobWorkerThread:TPasMPJobWorkerThread;
     ThreadIndex,Index:TPasMPInt32;
@@ -16559,7 +16894,7 @@ begin
    JobWorkerThread:=GetJobWorkerThread;
   end;
   PushJob(Job,JobWorkerThread);
-  WakeUpAll;
+  WakeUpOne;
  end;
 end;
 
