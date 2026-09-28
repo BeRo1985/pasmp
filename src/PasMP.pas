@@ -410,9 +410,13 @@ uses {$ifdef Windows}
         {$ifdef usecthreads}
          cthreads,
         {$endif}
-        BaseUnix,Unix,UnixType,SysCall,{$ifndef AndroidOld}PThreads,{$endif}
+        BaseUnix,Unix,UnixType,{$ifndef AndroidOld}PThreads,{$endif}
         {$if defined(Linux) or defined(Android)}
-         Linux,
+         // SysCall belongs here and not in the line above: the only three places which
+         // use it are PasMPLinuxFutexWait and PasMPLinuxFutexWake, and those are
+         // guarded by {$if defined(Linux) and defined(fpc)}. Darwin and the BSDs ship
+         // no such unit, so naming it for every Unix breaks them.
+         Linux,SysCall,
         {$else}
          ctypes,sysctl,
         {$ifend}
@@ -10789,6 +10793,7 @@ end;
 
 function TPasMPThreadSafeBoundedArrayBasedQueue.Enqueue(const Item):boolean;
 var LocalHeadSequence,QueueItemNodeSequence:TPasMPUInt32;
+    Difference:TPasMPInt32;
     QueueItemNode:PPasMPThreadSafeBoundedArrayBasedQueueItemNode;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -10803,26 +10808,27 @@ begin
   TPasMPMemoryBarrier.Read;
 {$ifend}
   QueueItemNodeSequence:=QueueItemNode^.Sequence;
-  case TPasMPInt32(QueueItemNodeSequence-LocalHeadSequence) of
-   0:begin
-    if TPasMPInterlocked.CompareExchange(fHeadSequence,
-                                         LocalHeadSequence+1,
-                                         LocalHeadSequence)=LocalHeadSequence then begin
-     break;
-    end;
+  // An if chain, not a case statement: a case label range starting at Low(TPasMPInt32)
+  // makes the AArch64 code generator compare against -2147483648 with CMN, whose
+  // overflow flag is the one of an addition, so the signed test is wrong for every
+  // value and the whole queue spins forever
+  Difference:=TPasMPInt32(QueueItemNodeSequence-LocalHeadSequence);
+  if Difference=0 then begin
+   if TPasMPInterlocked.CompareExchange(fHeadSequence,
+                                        LocalHeadSequence+1,
+                                        LocalHeadSequence)=LocalHeadSequence then begin
+    break;
    end;
-   Low(TPasMPInt32)..-1:begin
-    result:=false;
-    exit;
-   end;
-   else begin
+  end else if Difference<0 then begin
+   result:=false;
+   exit;
+  end else begin
 {$if defined(CPU386) or defined(CPUx86_64)}
-    TPasMPMemoryBarrier.ReadDependency;
+   TPasMPMemoryBarrier.ReadDependency;
 {$else}
-    TPasMPMemoryBarrier.Read;
+   TPasMPMemoryBarrier.Read;
 {$ifend}
-    LocalHeadSequence:=fHeadSequence;
-   end;
+   LocalHeadSequence:=fHeadSequence;
   end;
  until false;
  InitializeItem(@QueueItemNode^.Data);
@@ -10843,6 +10849,7 @@ end;
 
 function TPasMPThreadSafeBoundedArrayBasedQueue.Dequeue(out Item):boolean;
 var LocalTailSequence,QueueItemNodeSequence:TPasMPUInt32;
+    Difference:TPasMPInt32;
     QueueItemNode:PPasMPThreadSafeBoundedArrayBasedQueueItemNode;
 begin
 {$if not (defined(CPU386) or defined(CPUx86_64))}
@@ -10857,26 +10864,27 @@ begin
   TPasMPMemoryBarrier.Read;
 {$ifend}
   QueueItemNodeSequence:=QueueItemNode^.Sequence;
-  case TPasMPInt32(QueueItemNodeSequence-(LocalTailSequence+1)) of
-   0:begin
-    if TPasMPInterlocked.CompareExchange(fTailSequence,
-                                         LocalTailSequence+1,
-                                         LocalTailSequence)=LocalTailSequence then begin
-     break;
-    end;
+  // An if chain, not a case statement: a case label range starting at Low(TPasMPInt32)
+  // makes the AArch64 code generator compare against -2147483648 with CMN, whose
+  // overflow flag is the one of an addition, so the signed test is wrong for every
+  // value and the whole queue spins forever
+  Difference:=TPasMPInt32(QueueItemNodeSequence-(LocalTailSequence+1));
+  if Difference=0 then begin
+   if TPasMPInterlocked.CompareExchange(fTailSequence,
+                                        LocalTailSequence+1,
+                                        LocalTailSequence)=LocalTailSequence then begin
+    break;
    end;
-   Low(TPasMPInt32)..-1:begin
-    result:=false;
-    exit;
-   end;
-   else begin
+  end else if Difference<0 then begin
+   result:=false;
+   exit;
+  end else begin
 {$if defined(CPU386) or defined(CPUx86_64)}
-    TPasMPMemoryBarrier.ReadDependency;
+   TPasMPMemoryBarrier.ReadDependency;
 {$else}
-    TPasMPMemoryBarrier.Read;
+   TPasMPMemoryBarrier.Read;
 {$ifend}
-    LocalTailSequence:=fTailSequence;
-   end;
+   LocalTailSequence:=fTailSequence;
   end;
  until false;
  CopyItem(@QueueItemNode^.Data,@Item);
@@ -15990,7 +15998,7 @@ const IDs:array[0..3] of RawByteString=
         'machdep.cpu.core_count',
         'hw.physicalcpu',
         'machdep.cpu.thread_count',
-        'hw.logicalcpu',
+        'hw.logicalcpu'
        );
 var status,t,i:cint;
     len:size_t;
