@@ -1,7 +1,7 @@
 (******************************************************************************
  *                                   PasMP                                    *
  ******************************************************************************
- *                        Version 2026-10-02-09-25-0000                       *
+ *                        Version 2026-11-24-05-09-0000                       *
  ******************************************************************************
  *                                zlib license                                *
  *============================================================================*
@@ -2491,7 +2491,7 @@ type TPasMPAvailableCPUCores=array of TPasMPInt32;
        fGetJobVariant:TPasMPGetJobVariant;
        class function GetThreadIDHash(ThreadID:{$ifdef fpc}TThreadID{$else}TPasMPUInt32{$endif}):TPasMPUInt32; {$ifdef HAS_STATIC}static;{$endif}{$ifdef CAN_INLINE}inline;{$endif}
        function GetJobWorkerThread:TPasMPJobWorkerThread; {$ifndef UseThreadLocalStorage}{$ifdef fpc}{$ifdef CAN_INLINE}inline;{$endif}{$endif}{$endif}
-       procedure WaitForWakeUp;
+       function WaitForWakeUp(const aJobWorkerThread:TPasMPJobWorkerThread):PPasMPJob;
        procedure WakeUpAll;
        procedure WakeUpOne;
        function CanSpread:boolean;
@@ -15314,7 +15314,6 @@ begin
  try
   ThreadInitialization;
   fPasMPInstance.fSystemIsReadyEvent.WaitFor(INFINITE);
-  fPasMPInstance.WaitForWakeUp;
   SpinCount:=0;
   // Few hot steal rounds only, then sleep on the wake-up event: idle workers otherwise hammer the
   // job queue cache lines with steal attempts at full speed, which also slows down the threads
@@ -15322,18 +15321,17 @@ begin
   CountMaxSpinCount:=8;
   while not fSystemThread.Terminated do begin
    Job:=GetJob;
+   if not assigned(Job) and (SpinCount>=CountMaxSpinCount) then begin
+    Job:=fPasMPInstance.WaitForWakeUp(self);
+    SpinCount:=0;
+   end;
    if assigned(Job) then begin
     TPasMPInterlocked.Increment(fPasMPInstance.fWorkingJobWorkerThreads);
     fPasMPInstance.ExecuteJob(Job,self);
     TPasMPInterlocked.Decrement(fPasMPInstance.fWorkingJobWorkerThreads);
     SpinCount:=0;
    end else begin
-    if SpinCount<CountMaxSpinCount then begin
-     inc(SpinCount);
-    end else begin
-     fPasMPInstance.WaitForWakeUp;
-     SpinCount:=0;
-    end;
+    inc(SpinCount);
    end;
   end;
  except
@@ -16532,19 +16530,28 @@ begin
  end;
 end;
 
-procedure TPasMP.WaitForWakeUp;
+function TPasMP.WaitForWakeUp(const aJobWorkerThread:TPasMPJobWorkerThread):PPasMPJob;
 {$ifdef PasMPUseWakeUpConditionVariable}
 var SavedWakeUpCounter:TPasMPInt32;
 begin
+ result:=nil;
  if fSleepingOnIdle then begin
   fWakeUpConditionVariableLock.Acquire;
   try
    TPasMPInterlocked.Increment(fSleepingJobWorkerThreads);
-   SavedWakeUpCounter:=fWakeUpCounter;
-   repeat
-    fWakeUpConditionVariable.Wait(fWakeUpConditionVariableLock);
-   until SavedWakeUpCounter<>fWakeUpCounter;
-   TPasMPInterlocked.Decrement(fSleepingJobWorkerThreads);
+   try
+    // A submitter can wake us between the last failed search and this lock.
+    // Publish that we are about to sleep, then check for work once more.
+    result:=aJobWorkerThread.GetJob;
+    if not assigned(result) and not aJobWorkerThread.fSystemThread.Terminated then begin
+     SavedWakeUpCounter:=fWakeUpCounter;
+     repeat
+      fWakeUpConditionVariable.Wait(fWakeUpConditionVariableLock);
+     until SavedWakeUpCounter<>fWakeUpCounter;
+    end;
+   finally
+    TPasMPInterlocked.Decrement(fSleepingJobWorkerThreads);
+   end;
   finally
    fWakeUpConditionVariableLock.Release;
   end;
@@ -16554,11 +16561,18 @@ begin
 end;
 {$else}
 begin
+ result:=nil;
  if fSleepingOnIdle then begin
   fWakeUpEvent.ResetEvent;
   TPasMPInterlocked.Increment(fSleepingJobWorkerThreads);
-  fWakeUpEvent.WaitFor(INFINITE);
-  TPasMPInterlocked.Decrement(fSleepingJobWorkerThreads);
+  try
+   result:=aJobWorkerThread.GetJob;
+   if not assigned(result) and not aJobWorkerThread.fSystemThread.Terminated then begin
+    fWakeUpEvent.WaitFor(INFINITE);
+   end;
+  finally
+   TPasMPInterlocked.Decrement(fSleepingJobWorkerThreads);
+  end;
  end else begin
   TPasMP.Yield;
  end;
